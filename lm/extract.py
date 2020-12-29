@@ -1,0 +1,151 @@
+from typing import List
+from pathlib import Path
+import argparse
+from xml.etree.ElementTree import parse, Element
+from nltk import PunktSentenceTokenizer
+from .utils import cleanup, innertext, progress
+from .config import config
+from . import DATASET
+
+
+class ExtractorXML:
+    '''
+    Extract multiple text examples from xml documents based on an XPath selector.
+    Examples are saved as individual text files.
+    '''
+
+    ALLOWED_EXTENSION = ['.xml', '.XML', '.nxml']
+
+    def __init__(self, source_dir: Path):
+        self.source_dir = source_dir
+        self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
+        print(f"found {len(self.filepaths)} files.")
+
+    def run(self, dest_dir: Path, selector: str, punkt: bool=False, ext: str='txt') -> List[str]:
+        if not dest_dir.exists():
+            dest_dir.mkdir()
+            print(f"Created {dest_dir}")
+        examples = []
+        num_saved_examples = 0
+        for i, filepath in enumerate(self.filepaths):
+            progress(i, len(self.filepaths), f"{filepath}                         ")
+            new_examples = self._examples_from_file(filepath, selector, punkt)
+            examples += new_examples
+            # save to disk as we go
+            for j, example in enumerate(new_examples):
+                filename = filepath.stem
+                num_saved_examples += self._save(example, dest_dir, filename, str(j), ext)
+        print()
+        return num_saved_examples
+
+    def _examples_from_file(self, filepath: Path, xpath: str, punkt:bool) -> List[str]:
+        examples = []
+        elements = self._parse_xml_file(filepath, xpath)
+        examples = self._extract_text_from_elements(elements, punkt)
+        # examples = self._filter(examples)
+        examples = self._cleanup(examples)
+        return examples
+
+    def _parse_xml_file(self, path: Path, xpath: str, remove_tail: bool=True) -> List[str]:
+        with path.open() as f:
+            xml = parse(f)
+            elements = xml.findall(xpath)
+            if remove_tail:
+                for e in elements:
+                    if e.tail is not None :
+                        print(f"tail: {e.tail} in {e.tag} with text='{e.text}'")
+                        e.tail = None
+        return elements
+
+    def _extract_text_from_elements(self, elements, punkt: bool) -> List[str]:
+        examples = []
+        for e in elements:
+            text = innertext(e)
+            if punkt:
+                sentences = PunktSentenceTokenizer().tokenize(text=text)
+                examples += sentences
+            else:
+                examples.append(text)
+        return examples
+
+    def _cleanup(self, examples: List[str]) -> List[str]:
+        examples = [cleanup(e) for e in examples]
+        return examples
+
+    def _filter(self, examples: List[str]) -> List[str]:
+        N0 = len(examples)
+        examples = [e for e in examples if len(e) > config.min_char_length]
+        # print(f"filtered {N0 - len(examples)} examples out of a total of {N0}.")
+        return examples
+
+    def _save(self, text: str, dest_dir: Path, basename: str, suffix: str, ext: str):
+        ex_filename = f"{basename}_{suffix}.{ext}"
+        saving_path = dest_dir / ex_filename
+        if saving_path.exists():
+            print(f"{saving_path} already exists. Not overwritten.                                                     ", end="\r", flush=True)
+            return 0
+        else:
+            saving_path.write_text(text)
+            return 1
+
+
+def self_test():
+    content = [
+        '<xml><b>This was it. Maybe it is not</b></xml>',
+        '<xml><b>This <g>is</g> not.</b> It!</xml>'
+    ]
+    expected_examples = ['This was it.', 'Maybe it is not', 'This is not.']
+    for i, e in enumerate(content):
+        p = Path('/tmp/test_file_'+str(i)+'.xml')
+        p.write_text(e)
+    created_filenames = []
+    try:
+        config.min_char_length = 5
+        xtract = ExtractorXML(Path('/tmp'))
+        xtract.run(Path('/tmp/test'), selector='.//b', punkt=True)
+        created_filenames = [f.name for f in Path('/tmp/test').iterdir()]
+        print("created files:", created_filenames)
+        expected_filenames = ['test_file_0_0.txt', 'test_file_0_1.txt', 'test_file_1_0.txt']
+        assert len(expected_filenames) == len(created_filenames), f"{len(expected_filenames)} <> {len(created_filenames)}"
+
+        for created in created_filenames:
+            assert created in expected_filenames, f"'{created}' not it '{expected_filenames}'"
+        print("correctly created files!")
+
+        for i, filename in enumerate(created_filenames): 
+            expected = expected_examples[i]
+            p = Path('/tmp/test') / filename
+            loaded = p.read_text()
+            print(loaded)
+            assert expected == loaded, f"'{expected}' <> '{loaded}'" # hard to do with smartag
+        print("This seems to work!")
+    finally:
+        for i, e in enumerate(content):
+            Path('/tmp/test_file_'+str(i)+'.xml').unlink()
+        for f in created_filenames: 
+            filepath = Path('/tmp/test') / f
+            filepath.unlink()
+        Path('/tmp/test').rmdir()
+        print("Cleaned up and removed test/.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('corpus', nargs="?", default=None, help='path to the corpus of documents to use.')
+    parser.add_argument('destination', nargs="?", default=DATASET, help='Destination folder for extracted text files.')
+    parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
+    parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
+
+    args = parser.parse_args()
+    extract_sentences = args.sentences
+    xpath = args.xpath
+    if not args.corpus:
+        self_test()
+    else:
+        source_path = Path(args.corpus)
+        destination_path = Path(args.destination)
+        N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences)
+        print(f"Saved {N} examples.")
+
+if __name__ == '__main__':
+    main()
