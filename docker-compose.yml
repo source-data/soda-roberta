@@ -1,0 +1,29 @@
+# nvidia-docker run --shm-size 8G --rm -it -v /raid/lemberge/vsearch:/workspace/vsearch -p12345:6005 -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -e XAUTHORITY -e NVIDIA_DRIVER_CAPABILITIES=all tl/vsearch:last
+
+####
+# docker-compose up -d
+#   - CREATE A NEW CONTAINER: docker-compose run --rm vsearch /bin/bash
+#   - CONNECT TO A RUNNING CONTAINER: docker-compose exec vsearch bash
+# docker-compose down
+version: '3'
+
+services:
+  lm:
+    build:
+      context: .
+      shm_size: '8gb'
+      dockerfile: './Dockerfile'
+    image: sdbert
+    # runtime: nvidia
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix
+    - /tmp:/tmp
+    - .:/app
+
+    env_file:
+    - ./.env
+    ipc: host
+    tty: true
+    stdin_open: true
+    working_dir: /app
+    # command: python -c "import nltk; nltk.download('averaged_perceptron_tagger')"
