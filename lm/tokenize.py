@@ -26,6 +26,8 @@ def main():
     print(tokenized.ids)
     print()
     print(tokenized.offsets)
+    print()
+    print(f"length: {len(tokenized.tokens)} token.")
 
 
 if __name__ == '__main__':
