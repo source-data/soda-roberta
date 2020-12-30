@@ -5,7 +5,8 @@ Application-wide preferences.
 
 class Config:
     dirignore = ['__MACOSX', '.DS_Store']
-    max_length = 1500  # characters
+    vocab_size = 10_000
+    max_length = 512  # token
     min_char_length = 120  # characters
     split_ratio = {
         'train': 0.7,

@@ -10,9 +10,21 @@ from math import floor
 from random import shuffle
 from .utils import progress
 from .config import config
+from . import DATASET
 
 
 def distribute(path: Path, allowed_extension: str = '.nxml'):
+    """
+    Simple utility to split a set of files into train, eval, and test subsets.
+    Files will be selected randomly and moved into train/ eval/ and test/ subdirectories.
+    The ratios of files moved into each subdirectories is specified in config.split_ratio
+
+    Args:
+       path (Path):
+            The path of the directory containing the list of files.
+        allowed_extension (str):
+            Only the files with this extension (WITH THE DOT) will be redistributed.
+    """
 
     filepaths = [f for f in path.iterdir() if f.suffix == allowed_extension]
     N = len(filepaths)
@@ -34,6 +46,9 @@ def distribute(path: Path, allowed_extension: str = '.nxml'):
 
 
 def self_test():
+    """
+    Call module to self-test it.
+    """
     Path('/tmp/test_corpus').mkdir()
     expected = []
     N = 10
@@ -61,7 +76,7 @@ def self_test():
 
 def main():
     parser = argparse.ArgumentParser(description='Splitting a corpus into train, valid and testsets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('corpus', nargs="?", default='', help='path to the corpus of documents to use.')
+    parser.add_argument('corpus', nargs="?", default=DATASET, help='path to the corpus of documents to use.')
     parser.add_argument('-X', '--extension', default='.txt', help='Extension for allowed files in the corpus.')
     args = parser.parse_args()
 

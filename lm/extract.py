@@ -12,6 +12,10 @@ class ExtractorXML:
     '''
     Extract multiple text examples from xml documents based on an XPath selector.
     Examples are saved as individual text files.
+
+    Args:
+        source_dir (Path):
+            the path to the directors that contains the xml files.
     '''
 
     ALLOWED_EXTENSION = ['.xml', '.XML', '.nxml']
@@ -21,7 +25,28 @@ class ExtractorXML:
         self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         print(f"found {len(self.filepaths)} files.")
 
-    def run(self, dest_dir: Path, selector: str, punkt: bool=False, ext: str='txt') -> List[str]:
+    def run(self, dest_dir: Path, selector: str, punkt: bool=False, ext: str='txt') -> int:
+        """
+        Runs the extractor and saves examples in the destination directory.
+        A XPath specifies which element to extract from each xml file.
+        The inner text from the selected element will be saved as an example.
+        If sentence tokenization is True, the text is first split into sentences which are individually saved.
+
+        Args:
+            dest_dir (Path):
+                The path to the desitnation directory.
+            selector (str):
+                The XPath to select the xml element from which the inner text will be used as example.
+            punkt (bool):
+                Whether to split the innert text into sentences, which will be saved as individual examples.
+            ext (str):
+                The extension (WITHOUT dot) used when saving example text files.
+
+        Returns:
+            (int):
+                The number of examples saved to disk.
+        """
+
         if not dest_dir.exists():
             dest_dir.mkdir()
             print(f"Created {dest_dir}")
@@ -90,6 +115,9 @@ class ExtractorXML:
 
 
 def self_test():
+    """
+    Just call the module to sefl-test it.
+    """
     content = [
         '<xml><b>This was it. Maybe it is not</b></xml>',
         '<xml><b>This <g>is</g> not.</b> It!</xml>'

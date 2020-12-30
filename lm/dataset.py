@@ -3,18 +3,17 @@ import torch
 from torch.utils.data import Dataset
 from transformers import RobertaTokenizerFast
 from .utils import progress
+from .config import config
 from . import DATASET, TOKENIZER_PATH
 
-
 class BioDataset(Dataset):
-    def __init__(self, path: Path, tokenizer: RobertaTokenizerFast, evaluate: bool = False):
+    def __init__(self, path: Path, tokenizer: RobertaTokenizerFast, subset: str):
 
         self.examples = []
-
-        path = path / "eval" if evaluate else path / "train"
+        path = path / subset 
         src_files = list(path.glob("*.txt"))
         for i, src_file in enumerate(src_files):
-            progress(i, len(src_files), f"🔥 {src_file.name}                         ")
+            progress(i, len(src_files), f"🚀 {src_file.name}                  ")
             text = src_file.read_text(encoding="utf-8")
             encoded = tokenizer(text, truncation=True)
             self.examples.append(encoded.input_ids)
@@ -28,9 +27,9 @@ class BioDataset(Dataset):
 
 
 def self_test():
-    max_len = 512
+    max_len = config.max_length
     tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=max_len)
-    dataset = BioDataset(Path(DATASET), tokenizer)
+    dataset = BioDataset(Path(DATASET), tokenizer, "test")
     assert len(dataset) > 0
     for i, e in enumerate(dataset.examples):
         progress(i, len(dataset), f"len({i}) <= {max_len}                                ")

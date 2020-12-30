@@ -2,6 +2,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 from tokenizers import ByteLevelBPETokenizer
 from tokenizers.pre_tokenizers import Whitespace
+from .config import config
 from . import (
     DATASET, TOKENIZER_PATH
 )
@@ -14,17 +15,25 @@ def main():
     args = parser.parse_args()
     text_dir = args.text_dir
     tokenizer_path = args.tokenizer_path
-    paths = [str(x) for x in Path(text_dir).glob("**/*.txt")]
-    tokenizer = ByteLevelBPETokenizer()
-    tokenizer.pre_tokenizer = Whitespace
-    tokenizer.train(files=paths, vocab_size=52_000, min_frequency=2, special_tokens=[
-        "<s>",
-        "<pad>",
-        "</s>",
-        "<unk>",
-        "<mask>",
-    ])
-    tokenizer.save_model(tokenizer_path)
+    if Path(tokenizer_path).exists():
+        paths = [str(x) for x in Path(text_dir).glob("**/*.txt")]
+        tokenizer = ByteLevelBPETokenizer()
+        tokenizer.pre_tokenizer = Whitespace
+        tokenizer.train(
+            files=paths,
+            vocab_size=config.vocab_size,
+            min_frequency=2,
+            special_tokens=[
+                "<s>",
+                "<pad>",
+                "</s>",
+                "<unk>",
+                "<mask>",
+            ]
+        )
+        tokenizer.save_model(tokenizer_path)
+    else:
+        print(f"{tokenizer_path} does not exists, will not be able to save tokenizer. Create dir first and re-run the command.")
 
 
 if __name__ == '__main__':
