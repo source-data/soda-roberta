@@ -9,6 +9,7 @@ from collections import namedtuple
 def innertext(xml):
     return "".join([t for t in xml.itertext()])
 
+
 def cleanup(text):
     text = re.sub('[\r\n\t]', ' ', text)
     text = re.sub(' +', ' ', text)
@@ -38,8 +39,6 @@ def cleanup(text):
 # FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
 # OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 # OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-import sys, math
-
 
 def progress(count, total, status=''):
     bar_len = 60

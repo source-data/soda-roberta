@@ -6,6 +6,7 @@ from .utils import progress
 from .config import config
 from . import DATASET, TOKENIZER_PATH
 
+
 class BioDataset(Dataset):
     def __init__(self, path: Path, tokenizer: RobertaTokenizerFast, subset: str):
 
