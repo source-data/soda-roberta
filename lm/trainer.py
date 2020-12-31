@@ -1,7 +1,6 @@
 from typing import Optional, List, Union
 import collections
 import torch
-import numpy as np
 from transformers import Trainer
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
@@ -15,6 +14,7 @@ from transformers.trainer_pt_utils import (
 )
 
 logger = logging.get_logger(__name__)
+
 
 # based on https://github.com/huggingface/transformers/issues/8476#issuecomment-738773626
 class MyTrainer(Trainer):

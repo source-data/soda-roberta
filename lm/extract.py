@@ -3,20 +3,19 @@ from pathlib import Path
 import argparse
 from xml.etree.ElementTree import parse, Element, tostring
 from nltk import PunktSentenceTokenizer
-from .utils import cleanup, innertext, progress
-from .config import config
-from . import DATASET
+from ..common.utils import cleanup, innertext, progress
+from ..common.config import config
+from ..common import DATASET
 
 
 class ExtractorXML:
-    '''
-    Extract multiple text examples from xml documents based on an XPath selector.
+    """Extract multiple text examples from xml documents based on an XPath selector.
     Examples are saved as individual text files.
 
     Args:
         source_dir (Path):
             the path to the directors that contains the xml files.
-    '''
+    """
 
     ALLOWED_EXTENSION = ['.xml', '.XML', '.nxml']
 
@@ -26,8 +25,7 @@ class ExtractorXML:
         print(f"found {len(self.filepaths)} files.")
 
     def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
-        """
-        Runs the extractor and saves examples in the destination directory.
+        """Runs the extractor and saves examples in the destination directory.
         A XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
         It is also possible to prevent this and keep the xml markup, which is useful to train for token classification tasks.
@@ -125,8 +123,7 @@ class ExtractorXML:
 
 
 def self_test():
-    """
-    Just call the module to sefl-test it.
+    """Just call the module to sefl-test it.
     """
     content = [
         '<xml><b>This was it. Maybe it is not</b></xml>',

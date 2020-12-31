@@ -3,18 +3,16 @@ from pathlib import Path
 from typing import NamedTuple
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
-    Trainer, TrainingArguments, DataCollatorForLanguageModeling,
+    TrainingArguments, DataCollatorForLanguageModeling,
     EvalPrediction
 )
 from .trainer import MyTrainer
-# from transformers.integrations import TensorBoardCallback
-# from torch.utils.tensorboard import SummaryWriter
+from .metrics import compute_metrics
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from .dataset import BioDataset
-from datetime import datetime
 
-from .config import config
-from . import TOKENIZER_PATH, DATASET, MODEL_PATH
+from ..common.config import config
+from ..common import TOKENIZER_PATH, DATASET, MODEL_PATH
 
 
 print(f"Loading tokenizer from {TOKENIZER_PATH}.")
@@ -23,12 +21,20 @@ tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.
 # tokenizer._tokenizer.post_processor = BertProcessing(
 #     ("</s>", tokenizer.token_to_id("</s>")),
 #     ("<s>", tokenizer.token_to_id("<s>")),
-# ) 
+# )
 
-print(f"\nPreparing datasets found in {DATASET}.")
+print(f"\nLoading and tokenizing datasets found in {DATASET}.")
 train_dataset = BioDataset(Path(DATASET), tokenizer, subset="train")
 eval_dataset = BioDataset(Path(DATASET), tokenizer, subset="eval")
 test_dataset = BioDataset(Path(DATASET), tokenizer, subset="test")
+
+
+# from transformers import LineByLineTextDataset
+# dataset = LineByLineTextDataset(
+#     tokenizer=tokenizer,
+#     file_path="./oscar.eo.txt",
+#     block_size=128,
+# )
 
 data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer,
@@ -49,19 +55,6 @@ config = RobertaConfig(
 
 model = RobertaForMaskedLM(config=config)
 
-def compute_metrics(pred: EvalPrediction):
-    labels = pred.label_ids.flatten()
-    preds = pred.predictions.flatten()
-    # need to ignore the padding labels -100
-    set_of_labels = set(labels).remove(-100)
-    precision, recall, f1, _ = precision_recall_fscore_support(y_true=labels, y_pred=preds, labels=set_of_labels, average='micro')
-    acc = accuracy_score(labels, preds)
-    return {
-        'accuracy': acc,
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
 
 training_args = TrainingArguments(
     output_dir="./model",
