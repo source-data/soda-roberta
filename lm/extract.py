@@ -3,9 +3,9 @@ from pathlib import Path
 import argparse
 from xml.etree.ElementTree import parse, Element, tostring
 from nltk import PunktSentenceTokenizer
-from ..common.utils import cleanup, innertext, progress
-from ..common.config import config
-from ..common import DATASET
+from common.utils import cleanup, innertext, progress
+from common.config import config
+from common import DATASET
 
 
 class ExtractorXML:

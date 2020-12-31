@@ -2,9 +2,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from transformers import RobertaTokenizerFast
-from ..common.utils import progress
-from ..common.config import config
-from ..common import DATASET, TOKENIZER_PATH
+from common.utils import progress
+from common.config import config
+from common import DATASET, TOKENIZER_PATH
 
 
 class BioDataset(Dataset):

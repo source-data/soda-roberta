@@ -8,6 +8,7 @@ from transformers import (
 )
 from .trainer import MyTrainer
 from .metrics import compute_metrics
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from .dataset import BioDataset
 
 from common.config import config
@@ -17,11 +18,14 @@ from common import TOKENIZER_PATH, DATASET, MODEL_PATH
 print(f"Loading tokenizer from {TOKENIZER_PATH}.")
 tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 
-print(f"\nLoading and tokenizing datasets found in {DATASET}.")
-train_dataset = BioDataset(Path(DATASET), tokenizer, subset="train")
-eval_dataset = BioDataset(Path(DATASET), tokenizer, subset="eval")
-test_dataset = BioDataset(Path(DATASET), tokenizer, subset="test")
+print(f"\nLoading and tokenizing dataset.")
 
+from transformers import LineByLineTextDataset
+dataset = LineByLineTextDataset(
+    tokenizer=tokenizer,
+    file_path="./oscar.eo.txt",
+    block_size=128,
+)
 
 data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer,
@@ -29,8 +33,7 @@ data_collator = DataCollatorForLanguageModeling(
     mlm_probability=0.15
 )
 
-print(f"\nTraining with {len(train_dataset)} examples.")
-print(f"Evaluating on {len(eval_dataset)} examples.")
+print(f"\nTraining with {len(dataset)} examples.")
 
 config = RobertaConfig(
     vocab_size=config.vocab_size,
@@ -47,9 +50,7 @@ training_args = TrainingArguments(
     output_dir="./model",
     overwrite_output_dir=False,
     num_train_epochs=50,
-    per_device_train_batch_size=128,
-    per_device_eval_batch_size=128,
-    # eval_accumulation_steps=50,
+    per_device_train_batch_size=32,
     evaluation_strategy='steps',
     eval_steps=500,
     save_steps=10_000,
@@ -64,14 +65,9 @@ trainer = MyTrainer(
     model=model,
     args=training_args,
     data_collator=data_collator,
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
+    train_dataset=dataset,
+    eval_dataset=dataset,
     compute_metrics=compute_metrics
 )
 
 trainer.train()
-trainer.save_model(f"{MODEL_PATH}")
-
-print(f"Testing on {len(test_dataset)}.")
-pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
-print(f"{pred.metrics}")
