@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 # from tokenizers.implementations import ByteLevelBPETokenizer
 from tokenizers.processors import BertProcessing
 from transormers import RobertaTokenizerFast
-from ..common import TOKENIZER_PATH
+from common import TOKENIZER_PATH
 
 
 def main():
