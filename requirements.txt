@@ -2,4 +2,9 @@ transformers
 torch
 python-dotenv==0.15.0
 nltk
-tensorboard
+# tensorflow  # necessary for tensorboard to work properly
+# tensorboard
+# nvidia-pyindex  # https://github.com/NVIDIA/tensorflow#install
+# nvidia-tensorflow
+# nvidia-tensorboard-plugin-dlprof
+# nvidia-tensorboard
