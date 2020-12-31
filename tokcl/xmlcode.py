@@ -1,45 +1,84 @@
 """
-The CODES dictionary maps a combination of tag name + attribute name + value of the attribute to a unique code.
-For example <sd-tag type="cell">...</sd-tag> would receive the code 4, <sd-tag role="normalizing">...</sd-tag> the code 10.
-CODES has 4 levels of depth: 
-    1. the code family: codes can be used for different situation, marking the whole lengthe of an element or only its boundaries.
-    2. the name of the xml tags
-    3. the name of the attributes
-    4. the value of the attributes.
-The codes are provided as values or list of values (in the case that different codes are needed to mark the start and the end of an element, for example).
-This is the general structure of CODES:
-{
-    'code_family': {
-        'tag_name': {
-            'attribute_name': {
-                'attribute_value': code,
-                ...
-            },
-            ...
-        },
-        ...
-    },
-    ...
-}
+CodeMap is used to encode XML elements for token classification tasks. 
+CodeMaps map unique codes to a specific set of conditions an XML tag needs to satisfie to be labeled with this code.
+For each code, an XML element will be assign this code if:
+- it has the specified tag name,
+- AND the listed attributes are ALL present,
+- AND the attribute have a value IN the provided list.
+
+For example, with the constraints held in EntityTypeCodeMap, the element <sd-tag type='protein'>...</sd-tag> will be labeled with code 2.
+With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled with code 1, without any furter constaints on attributes and their values.
+Usage: call `python -m tokcl.encoder` for a demo.
 """
 
-CODES = {
-    'marks': {
-        'sd-tag': {
-            'type': {
-                '': None, 'molecule': 0, 'gene': 1, 'protein': 2, 'geneprod': 21, 'subcellular': 3, 'cell': 4, 'tissue': 5, 'organism': 6, 'undefined': 7
-            },
-            'role': {
-                '': None, 'intervention': 8, 'assayed': 9, 'normalizing': 10, 'reporter': 11, 'experiment': 12, 'component': 13
-            },
-            'category': {
-                '': None, 'assay': 14, 'entity': 15, 'time': 16, 'physical': 17, 'disease': 18
+class CodeMap:
+    constraints = {}
+
+
+class GeneprodRoleCodeMap(CodeMap):
+    constraints = {
+        1: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('gene', 'protein', 'geneprot'),
+                'role': ('intervention', 'assayed'),
             }
-        }
-    },
-    'boundaries': {
-        'sd-panel': {
-            '': {'': [19, 20]}
-            }
+        },
     }
-}
+
+
+class EntityTypeCodeMap(CodeMap):
+    constraints = {
+        1: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('small_molecule'),
+            }
+        },
+        2: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('gene', 'protein', 'geneprod'),
+            }
+        },
+        3: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('small_molecule'),
+            }
+        },
+
+        4: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('subcellular'),
+            }
+        },
+        5: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('cell'),
+            }
+        },
+        6: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('tissue'),
+            }
+        },
+        7: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('organism'),
+            }
+        },
+    }
+
+
+class PanelBoundaryCodeMap(CodeMap):
+
+    constraints = {
+        1: {
+            'tag': 'sd-panel',
+        },
+    }
