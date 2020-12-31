@@ -2,16 +2,16 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from transformers import RobertaTokenizerFast
-from .utils import progress
-from .config import config
-from . import DATASET, TOKENIZER_PATH
+from ..common.utils import progress
+from ..common.config import config
+from ..common import DATASET, TOKENIZER_PATH
 
 
 class BioDataset(Dataset):
     def __init__(self, path: Path, tokenizer: RobertaTokenizerFast, subset: str):
 
         self.examples = []
-        path = path / subset 
+        path = path / subset
         src_files = list(path.glob("*.txt"))
         for i, src_file in enumerate(src_files):
             progress(i, len(src_files), f"🚀 {src_file.name}                  ")

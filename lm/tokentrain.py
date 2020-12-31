@@ -2,8 +2,8 @@ from pathlib import Path
 from argparse import ArgumentParser
 from tokenizers import ByteLevelBPETokenizer
 from tokenizers.pre_tokenizers import Whitespace
-from .config import config
-from . import (
+from ..common.config import config
+from ..common import (
     DATASET, TOKENIZER_PATH
 )
 

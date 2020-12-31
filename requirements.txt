@@ -1,5 +1,6 @@
 transformers
 torch
-python-dotenv==0.15.0
+python-dotenv
 nltk
 tensorboard
+sklearn

@@ -1,26 +1,20 @@
-'''
-A list of documents is randomly split into train, valid and test set sub groups.
-It is important to do this at the document level before any extraction and data augmentation happens.
-'''
-
 from pathlib import Path
 import shutil
 import argparse
 from math import floor
 from random import shuffle
-from .utils import progress
-from .config import config
-from . import DATASET
+from ..common.utils import progress
+from ..common.config import config
+from ..common import DATASET
 
 
 def distribute(path: Path, allowed_extension: str = '.nxml'):
-    """
-    Simple utility to split a set of files into train, eval, and test subsets.
+    """Simple utility to split a set of files into train, eval, and test subsets.
     Files will be selected randomly and moved into train/ eval/ and test/ subdirectories.
-    The ratios of files moved into each subdirectories is specified in config.split_ratio
+    The ratios of files moved into each subdirectories is specified in common.config.split_ratio
 
     Args:
-       path (Path):
+        path (Path):
             The path of the directory containing the list of files.
         allowed_extension (str):
             Only the files with this extension (WITH THE DOT) will be redistributed.
@@ -46,8 +40,7 @@ def distribute(path: Path, allowed_extension: str = '.nxml'):
 
 
 def self_test():
-    """
-    Call module to self-test it.
+    """Call module to self-test it.
     """
     Path('/tmp/test_corpus').mkdir()
     expected = []

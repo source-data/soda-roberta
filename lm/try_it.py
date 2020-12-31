@@ -1,7 +1,7 @@
 from transformers import pipeline
 from argparse import ArgumentParser
 from pathlib import Path
-from . import MODEL_PATH, TOKENIZER_PATH
+from ..common import MODEL_PATH
 
 
 def main():
