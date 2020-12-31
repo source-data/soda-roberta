@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from tokenizers.processors import BertProcessing
 from transformers import RobertaTokenizerFast
 from common import TOKENIZER_PATH
+from common.config import config
 
 
 def main():
