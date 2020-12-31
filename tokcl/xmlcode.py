@@ -11,11 +11,16 @@ With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled w
 Usage: call `python -m tokcl.encoder` for a demo.
 """
 
+
 class CodeMap:
+    """Base class. The constraints will be held in constraints.
+    """
     constraints = {}
 
 
 class GeneprodRoleCodeMap(CodeMap):
+    """CodeMap that holds codes to label the role of gnene products, according to the SourceData nomenclature.
+    """
     constraints = {
         1: {
             'tag': 'sd-tag',
@@ -28,6 +33,8 @@ class GeneprodRoleCodeMap(CodeMap):
 
 
 class EntityTypeCodeMap(CodeMap):
+    """CodeMap that holds codes to label entities of 8 types, according to the SourceData nomenclature.
+    """
     constraints = {
         1: {
             'tag': 'sd-tag',
@@ -72,6 +79,12 @@ class EntityTypeCodeMap(CodeMap):
                 'type': ('organism'),
             }
         },
+        8: {
+            'tag': 'sd-tag',
+            'attributes': {
+                'type': ('assay'),
+            }
+        }
     }
 
 

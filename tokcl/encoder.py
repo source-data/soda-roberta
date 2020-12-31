@@ -5,15 +5,29 @@ from common.utils import innertext
 
 
 class XMLEncoder:
+    """Encodes a XML object in a list of label ids based on the XML-to-label mapping provided by the supplied CodeMap.
+
+    Args:
+        code_map (CodeMap):
+            The CodeMap object that maps label codes (int) to specic combinations of tag name and attribute values.
+    """
     def __init__(self, code_map: CodeMap):
         self.code_map = code_map
 
-    def encode(self, element: Element) -> List:
+    def encode(self, element: Element) -> List[int]:
+        """Encodes an Element into a list of character-level label codes (int).
+        Positions that are not assigned with any code are filled with None.
+        THe XML tree is traversed recursively and as soon as an element satistifes to one constraints provided in code_map, 
+        the entire span of the element is assigned this code.
+        To visualize run:
+            python -m tokcl.encoder
+        without any arguments.
+        """
         text_element = element.text or ''
         L_text = len(text_element)
         text_tail = element.tail or ''
         L_tail = len(text_tail)
-        code = self.get_code(element)
+        code = self._get_code(element)
         if code:
             # as soon as an element corresponds to one of the code, the code is proagated on the whole length of the element and its tail
             L_tot = len(innertext(element))
@@ -28,7 +42,7 @@ class XMLEncoder:
         encoded = encoded + [None] * L_tail
         return encoded
 
-    def get_code(self, element: Element) -> int:
+    def _get_code(self, element: Element) -> int:
         for code, constraint in self.code_map.constraints.items():
             if element.tag == constraint['tag']:
                 if constraint['attributes']:
@@ -41,20 +55,6 @@ class XMLEncoder:
                     return code
         # the element does not match any of the constraints
         return None
-
-
-    # def boundary_marks(self, element, features, L):
-    #     element_tag = element.tag
-    #     if element_tag in CODES['boundaries'] and L > 0:
-    #         if '' in CODES['boundaries'][element_tag]:
-    #             features['boundaries'][element_tag][''][0] = CODES['boundaries'][element_tag][''][''][0]
-    #             features['boundaries'][element_tag][''][L-1] = CODES['boundaries'][element_tag][''][''][1]
-    #         for attribute in (set(CODES['boundaries'][element_tag].keys()) & set(element.attrib)):
-    #             val = element.attrib[attribute]
-    #             if val and val in CODES['boundaries'][element_tag][attribute]:
-    #                 features['boundaries'][element_tag][attribute][0] = CODES['boundaries'][element_tag][attribute][val][0]
-    #                 features['boundaries'][element_tag][attribute][L-1] = CODES['boundaries'][element_tag][attribute][val][1]
-    #     return features
 
 
 def demo():
