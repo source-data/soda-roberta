@@ -1,16 +1,18 @@
 from pathlib import Path
 from typing import List, Tuple, Dict
 from xml.etree.ElementTree import parse, Element, ElementTree
+from math import floor
 import json
 import shutil
-from datetime import datetime
+from random import shuffle
 from tokenizers import Encoding, ByteLevelBPETokenizer
 from .encoder import XMLEncoder
 from .xmlcode import (
     CodeMap, EntityTypeCodeMap
 )
-from common.utils import innertext
+from common.utils import innertext, now
 from common import TOKENIZER_PATH
+from common.config import config
 
 
 class SDPreparator:
@@ -26,11 +28,20 @@ class SDPreparator:
         code_map (CodeMap):
             The XML-to-code constraints mapping label codes to specific combinations of tag name and attribute values.
     """
-    def __init__(self, source_dir_path: Path, dest_path: Path, tokenizer: ByteLevelBPETokenizer, code_map: CodeMap):
+    def __init__(
+        self,
+        source_dir_path: Path,
+        dest_path: Path,
+        tokenizer: ByteLevelBPETokenizer,
+        code_map: CodeMap,
+        split_ratio: Dict = config.split_ratio
+    ):
         self.source_dir_path = source_dir_path
         self.dest_path = dest_path
-        self.ec = XMLEncoder(code_map)
+        self.code_map = code_map
+        self.xml_encoder = XMLEncoder(self.code_map)
         self.tokenizer = tokenizer
+        self.split_ratio = split_ratio
 
     def run(self, ext: str = 'xml'):
         """Runs the coding and labeling of xml examples. 
@@ -52,16 +63,30 @@ class SDPreparator:
                 'label_ids': token_level_label_ids
             })
             # self._save_individual_example(filepath, labeled_token)
-        self._save_json(labeled_examples)
+        split_examples = self._split(labeled_examples)
+        self._save_json(split_examples)
         return labeled_examples
 
     def _encode_example(self, xml: Element) -> List:
-        xml_encoded = self.ec.encode(xml)
+        xml_encoded = self.xml_encoder.encode(xml)
         character_level_label_ids = [c if c is not None else -100 for c in xml_encoded['label_ids']]
         inner_text = innertext(xml)
         tokenized = self.tokenizer.encode(inner_text)  # uses Whitespace as pre_processor
         token_level_label_ids = self._align_labels(tokenized, character_level_label_ids)
         return tokenized, token_level_label_ids
+
+    def _split(self, examples: List) -> Dict:
+        shuffle(examples)
+        N = len(examples)
+        valid_fraction = min(floor(N * self.split_ratio['eval']), self.split_ratio['max_eval'] - 1)
+        test_fraction = min(floor(N * self.split_ratio['test']), self.split_ratio['max_test'] - 1)
+        train_fraction = N - valid_fraction - test_fraction
+        assert train_fraction + valid_fraction + test_fraction == N
+        split_examples = {}
+        split_examples['train'] = [e for e in examples[0:train_fraction]]
+        split_examples['eval'] = [e for e in examples[train_fraction:train_fraction + valid_fraction]]
+        split_examples['test'] = [p for p in examples[train_fraction + valid_fraction:]]
+        return split_examples
 
     def _align_labels(self, tokenized: Encoding, character_level_label_ids: list) -> Tuple[List[int], List[str], List[int]]:
         token_level_label_ids = []
@@ -71,15 +96,19 @@ class SDPreparator:
             token_level_label_ids.append(label_id)
         return token_level_label_ids
 
-    def _save_json(self, labeled_examples: Dict):
-        for examples in labeled_examples:
-            j = {
-                'version': datetime.now().isoformat(),
-                'dataset': {
-                    'tokens': examples['tokenized'].tokens,
-                    'label_ids':  examples['label_ids'],
+    def _save_json(self, split_examples: Dict):
+        j = {
+            'version': "_".join([self.code_map.__name__, now()]),
+            'data': {}
+        }
+        for subset, examples in split_examples.items():
+            data = {}
+            for example in examples:
+                data = {
+                    'tokens': example['tokenized'].tokens,
+                    'label_ids':  example['label_ids'],
                 }
-            }
+            j['data'][subset] = data
         with self.dest_path.open('w', encoding='utf-8') as f:
             json.dump(j, f)
 
