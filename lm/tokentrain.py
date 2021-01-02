@@ -4,13 +4,13 @@ from tokenizers import ByteLevelBPETokenizer
 from tokenizers.pre_tokenizers import Whitespace
 from common.config import config
 from common import (
-    DATASET, TOKENIZER_PATH
+    LM_DATASET, TOKENIZER_PATH
 )
 
 
 def main():
     parser = ArgumentParser(description="Training tokenizer on text files.")
-    parser.add_argument("text_dir", nargs="?", default=DATASET, help="Path to the directory containgin the text files.")
+    parser.add_argument("text_dir", nargs="?", default=LM_DATASET, help="Path to the directory containgin the text files.")
     parser.add_argument("-t", "--tokenizer_path", default=TOKENIZER_PATH, help="Path to the saved trained tokenizer.")
     args = parser.parse_args()
     text_dir = args.text_dir

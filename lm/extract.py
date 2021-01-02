@@ -5,7 +5,7 @@ from xml.etree.ElementTree import parse, Element, tostring
 from nltk import PunktSentenceTokenizer
 from common.utils import cleanup, innertext, progress
 from common.config import config
-from common import DATASET
+from common import LM_DATASET
 
 
 class ExtractorXML:
@@ -167,7 +167,7 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('corpus', nargs="?", default=None, help='path to the corpus of documents to use.')
-    parser.add_argument('destination', nargs="?", default=DATASET, help='Destination folder for extracted text files.')
+    parser.add_argument('destination', nargs="?", default=LM_DATASET, help='Destination folder for extracted text files.')
     parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
     parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')

@@ -5,7 +5,6 @@ from math import floor
 from random import shuffle
 from common.utils import progress
 from common.config import config
-from common import DATASET
 
 
 def distribute(path: Path, ext: str):
