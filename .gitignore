@@ -6,9 +6,9 @@ ner_dataset/
 sourcedata/
 191012/
 191012.zip
-trained_tokenizer/
+tokenizer/
 model/
-
+cache/
 runs/
 
 ##
