@@ -15,6 +15,7 @@ from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACH
 # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
 # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
 
 print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
@@ -36,22 +37,19 @@ data_collator = DataCollatorForTokenClassification(
 )
 
 num_labels = train_dataset.info.features['labels'].feature.num_classes
-model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
-
+model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=8)
 
 training_args = TrainingArguments(
     output_dir="./model",
     overwrite_output_dir=False,
     num_train_epochs=50,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=16,
-    # eval_accumulation_steps=50,
+    per_device_train_batch_size=32,
+    per_device_eval_batch_size=32,
     evaluation_strategy='steps',
-    eval_steps=500,
+    eval_steps=100,
     save_steps=10_000,
     save_total_limit=2,
-    prediction_loss_only=False,
-    label_names=['labels']
+    prediction_loss_only=True,
 )
 
 print("\nTraining arguments:")
@@ -63,7 +61,7 @@ trainer = Trainer(
     data_collator=data_collator,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
-    compute_metrics=compute_metrics,
+    #compute_metrics=compute_metrics,
 )
 
 trainer.train()
