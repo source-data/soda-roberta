@@ -10,16 +10,16 @@ from common.metrics import compute_metrics
 from .dataset import BioDataset
 
 from common.config import config
-from common import TOKENIZER_PATH, DATASET, MODEL_PATH
+from common import TOKENIZER_PATH, LM_DATASET, MODEL_PATH
 
 
 print(f"Loading tokenizer from {TOKENIZER_PATH}.")
 tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 
-print(f"\nLoading and tokenizing datasets found in {DATASET}.")
-train_dataset = BioDataset(Path(DATASET), tokenizer, subset="train")
-eval_dataset = BioDataset(Path(DATASET), tokenizer, subset="eval")
-test_dataset = BioDataset(Path(DATASET), tokenizer, subset="test")
+print(f"\nLoading and tokenizing datasets found in {LM_DATASET}.")
+train_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="train")
+eval_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="eval")
+test_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="test")
 
 
 data_collator = DataCollatorForLanguageModeling(
