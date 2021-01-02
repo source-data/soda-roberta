@@ -1,13 +1,14 @@
 from argparse import ArgumentParser
 from tokenizers.implementations import ByteLevelBPETokenizer
 from tokenizers.processors import BertProcessing
+from transformers import RobertaTokenizer
 from common import TOKENIZER_PATH
 from common.config import config
 
 
 def main():
     parser = ArgumentParser(description="Try the tokenizer.")
-    parser.add_argument("text", help="Text to tokenize.")
+    parser.add_argument("text", nargs="?", default="This is an example.", help="Text to tokenize.")
     args = parser.parse_args()
     text = args.text
 
@@ -28,6 +29,11 @@ def main():
     print(tokenized.offsets)
     print()
     print(f"length: {len(tokenized.tokens)} token.")
+
+    fast_tokenizer = RobertaTokenizer.from_pretrained(TOKENIZER_PATH, max_length=config.max_length)
+    fast_tokenized = fast_tokenizer(text)
+    print("Comparison of output with fast tokeniser:")
+    print(fast_tokenized)
 
 
 if __name__ == '__main__':

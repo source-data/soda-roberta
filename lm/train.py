@@ -4,10 +4,9 @@ from typing import NamedTuple
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForLanguageModeling,
-    EvalPrediction
 )
 from .trainer import MyTrainer
-from .metrics import compute_metrics
+from common.metrics import compute_metrics
 from .dataset import BioDataset
 
 from common.config import config

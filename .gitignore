@@ -1,9 +1,13 @@
 #####################################################################################
 ## vsearch
 *.ipynb
-dataset
-trained_tokenizer
-model
+dataset/
+ner_dataset/
+sourcedata/
+191012/
+191012.zip
+trained_tokenizer/
+model/
 
 runs/
 
