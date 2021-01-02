@@ -1,100 +1,96 @@
 from xml.etree.ElementTree import Element, fromstring
-from typing import Tuple, Dict
+from typing import List
+from .xmlcode import CodeMap, EntityTypeCodeMap
 from common.utils import innertext
-from .xmlcode import CODES
 
 
-def featurize(element: Element) -> Tuple[Dict, int, int]:
-    text_core = element.text or ''
-    L_text = len(text_core)
-    text_tail = element.tail or ''
-    L_tail = len(text_tail)
-    features = longitudinal_marks(element, L_text)
-    L_tot = L_text
-    # add marks recursively
-    for child in list(element):
-        child_features, L_child_text, L_child_tail = featurize(child)
-        L_tot = L_tot + L_child_text + L_child_tail
-        # adding to child the features inherited from parent element
-        child_features = longitudinal_marks(element, L_child_text, child_features)
-        child_tail_features = longitudinal_marks(element, L_child_tail)
-        # append the features of child and its tail to the element features generated so far
-        for kind in features:
-            for e in features[kind]:
-                for a in features[kind][e]:
-                    features[kind][e][a] += child_features[kind][e][a] + child_tail_features[kind][e][a]
-    # add boundaries to current element
-    try:
-        features = boundary_marks(element, features, L_tot)
-    except Exception as e:
-        print(element.text, element.tag, element.attrib)
-        print(features)
-        print(L_tot)
-        raise(e)
-    return features, L_tot, L_tail
+class XMLEncoder:
+    """Encodes a XML object in a list of label ids based on the XML-to-label mapping provided by the supplied CodeMap.
 
+    Args:
+        code_map (CodeMap):
+            The CodeMap object that maps label codes (int) to specic combinations of tag name and attribute values.
+    """
+    def __init__(self, code_map: CodeMap):
+        self.code_map = code_map
 
-def longitudinal_marks(element: Element, L: int, features: Dict = {}) -> Dict:
-    tag = element.tag
-    # initialization of the features dict if no features were coded before from a parent element
-    if not features:
-        features = {
-            kind: {
-                el: {
-                    attr: [None] * L for attr in CODES[kind][el]
-                } for el in CODES[kind]
-            } for kind in CODES
-        }
+    def encode(self, element: Element):
+        """Encodes an Element into a list of character-level label codes (int).
+        Positions that are not assigned with any code are filled with None.
+        THe XML tree is traversed recursively and as soon as an element satistifes to one constraints provided in code_map, 
+        the entire span of the element is assigned this code.
+        To visualize run:
+            python -m tokcl.encoder
+        without any arguments.
 
-    if tag in CODES['marks']:
-        # marks that do not depend on the presence of any attributes
-        if '' in CODES['marks'][tag]:
-            features['marks'][tag][''] = [CODES['marks'][tag]['']] * L
-        # find the set of attributes of the element that can be encoded
-        attributes_found = set(CODES['marks'][tag].keys()) & set(element.attrib)
-        for attribute in attributes_found:
-            val = element.attrib[attribute]
-            if val and val in CODES['marks'][tag][attribute]:
-                features['marks'][tag][attribute] = [CODES['marks'][tag][attribute][val]] * L
-    return features
+        Args:
+            element (Element):
+                The XML Element to encode
 
+        Returns:
+            (Dict[List[int], List[Tubple[int, int]]]):
+                A dictionary with the list of label ids and the offsets indicating the start and end postition of each labeled element
+        """
+        offsets = []
+        encoded, _ = self._encode(element, offsets)
+        labels_and_offsets = {'label_ids': encoded, 'offsets': offsets}
+        return labels_and_offsets
 
-def boundary_marks(element, features, L):
-    element_tag = element.tag
-    if element_tag in CODES['boundaries'] and L > 0:
-        if '' in CODES['boundaries'][element_tag]:
-            features['boundaries'][element_tag][''][0] = CODES['boundaries'][element_tag][''][''][0]
-            features['boundaries'][element_tag][''][L-1] = CODES['boundaries'][element_tag][''][''][1]
-        for attribute in (set(CODES['boundaries'][element_tag].keys()) & set(element.attrib)):
-            val = element.attrib[attribute]
-            if val and val in CODES['boundaries'][element_tag][attribute]:
-                features['boundaries'][element_tag][attribute][0] = CODES['boundaries'][element_tag][attribute][val][0]
-                features['boundaries'][element_tag][attribute][L-1] = CODES['boundaries'][element_tag][attribute][val][1]
-    return features
+    def _encode(self, element: Element, offsets: List = [], pos: int = 0) -> List[int]:
+        text_element = element.text or ''
+        L_text = len(text_element)
+        text_tail = element.tail or ''
+        L_tail = len(text_tail)
+        code = self._get_code(element)
+        L_tot = len(innertext(element))
+        if code:
+            # as soon as an element corresponds to one of the code, the code is proagated on the whole length of the element and its tail
+            encoded = [code] * L_tot
+            offsets.append((pos, pos + L_tot))
+        else:
+            encoded = [None] * L_text
+            pos += L_text
+            # check child elements
+            for child in list(element):
+                child_encoded, pos = self._encode(child, offsets=offsets, pos=pos)
+                encoded += child_encoded
+        encoded = encoded + [None] * L_tail
+        pos += L_tot + L_tail
+        return encoded, pos
+
+    def _get_code(self, element: Element) -> int:
+        for code, constraint in self.code_map.constraints.items():
+            if element.tag == constraint['tag']:
+                if constraint['attributes']:
+                    attributes_found = set(constraint['attributes'].keys()) & set(element.attrib)
+                    for a in attributes_found:
+                        val = element.attrib[a]
+                        if val and val in constraint['attributes'][a]:
+                            return code
+                else:  # no constraints beyond the tag name
+                    return code
+        # the element does not match any of the constraints
+        return None
 
 
 def demo():
-    example = "<xml>Here <sd-panel>it is: <i><sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag></i>. End</sd-panel>.</xml>"
+    example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>.</xml>"
     xml = fromstring(example)
-    features, L, _ = featurize(xml)
+    xe = XMLEncoder(EntityTypeCodeMap)
+    encoded = xe.encode(xml)
     inner_text = innertext(xml)
-    assert L == len(inner_text)
+    assert len(encoded['label_ids']) == len(inner_text)
     text = ''.join([c + '  ' for c in inner_text])
     print("\nExample xml:\n")
     print(example)
     print("\nInner text and features with codes:\n")
     print(text)
-    for kind in features:
-        for tag in features[kind]:
-            for attribute in features[kind][tag]:
-                codes = features[kind][tag][attribute]
-                trace = []
-                for c in codes:
-                    if c is None:
-                        trace.append('__')
-                    else:
-                        trace.append(f"{c:02}")
-                print(f"{' '.join(trace)}\t{kind} {tag} {attribute}")
+    trace = []
+    trace = [f"{c:02}" if c is not None else '__' for c in encoded['label_ids']]
+    print(f"{' '.join(trace)}")
+    print(f"\nOffsets of the labeled elements with their code:")
+    for start, end in encoded['offsets']:
+        print(f"'{inner_text[start:end]}': start={start}, end={end}, with codes: {encoded['label_ids'][start:end]}")
 
 
 if __name__ == '__main__':

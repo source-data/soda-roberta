@@ -1,9 +1,5 @@
 import re
-from typing import Dict, List
-from time import time
-from copy import deepcopy
-from string import ascii_letters, printable
-from collections import namedtuple
+from datetime import datetime
 
 
 def innertext(xml):
@@ -17,6 +13,11 @@ def cleanup(text):
     text = re.sub(r'^[Aa]bstract', '', text)
     return text
 
+
+def now():
+    now_str = datetime.now().isoformat()
+    now_str.replace(':', '-')
+    return now_str
 
 # -*- coding: utf-8 -*-
 # From https://gist.github.com/vladignatyev/06860ec2040cb497f0f3

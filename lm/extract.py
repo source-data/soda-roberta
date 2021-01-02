@@ -5,7 +5,7 @@ from xml.etree.ElementTree import parse, Element, tostring
 from nltk import PunktSentenceTokenizer
 from common.utils import cleanup, innertext, progress
 from common.config import config
-from common import DATASET
+from common import LM_DATASET
 
 
 class ExtractorXML:
@@ -41,7 +41,7 @@ class ExtractorXML:
             keep_xml (bool):
                 Whether to xeep the xml markup instead of extracting innertext. Can be useful for token classification.
             remove_tail (bool):
-                Wheter to remove the tail of the xml selected xml element. 
+                Whether to remove the tail of the xml selected xml element. 
 
         Returns:
             (int):
@@ -167,19 +167,21 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('corpus', nargs="?", default=None, help='path to the corpus of documents to use.')
-    parser.add_argument('destination', nargs="?", default=DATASET, help='Destination folder for extracted text files.')
+    parser.add_argument('destination', nargs="?", default=LM_DATASET, help='Destination folder for extracted text files.')
     parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
+    parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')
 
     args = parser.parse_args()
     extract_sentences = args.sentences
     xpath = args.xpath
+    keep_xml = args.keep_xml
     if not args.corpus:
         self_test()
     else:
         source_path = Path(args.corpus)
         destination_path = Path(args.destination)
-        N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences)
+        N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
         print(f"Saved {N} examples.")
 
 

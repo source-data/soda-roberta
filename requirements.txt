@@ -1,4 +1,5 @@
 transformers
+datasets
 torch
 python-dotenv
 nltk

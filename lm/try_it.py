@@ -1,6 +1,5 @@
 from transformers import pipeline
 from argparse import ArgumentParser
-from pathlib import Path
 from common import MODEL_PATH
 
 

@@ -27,16 +27,16 @@ def self_test():
             [-100, -100,    4]
         ]),
         predictions=np.array([
-            [-100,    1, -100],
-            [   1, -100, -100],
-            [-100, -100, -100],
-            [-100, -100, -100]
-        ])
+            [-100,    1, -100],  # 1 true positive
+            [   2, -100, -100],  # 1 true positive
+            [   1,    1,    1],  # 3 false negatives
+            [   1,    1,    1]   # 3 false negatives
+        ])  # => 2 TP / 8 calls = 0.25 precision; 2 TP / 4 P = 50%  recall
     )
     metrics = compute_metrics(pred)
     print(metrics)
-    assert metrics['precision'] == 0.5
-    assert metrics['recall'] == 0.25
+    assert metrics['precision'] == 0.25
+    assert metrics['recall'] == 0.50
     print("Looks like it is working!")
 
 
