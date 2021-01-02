@@ -9,7 +9,7 @@ from datasets import load_dataset
 # from datasets.utils.download_manager import GenerateMode
 from common.metrics import compute_metrics
 from common.config import config
-from common import TOKENIZER_PATH, NER_DATASET, MODEL_PATH, HUGGINGFACE_CACHE
+from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
 
 # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
@@ -35,16 +35,16 @@ data_collator = DataCollatorForTokenClassification(
     max_length=config.max_length
 )
 
-
-model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=8)
+num_labels = train_dataset.info.features['labels'].feature.num_classes
+model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
 
 training_args = TrainingArguments(
     output_dir="./model",
     overwrite_output_dir=False,
     num_train_epochs=50,
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
     # eval_accumulation_steps=50,
     evaluation_strategy='steps',
     eval_steps=500,
@@ -67,7 +67,7 @@ trainer = Trainer(
 )
 
 trainer.train()
-trainer.save_model(f"{MODEL_PATH}")
+trainer.save_model(f"{NER_MODEL_PATH}")
 
 print(f"Testing on {len(test_dataset)}.")
 pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')

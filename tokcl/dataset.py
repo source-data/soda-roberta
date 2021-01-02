@@ -23,10 +23,9 @@ import datasets
 from common import NER_DATASET, HUGGINGFACE_CACHE
 from common.config import config
 
-datasets.DownloadConfig()
 
 #  don't forget to add 'O' for outside of mapped entities.
-_NER_LABEL_NAMES = [config.outside_of_entity_label] + [c['label'] for _, c in EntityTypeCodeMap.constraints.items()]
+_NER_LABEL_NAMES = [config.outside_of_entity_label] + EntityTypeCodeMap.all_labels
 print(_NER_LABEL_NAMES)
 
 _CITATION = """\
@@ -193,6 +192,7 @@ def self_test():
     print(len(train_dataset))
     print(len(eval_dataset))
     print(len(test_dataset))
+    print(f"Number of classes: {train_dataset.info.features['labels'].feature.num_classes}")
     # train_10_80pct_ds = datasets.load_dataset('bookcorpus', split='train[:10%]+train[-80%:]')
 
 if __name__ == "__main__":
