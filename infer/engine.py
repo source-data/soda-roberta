@@ -61,3 +61,5 @@ if __name__ == "__main__":
     )
     serializer = Serializer()
     engine = Engine(model, tokenizer, serializer)
+    tagged = engine.tag(text)
+    print(tagged)
