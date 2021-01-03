@@ -44,6 +44,7 @@ class MetricsComputer:
             for prediction, label in zip(predictions, labels)
         ]
 
+        print(classification_report(true_labels, true_predictions))
         return {
             "accuracy_score": accuracy_score(true_labels, true_predictions),
             "precision": precision_score(true_labels, true_predictions),
@@ -64,21 +65,26 @@ def self_test():
         [-100,          3,          4,            0,           0,           1,          2,            0,        -100]
     ])
     y_pred = [
-        ['O',          'O',        'O',         'B-MISC',     'I-MISC',    'I-MISC',   'I-MISC',    'O',        'O'],
-        ['O',          'B-PER',    'I-PER',     'O',          'O',         'B-MISC',   'I-MISC',    'I-MISC',   'O']
+        ['O',          'O',        'B-PER',         'O',      'B-MISC',     'I-MISC',   'I-MISC',    'O',        'O'],
+        ['O',          'B-PER',    'I-PER',     'I-PER',      'O',          'B-MISC',   'O',         'B-MISC',   'O']
     ]
     y_pred_np = np.array([
         # 'O',         'O',        'O',         'O',         'B-MISC',    'I-MISC',    'I-MISC',    'O',         'O'
         [[10,2,2,1,2],[10,2,2,1,2],[10,1,2,1,2],[10,1,1,2,1],[2,10,1,2,2],[1,1,10,2,1],[1,1,10,2,1],[10,1,1,2,1],[10,2,2,1,2]],
-        #'O',         'B-PER',     'I-PER',     'O',         'O',         'B-MISC',    'O',         'I-MISC',         'O'
-        [[10,2,2,1,2],[1,2,2,10,2],[1,2,2,1,10],[10,2,2,1,2],[10,2,2,1,2],[1,10,2,1,2],[1,2,10,1,2],[1,2,10,1,2],[10,2,2,1,2]]
+        #'O',         'B-PER',     'I-PER',     'O',         'O',         'B-MISC',    'O',         'B-MISC',         'O'
+        [[10,2,2,1,2],[1,2,2,10,2],[1,2,2,1,10],[10,2,2,1,2],[10,2,2,1,2],[1,10,2,1,2],[10,2,1,1,2],[1,10,1,1,2],[10,2,2,1,2]]
     ])
-    # codes        0    1         2         3        4
-    mc = MetricsComputer(label_list=['O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER'])
+    
+    mc = MetricsComputer(label_list=[
+    #    0    1         2         3        4
+        'O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER'
+    ])
     eval_pred = EvalPrediction(y_pred_np, y_true_np)
     m = mc(eval_pred)
-    for k, v in m.items():
-        print(k, v)
+    print(m)
+    # for k, v in m.items():
+    #     print(k, v)
+    print(classification_report(y_true, y_pred))
 
 
 if __name__ == "__main__":
