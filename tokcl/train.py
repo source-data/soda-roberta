@@ -44,7 +44,7 @@ compute_metrics = MetricsComputer(label_list=label_list)
 model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
 training_args = TrainingArguments(
-    output_dir="./model",
+    output_dir=NER_MODEL,
     overwrite_output_dir=False,
     num_train_epochs=50,
     per_device_train_batch_size=32,
