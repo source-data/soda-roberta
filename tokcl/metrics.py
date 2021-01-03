@@ -44,6 +44,7 @@ class MetricsComputer:
             for prediction, label in zip(predictions, labels)
         ]
 
+        print("\n"+" " * 80)
         print(classification_report(true_labels, true_predictions))
         return {
             "accuracy_score": accuracy_score(true_labels, true_predictions),
