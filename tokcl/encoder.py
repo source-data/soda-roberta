@@ -1,4 +1,4 @@
-from xml.etree.ElementTree import Element, fromstring
+from xml.etree.ElementTree import Element, fromstring, tostring
 from typing import List
 from .xmlcode import CodeMap, SourceDataCodes
 from common.utils import innertext
@@ -34,6 +34,8 @@ class XMLEncoder:
         offsets = []
         encoded, _ = self._encode(element, offsets)
         labels_and_offsets = {'label_ids': encoded, 'offsets': offsets}
+        for start, end in offsets:
+            assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(element)}\n{innertext(element)[start:end]}\n{tostring(element)}"
         return labels_and_offsets
 
     def _encode(self, element: Element, offsets: List = [], pos: int = 0) -> List[int]:
@@ -42,11 +44,14 @@ class XMLEncoder:
         text_tail = element.tail or ''
         L_tail = len(text_tail)
         code = self._get_code(element)
-        L_tot = len(innertext(element))
+        inner_text = innertext(element)
+        L_inner_text = len(inner_text)
+        # print(f"{'•' * pos}{inner_text}<{element.tag}, {pos}, {pos + L_inner_text}, tail={L_tail}>")
         if code:
             # as soon as an element corresponds to one of the code, the code is proagated on the whole length of the element and its tail
-            encoded = [code] * L_tot
-            offsets.append((pos, pos + L_tot))
+            encoded = [code] * L_inner_text
+            offsets.append((pos, pos + L_inner_text))
+            pos += L_inner_text
         else:
             encoded = [None] * L_text
             pos += L_text
@@ -55,7 +60,7 @@ class XMLEncoder:
                 child_encoded, pos = self._encode(child, offsets=offsets, pos=pos)
                 encoded += child_encoded
         encoded = encoded + [None] * L_tail
-        pos += L_tot + L_tail
+        pos += L_tail
         return encoded, pos
 
     def _get_code(self, element: Element) -> int:
@@ -74,7 +79,8 @@ class XMLEncoder:
 
 
 def demo():
-    example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>.</xml>"
+    example = "<xml><span>Here</span> <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>.</xml>"
+    # example = '<sd-panel><p><strong>F</strong> <em><sd-tag category="" role="intervention" type="gene">FUNDC1</sd-tag></em></p></sd-panel>'
     xml = fromstring(example)
     xe = XMLEncoder(SourceDataCodes.ENTITY_TYPES)
     encoded = xe.encode(xml)
