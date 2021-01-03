@@ -12,36 +12,44 @@ from typing import List, Dict, Tuple
 #  Metrics
 
 
-def compute_metrics(eval_pred: EvalPrediction, label_ids: List[str]) -> Dict:
-    """Computes metrics for token classifications. Assums the labels follow the IOB2 scheme.
-    Positions with labels with a value of -100 will be filtered out both from true labela dn prediction.
+class MetricsComputer:
+    """Computes metrics for token classifications. Assumes the labels follow the IOB2 scheme.
 
     Args:
-        eval_pred (EvalPrediction): the predictions and targets to be matched as np.ndarrays.
-        label_list: the list of IOB2 string labels corresponding to the numerical codes.
-
-    Returns:
-        (Dict): a dictionary with accuracy_score, precision, recall and f1.
+        label_list: the list of IOB2 string labels.
     """
-    predictions, labels = eval_pred
-    predictions = np.argmax(predictions, axis=-1)
+    def __init__(self, label_list: List = []):
+        self.label_list = label_list
 
-    # Remove ignored index (special tokens)
-    true_predictions = [
-        [label_ids[p] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [label_ids[l] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
+    def __call__(self, eval_pred: EvalPrediction) -> Dict:
+        """Computes accuracy precision, recall and f1 based on the list of IOB2 labels. 
+        Positions with labels with a value of -100 will be filtered out both from true labela dn prediction.
 
-    return {
-        "accuracy_score": accuracy_score(true_labels, true_predictions),
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions),
-    }
+        Args:
+            eval_pred (EvalPrediction): the predictions and targets to be matched as np.ndarrays.
+
+        Returns:
+            (Dict): a dictionary with accuracy_score, precision, recall and f1.
+        """
+        predictions, labels = eval_pred
+        predictions = np.argmax(predictions, axis=-1)
+
+        # Remove ignored index (special tokens)
+        true_predictions = [
+            [self.label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+        true_labels = [
+            [self.label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+
+        return {
+            "accuracy_score": accuracy_score(true_labels, true_predictions),
+            "precision": precision_score(true_labels, true_predictions),
+            "recall": recall_score(true_labels, true_predictions),
+            "f1": f1_score(true_labels, true_predictions),
+        }
 
 
 def self_test():
@@ -66,9 +74,9 @@ def self_test():
         [[10,2,2,1,2],[1,2,2,10,2],[1,2,2,1,10],[10,2,2,1,2],[10,2,2,1,2],[1,10,2,1,2],[1,2,10,1,2],[1,2,10,1,2],[10,2,2,1,2]]
     ])
     # codes        0    1         2         3        4
-    label_list = ['O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER']
+    mc = MetricsComputer(label_list=['O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER'])
     eval_pred = EvalPrediction(y_pred_np, y_true_np)
-    m = compute_metrics(eval_pred, label_list)
+    m = mc(eval_pred)
     for k, v in m.items():
         print(k, v)
 
