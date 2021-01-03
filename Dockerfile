@@ -9,7 +9,7 @@ RUN pip install sklearn
 RUN pip install transformers
 RUN pip install datasets
 # uninstalling TensorBoard 1.15.0+nv is making problem with 'cannot convert 0 to DType'
-RUN pip uninstall -y tensorflow
+# RUN pip uninstall -y tensorflow
 RUN pip uninstall -y nvidia-tensorboard
 RUN pip install tensorflow
 RUN pip install seqeval
