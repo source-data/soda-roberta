@@ -1,5 +1,6 @@
 # https://github.com/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb
 from typing import NamedTuple
+import torch
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForTokenClassification,
@@ -65,6 +66,8 @@ trainer = Trainer(
     eval_dataset=eval_dataset,
     compute_metrics=compute_metrics,
 )
+
+print(f"CUDA available: {torch.cuda.is_available()}")
 
 trainer.train()
 trainer.save_model(f"{NER_MODEL_PATH}")
