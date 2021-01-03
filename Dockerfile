@@ -12,6 +12,7 @@ RUN pip install datasets
 RUN pip uninstall -y tensorflow
 RUN pip uninstall -y nvidia-tensorboard
 RUN pip install tensorflow
+RUN pip install seqeval
 # RUN pip install nvidia-pyindex
 # RUN pip install nvidia-tensorflow
 # RUN python -c "import nltk; nltk.download('averaged_perceptron_tagger')" \
