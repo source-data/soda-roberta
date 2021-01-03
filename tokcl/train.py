@@ -46,12 +46,12 @@ model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels
 training_args = TrainingArguments(
     output_dir=NER_MODEL_PATH,
     overwrite_output_dir=False,
-    num_train_epochs=50,
+    num_train_epochs=10,
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,
     evaluation_strategy='steps',
-    eval_steps=1,
-    save_steps=10_000,
+    eval_steps=100,
+    save_steps=100,
     save_total_limit=2,
     prediction_loss_only=False,
 )
