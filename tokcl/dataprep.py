@@ -92,25 +92,35 @@ class Preparator:
         xml_encoded = self.xml_encoder.encode(xml)
         inner_text = innertext(xml)
         tokenized = self.tokenizer.encode(inner_text)  # uses Whitespace as pre_processor
-        token_level_labels = self._align_labels(tokenized, xml_encoded)
+        token_level_labels = self._align_labels(tokenized, xml_encoded, inner_text)
         return tokenized, token_level_labels
 
-    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict) -> Tuple[List[int], List[str], List[int]]:
+    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text) -> Tuple[List[int], List[str], List[int]]:
         # prefil with outside of entity label 'O' using IOB2 scheme
         token_level_labels = ['O'] * len(tokenized)
+        # tokenizer may have truncated the example
+        last_token_start, last_token_end = tokenized.offsets[-2]  # -2 because the last token is </2> with offsets (0,0) by convention
         for element_start, element_end in xml_encoded['offsets']:
-            start_token_idx = tokenized.char_to_token(element_start)
-            end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
-            code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
-            prefix = "B"  # for beginign token according to IOB2 scheme
-            for token_ids in range(start_token_idx, end_token_idx + 1):
-                label = self._int_code_to_iob2_label(prefix, code)
-                token_level_labels[token_ids] = label
-                prefix = "I"  # for subsequet inside tokens
+            # check we are still within the truncated example
+            if (element_start <= last_token_start) & (element_end <= last_token_end):
+                start_token_idx = tokenized.char_to_token(element_start)
+                end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
+                assert start_token_idx is not None, f"\n\nproblem with start token for text {inner_text[element_start:element_end]}\n\n{inner_text}\n\n{tokenized.tokens}"
+                assert end_token_idx is not None, f"\n\nproblem with end token for text {inner_text[element_start:element_end]}\n\n{inner_text}\n\n{tokenized.tokens}"
+                code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
+                assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
+                prefix = "B"  # for beginign token according to IOB2 scheme
+                for token_ids in range(start_token_idx, end_token_idx + 1):
+                    label = self._int_code_to_iob2_label(prefix, code)
+                    token_level_labels[token_ids] = label
+                    prefix = "I"  # for subsequet inside tokens
+            else:
+                # the last token has been reached, no point scanner further elemnts
+                break
         return token_level_labels
 
-    def _int_code_to_iob2_label(self, prefix: str, label_id: int) -> str:
-        label = self.code_map.constraints[label_id]['label']
+    def _int_code_to_iob2_label(self, prefix: str, code: int) -> str:
+        label = self.code_map.constraints[code]['label']
         iob2_label = f"{prefix}-{label}"
         return iob2_label
 
@@ -229,7 +239,7 @@ if __name__ == "__main__":
     source_dir_path = args.source_dir
     if source_dir_path:
         dest_dir_path = args.dest_dir
-        code_map = EntityTypeCodeMap
+        code_map = SourceDataCodes.ENTITY_TYPES
         # tokenizer = ByteLevelBPETokenizer.from_file(
         #     vocab_filename=f"{TOKENIZER_PATH}/vocab.json",
         #     merges_filename=f"{TOKENIZER_PATH}/merges.txt"
