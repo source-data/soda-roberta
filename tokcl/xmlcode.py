@@ -85,7 +85,7 @@ class SourceDataCodes(Enum):
                 'label': 'SMALL_MOLECULE',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['small_molecule'],
+                    'type': ['molecule'],
                 }
             },
             2: {
@@ -127,7 +127,7 @@ class SourceDataCodes(Enum):
                 'label': 'EXP_ASSAY',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['assay'],
+                    'category': ['assay'],
                 }
             }
         })
