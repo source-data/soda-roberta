@@ -1,14 +1,14 @@
-# https://github.com/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb
+# https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 from typing import NamedTuple
 import torch
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForTokenClassification,
-    EvalPrediction, Trainer
+    Trainer
 )
 from datasets import load_dataset
 # from datasets.utils.download_manager import GenerateMode
-from .metrics import compute_metrics
+from .metrics import MetricsComputer
 from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
@@ -38,6 +38,9 @@ data_collator = DataCollatorForTokenClassification(
 )
 
 num_labels = train_dataset.info.features['labels'].feature.num_classes
+label_list = train_dataset.info.features['labels'].feature.names
+compute_metrics = MetricsComputer(label_list=label_list)
+
 model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
 training_args = TrainingArguments(
