@@ -15,7 +15,6 @@ class Config:
         'max_eval': 10_000,
         'max_test': 10_000,
     }
-    outside_of_entity_label = "O"  # label used for token, chars outside of a named entity
 
 
 config = Config()

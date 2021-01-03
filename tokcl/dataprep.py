@@ -7,11 +7,11 @@ import shutil
 from random import shuffle
 from argparse import ArgumentParser
 from tokenizers import Encoding, ByteLevelBPETokenizer
-from tokenizers.processors import BertProcessing, RobertaProcessing
+from tokenizers.processors import RobertaProcessing
 from transformers import RobertaTokenizer
 from .encoder import XMLEncoder
 from .xmlcode import (
-    CodeMap, EntityTypeCodeMap
+    CodeMap, SourceDataCodes
 )
 from common.utils import innertext, progress
 from common import TOKENIZER_PATH, NER_DATASET
@@ -20,6 +20,9 @@ from common.config import config
 
 class Preparator:
     """Processes source xml documents into examples that can be used in a token classification task.
+    It tokenizes the text with the provided tokenizer. 
+    The XML is used to generate labels according to the provided CodeMap.
+    The datset is then split into train, eval, and test set and saved into json line files.
 
     Args:
         source_dir_path (Path):
@@ -75,10 +78,10 @@ class Preparator:
             with filepath.open() as f:
                 xml_example: ElementTree = parse(f)
             xml_example: Element = xml_example.getroot()
-            tokenized, token_level_label_ids = self._encode_example(xml_example)
+            tokenized, token_level_labels = self._encode_example(xml_example)
             labeled_examples.append({
                 'tokenized': tokenized,
-                'label_ids': token_level_label_ids
+                'label_ids': token_level_labels
             })
             # self._save_individual_example(filepath, labeled_token)
         split_examples = self._split(labeled_examples)
@@ -87,22 +90,29 @@ class Preparator:
 
     def _encode_example(self, xml: Element) -> List:
         xml_encoded = self.xml_encoder.encode(xml)
-        # replacing int label ids with strings, facilitates use of datasets.ClassLabel in tokcl.dataset
-        character_level_label_ids = self._int_labels_to_str(xml_encoded['label_ids'])
         inner_text = innertext(xml)
         tokenized = self.tokenizer.encode(inner_text)  # uses Whitespace as pre_processor
-        token_level_label_ids = self._align_labels(tokenized, character_level_label_ids)
-        return tokenized, token_level_label_ids
+        token_level_labels = self._align_labels(tokenized, xml_encoded)
+        return tokenized, token_level_labels
 
-    def _int_labels_to_str(self, label_ids: List[int]) -> List[str]:
-        label_str = []
-        for label_id in label_ids:
-            if label_id is None:
-                label_str.append(config.outside_of_entity_label)
-            else:
-                label_name = self.code_map.constraints[label_id]['label']
-                label_str.append(label_name)
-        return label_str
+    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict) -> Tuple[List[int], List[str], List[int]]:
+        # prefil with outside of entity label 'O' using IOB2 scheme
+        token_level_labels = ['O'] * len(tokenized)
+        for element_start, element_end in xml_encoded['offsets']:
+            start_token_idx = tokenized.char_to_token(element_start)
+            end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
+            code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
+            prefix = "B"  # for beginign token according to IOB2 scheme
+            for token_ids in range(start_token_idx, end_token_idx + 1):
+                label = self._int_code_to_iob2_label(prefix, code)
+                token_level_labels[token_ids] = label
+                prefix = "I"  # for subsequet inside tokens
+        return token_level_labels
+
+    def _int_code_to_iob2_label(self, prefix: str, label_id: int) -> str:
+        label = self.code_map.constraints[label_id]['label']
+        iob2_label = f"{prefix}-{label}"
+        return iob2_label
 
     def _split(self, examples: List) -> Dict:
         shuffle(examples)
@@ -116,14 +126,6 @@ class Preparator:
         split_examples['eval'] = [e for e in examples[train_fraction:train_fraction + valid_fraction]]
         split_examples['test'] = [p for p in examples[train_fraction + valid_fraction:]]
         return split_examples
-
-    def _align_labels(self, tokenized: Encoding, character_level_label_ids: list) -> Tuple[List[int], List[str], List[int]]:
-        token_level_label_ids = []
-        for i in range(len(tokenized.tokens)):
-            start, end = tokenized.offsets[i]
-            label_id = character_level_label_ids[end - 1]  # better to take last character of token since firt can be special character for space; but see # https://huggingface.co/transformers/custom_datasets.html#tok-ner
-            token_level_label_ids.append(label_id)
-        return token_level_label_ids
 
     def _save_json(self, split_examples: Dict):
         if not self.dest_dir_path.exists():
@@ -163,6 +165,8 @@ def self_test():
     # )
     # tokenizer = ByteLevelBPETokenizer.from_pretrained('roberta-base')
     pre_trained_tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+    # TODO
+    # TRY ByteLevelBPETokenizer("bert-base-uncased-vocab.txt", lowercase=True)
     pre_trained_tokenizer.save_pretrained("/tmp/pre_trained_tokenizer")
     tokenizer = ByteLevelBPETokenizer.from_file(
         "/tmp/pre_trained_tokenizer/vocab.json",
@@ -176,10 +180,26 @@ def self_test():
     source_file_path = source_path / 'example.xml'
     source_file_path.write_text(example)
     max_length = 20  # in token!
-    expected_label_codes = ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'geneprod', 'geneprod', 'geneprod', 'geneprod', 'O', 'O', 'cell', 'O', 'O', 'O', 'O', 'O', 'O']
-    expected_tokens = ['<s>', 'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin', 'ĠCre', 'b', '-', '1', 'Ġwith', 'Ġsome', 'Ġtail', '.', 'ĠEnd', '.', '________________________________________________________________', '________________________________________________________________', '</s>']
+    expected_label_codes = [
+        'O',
+        'O', 'O', 'O', 'O', 'O', 'O',
+        'B-GENEPROD', 'I-GENEPROD', 'I-GENEPROD', 'I-GENEPROD',
+        'O', 'O',
+        'B-CELL',
+        'O', 'O', 'O', 'O', 'O',
+        'O'
+    ]
+    expected_tokens = [
+        '<s>',
+        'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin',
+        'ĠCre', 'b', '-', '1',
+        'Ġwith', 'Ġsome',
+        'Ġtail',
+        '.', 'ĠEnd', '.', '________________________________________________________________', '________________________________________________________________',
+        '</s>'
+    ]
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, EntityTypeCodeMap, max_length=max_length)
+        data_prep = Preparator(source_path, dest_dir_path, tokenizer, SourceDataCodes.ENTITY_TYPES, max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])

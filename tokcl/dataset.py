@@ -18,14 +18,12 @@ from __future__ import absolute_import, division, print_function
 
 import json
 from pathlib import Path
-from .xmlcode import EntityTypeCodeMap
+from .xmlcode import SourceDataCodes
 import datasets
 from common import NER_DATASET, HUGGINGFACE_CACHE
-from common.config import config
 
 
-#  don't forget to add 'O' for outside of mapped entities.
-_NER_LABEL_NAMES = [config.outside_of_entity_label] + EntityTypeCodeMap.all_labels
+_NER_LABEL_NAMES = SourceDataCodes.ENTITY_TYPES.iob2_labels
 print(_NER_LABEL_NAMES)
 
 _CITATION = """\

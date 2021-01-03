@@ -1,6 +1,6 @@
 from xml.etree.ElementTree import Element, fromstring
 from typing import List
-from .xmlcode import CodeMap, EntityTypeCodeMap
+from .xmlcode import CodeMap, SourceDataCodes
 from common.utils import innertext
 
 
@@ -76,7 +76,7 @@ class XMLEncoder:
 def demo():
     example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>.</xml>"
     xml = fromstring(example)
-    xe = XMLEncoder(EntityTypeCodeMap)
+    xe = XMLEncoder(SourceDataCodes.ENTITY_TYPES)
     encoded = xe.encode(xml)
     inner_text = innertext(xml)
     assert len(encoded['label_ids']) == len(inner_text)

@@ -8,7 +8,7 @@ from transformers import (
 )
 from datasets import load_dataset
 # from datasets.utils.download_manager import GenerateMode
-from common.metrics import compute_metrics
+from .metrics import compute_metrics
 from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
@@ -38,7 +38,7 @@ data_collator = DataCollatorForTokenClassification(
 )
 
 num_labels = train_dataset.info.features['labels'].feature.num_classes
-model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=8)
+model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
 training_args = TrainingArguments(
     output_dir="./model",
@@ -62,7 +62,7 @@ trainer = Trainer(
     data_collator=data_collator,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
-    #compute_metrics=compute_metrics,
+    compute_metrics=compute_metrics,
 )
 
 print(f"CUDA available: {torch.cuda.is_available()}")
