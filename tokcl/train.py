@@ -47,10 +47,10 @@ training_args = TrainingArguments(
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,
     evaluation_strategy='steps',
-    eval_steps=100,
+    eval_steps=1,
     save_steps=10_000,
     save_total_limit=2,
-    prediction_loss_only=True,
+    prediction_loss_only=False,
 )
 
 print("\nTraining arguments:")
