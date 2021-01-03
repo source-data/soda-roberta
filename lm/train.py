@@ -6,7 +6,7 @@ from transformers import (
     TrainingArguments, DataCollatorForLanguageModeling,
 )
 from .trainer import MyTrainer
-from common.metrics import compute_metrics
+from .metrics import compute_metrics
 from .dataset import BioDataset
 
 from common.config import config
