@@ -50,9 +50,9 @@ training_args = TrainingArguments(
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,
     evaluation_strategy='steps',
-    eval_steps=1,
-    save_steps=10_000,
-    save_total_limit=2,
+    eval_steps=50,
+    save_steps=100,
+    save_total_limit=3,
     prediction_loss_only=False,
 )
 
