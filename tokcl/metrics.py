@@ -12,7 +12,7 @@ from typing import List, Dict, Tuple
 #  Metrics
 
 
-def compute_metrics(eval_pred: EvalPrediction, label_list: List[str]) -> Dict:
+def compute_metrics(eval_pred: EvalPrediction, label_ids: List[str]) -> Dict:
     """Computes metrics for token classifications. Assums the labels follow the IOB2 scheme.
     Positions with labels with a value of -100 will be filtered out both from true labela dn prediction.
 
@@ -28,11 +28,11 @@ def compute_metrics(eval_pred: EvalPrediction, label_list: List[str]) -> Dict:
 
     # Remove ignored index (special tokens)
     true_predictions = [
-        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        [label_ids[p] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
     true_labels = [
-        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        [label_ids[l] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
 
