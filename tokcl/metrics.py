@@ -2,8 +2,9 @@ from seqeval.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report
 )
+from transformers import EvalPrediction
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Tuple
 # https://huggingface.co/metrics/seqeval
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 # https://github.com/chakki-works/seqeval
@@ -11,8 +12,18 @@ from typing import List, Dict
 #  Metrics
 
 
-def compute_metrics(p, label_list: List[str]) -> Dict:
-    labels, predictions = p
+def compute_metrics(eval_pred: EvalPrediction, label_list: List[str]) -> Dict:
+    """Computes metrics for token classifications. Assums the labels follow the IOB2 scheme.
+    Positions with labels with a value of -100 will be filtered out both from true labela dn prediction.
+
+    Args:
+        eval_pred (EvalPrediction): the predictions and targets to be matched as np.ndarrays.
+        label_list: the list of IOB2 string labels corresponding to the numerical codes.
+
+    Returns:
+        (Dict): a dictionary with accuracy_score, precision, recall and f1.
+    """
+    predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=-1)
 
     # Remove ignored index (special tokens)
@@ -56,11 +67,10 @@ def self_test():
     ])
     # codes        0    1         2         3        4
     label_list = ['O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER']
-    m = compute_metrics((y_true_np, y_pred_np), label_list)
+    eval_pred = EvalPrediction(y_pred_np, y_true_np)
+    m = compute_metrics(eval_pred, label_list)
     for k, v in m.items():
         print(k, v)
-    report = classification_report(y_true, y_pred)
-    print(report)
 
 
 if __name__ == "__main__":
