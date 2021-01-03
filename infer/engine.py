@@ -52,7 +52,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Tags text.")
     parser.add_argument("text", nargs="?", default="This is Creb1 speaking", help="Directory where the xml files are located.")
     args = parser.parse_args()
-    model = RobertaForTokenClassification.from_pretrained({NER_MODEL_PATH})
+    model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}")
     pre_trained_tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
     pre_trained_tokenizer.save_pretrained("/tmp/pre_trained_tokenizer")
     tokenizer = ByteLevelBPETokenizer.from_file(
