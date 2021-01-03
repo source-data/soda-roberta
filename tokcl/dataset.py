@@ -24,7 +24,6 @@ from common import NER_DATASET, HUGGINGFACE_CACHE
 
 
 _NER_LABEL_NAMES = SourceDataCodes.ENTITY_TYPES.iob2_labels
-print(_NER_LABEL_NAMES)
 
 _CITATION = """\
 @Unpublished{
