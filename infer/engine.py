@@ -42,9 +42,11 @@ class Engine:
 
 class Serializer:
 
-    def __call__(self, input: List[Dict], format: str = "json"):
+    def __call__(self, input: List[Dict], format: str = "json") -> str:
+        s = ""
         if format == "json":
             s = self.to_json(input)
+        return s
 
     def to_json(self, tagged):
         j = tagged
