@@ -16,7 +16,11 @@ class BioDataset(Dataset):
         for i, src_file in enumerate(src_files):
             progress(i, len(src_files), f"🚀 {src_file.name}                  ")
             text = src_file.read_text(encoding="utf-8")
-            encoded = tokenizer(text, truncation=True)
+            encoded = tokenizer(
+                text,
+                truncation=True,
+                add_special_tokens=True
+            )
             self.examples.append(encoded.input_ids)
 
     def __len__(self):
