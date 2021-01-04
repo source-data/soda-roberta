@@ -49,11 +49,6 @@ class Preparator:
         self.xml_encoder = XMLEncoder(self.code_map)
         self.max_length = max_length
         self.tokenizer = tokenizer
-        # self.tokenizer.enable_truncation(max_length=self.max_length)
-        # self.tokenizer._tokenizer.post_processor = RobertaProcessing(
-        #     ("</s>", tokenizer.token_to_id("</s>")),
-        #     ("<s>", tokenizer.token_to_id("<s>")),
-        # )
         self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
