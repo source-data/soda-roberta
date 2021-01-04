@@ -48,7 +48,6 @@ training_args = TrainingArguments(
     num_train_epochs=50,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    # eval_accumulation_steps=50,
     evaluation_strategy='steps',
     eval_steps=500,
     save_steps=10_000,
