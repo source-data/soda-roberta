@@ -11,7 +11,7 @@ class Engine:
 
     def __init__(self, model, tokenizer, serializer):
         self.model: RobertaForTokenClassification = model
-        self.tokenizer: ByteLevelBPETokenizer = tokenizer
+        self.tokenizer: RobertaTokenizerFast = tokenizer
         self.serializer: Serializer = serializer
         self.ner: TokenClassificationPipeline = pipeline(
             task='ner',
@@ -36,7 +36,7 @@ class Engine:
         #       Only exists if the offsets are available within the tokenizer
         #     - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
         #       Only exists if the offsets are available within the tokenizer
-        serialized: str = self.serialize(tagged)
+        serialized: str = self.serializer(tagged)
         return serialized
 
 
