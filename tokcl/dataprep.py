@@ -8,7 +8,7 @@ from random import shuffle
 from argparse import ArgumentParser
 from tokenizers import Encoding, ByteLevelBPETokenizer
 from tokenizers.processors import RobertaProcessing
-from transformers import RobertaTokenizer
+from transformers import RobertaTokenizerFast, RobertaTokenizer
 from .encoder import XMLEncoder
 from .xmlcode import (
     CodeMap, SourceDataCodes
@@ -49,11 +49,11 @@ class Preparator:
         self.xml_encoder = XMLEncoder(self.code_map)
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.tokenizer.enable_truncation(max_length=self.max_length)
-        self.tokenizer._tokenizer.post_processor = RobertaProcessing(
-            ("</s>", tokenizer.token_to_id("</s>")),
-            ("<s>", tokenizer.token_to_id("<s>")),
-        )
+        # self.tokenizer.enable_truncation(max_length=self.max_length)
+        # self.tokenizer._tokenizer.post_processor = RobertaProcessing(
+        #     ("</s>", tokenizer.token_to_id("</s>")),
+        #     ("<s>", tokenizer.token_to_id("<s>")),
+        # )
         self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
@@ -91,15 +91,22 @@ class Preparator:
     def _encode_example(self, xml: Element) -> List:
         xml_encoded = self.xml_encoder.encode(xml)
         inner_text = innertext(xml)
-        tokenized = self.tokenizer.encode(inner_text)  # uses Whitespace as pre_processor
+        tokenized = self.tokenizer(
+            inner_text,
+            max_length=self.max_length,
+            truncation=True,
+            return_offsets_mapping=True,
+            add_special_tokens=True
+        )
+        # uses Whitespace as pre_processor
         token_level_labels = self._align_labels(tokenized, xml_encoded, inner_text)
         return tokenized, token_level_labels
 
     def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text) -> Tuple[List[int], List[str], List[int]]:
         # prefil with outside of entity label 'O' using IOB2 scheme
-        token_level_labels = ['O'] * len(tokenized)
+        token_level_labels = ['O'] * len(tokenized.input_ids)
         # tokenizer may have truncated the example
-        last_token_start, last_token_end = tokenized.offsets[-2]  # -2 because the last token is </2> with offsets (0,0) by convention
+        last_token_start, last_token_end = tokenized.offset_mapping[-2]  # -2 because the last token is </2> with offsets (0,0) by convention
         for element_start, element_end in xml_encoded['offsets']:
             # check we are still within the truncated example
             if (element_start <= last_token_start) & (element_end <= last_token_end):
@@ -147,8 +154,8 @@ class Preparator:
             with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
                 for example in examples:
                     j = {
-                        'tokens': example['tokenized'].tokens,
-                        'input_ids': example['tokenized'].ids,
+                        'tokens': example['tokenized'].tokens(),
+                        'input_ids': example['tokenized'].input_ids,
                         'label_ids':  example['label_ids'],
                     }
                     f.write(f"{json.dumps(j)}\n")
@@ -159,9 +166,9 @@ class Preparator:
             with p.open() as f:
                 for n, line in enumerate(f):
                     j = json.loads(line)
-                    assert len(j['tokens']) <= self.max_length, "Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
-                    assert len(j['tokens']) == len(j['input_ids']), "mismatch in number of tokens and input_ids: error line {n} in {p}"
-                    assert len(j['tokens']) == len(j['label_ids']), "mismatch in number of tokens and label_ids: error line {n} in {p}"
+                    assert len(j['tokens']) <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
+                    assert len(j['tokens']) == len(j['input_ids']), f"mismatch in number of tokens and input_ids: error line {n} in {p}"
+                    assert len(j['tokens']) == len(j['label_ids']), f"mismatch in number of tokens and label_ids: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 
@@ -169,19 +176,7 @@ class Preparator:
 def self_test():
     example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>."
     example += '_' * 150 + '</xml>'  # to test truncation
-    # tokenizer = ByteLevelBPETokenizer.from_file(
-    #     f"{TOKENIZER_PATH}/vocab.json",
-    #     f"{TOKENIZER_PATH}/merges.txt"
-    # )
-    # tokenizer = ByteLevelBPETokenizer.from_pretrained('roberta-base')
-    pre_trained_tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    # TODO
-    # TRY ByteLevelBPETokenizer("bert-base-uncased-vocab.txt", lowercase=True)
-    pre_trained_tokenizer.save_pretrained("/tmp/pre_trained_tokenizer")
-    tokenizer = ByteLevelBPETokenizer.from_file(
-        "/tmp/pre_trained_tokenizer/vocab.json",
-        "/tmp/pre_trained_tokenizer/merges.txt"
-    )
+    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     path = Path('/tmp/test_dataprep')
     path.mkdir()
     source_path = path / 'source'
@@ -196,7 +191,9 @@ def self_test():
         'B-GENEPROD', 'I-GENEPROD', 'I-GENEPROD', 'I-GENEPROD',
         'O', 'O',
         'B-CELL',
-        'O', 'O', 'O', 'O', 'O',
+        'O', 'O', 'O',
+        'O',
+        'O',
         'O'
     ]
     expected_tokens = [
@@ -205,7 +202,9 @@ def self_test():
         'ĠCre', 'b', '-', '1',
         'Ġwith', 'Ġsome',
         'Ġtail',
-        '.', 'ĠEnd', '.', '________________________________________________________________', '________________________________________________________________',
+        '.', 'ĠEnd', '.', 
+        '________________________________________________________________', 
+        '________________________________________________________________',
         '</s>'
     ]
     try:
@@ -214,9 +213,9 @@ def self_test():
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])
         print('\nTokens')
-        print(labeled_examples[0]['tokenized'].tokens)
-        assert labeled_examples[0]['label_ids'] == expected_label_codes
-        assert labeled_examples[0]['tokenized'].tokens == expected_tokens
+        print(labeled_examples[0]['tokenized'].tokens())
+        assert labeled_examples[0]['label_ids'] == expected_label_codes, labeled_examples[0]['label_ids']
+        assert labeled_examples[0]['tokenized'].tokens() == expected_tokens
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
         for filepath in filepaths:
@@ -240,17 +239,7 @@ if __name__ == "__main__":
     if source_dir_path:
         dest_dir_path = args.dest_dir
         code_map = SourceDataCodes.ENTITY_TYPES
-        # tokenizer = ByteLevelBPETokenizer.from_file(
-        #     vocab_filename=f"{TOKENIZER_PATH}/vocab.json",
-        #     merges_filename=f"{TOKENIZER_PATH}/merges.txt"
-        # )
-        # download pretrained tokenizer files; not sure this will produce correct results...
-        pre_trained_tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        pre_trained_tokenizer.save_pretrained("/tmp/pre_trained_tokenizer")
-        tokenizer = ByteLevelBPETokenizer.from_file(
-            "/tmp/pre_trained_tokenizer/vocab.json",
-            "/tmp/pre_trained_tokenizer/merges.txt"
-        )
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
         sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_map)
         sdprep.run()
         sdprep.verify()
