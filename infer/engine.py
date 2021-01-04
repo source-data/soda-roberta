@@ -1,7 +1,6 @@
 from transformers import (
-    pipeline, TokenClassificationPipeline, RobertaForTokenClassification, RobertaTokenizer
+    pipeline, TokenClassificationPipeline, RobertaForTokenClassification, RobertaTokenizerFast
 )
-from tokenizers import ByteLevelBPETokenizer
 from argparse import ArgumentParser
 import json
 from typing import List, Dict
@@ -54,12 +53,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/checkpoint-300")
     text = args.text
-    pre_trained_tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    pre_trained_tokenizer.save_pretrained("/tmp/pre_trained_tokenizer")
-    tokenizer = ByteLevelBPETokenizer.from_file(
-        "/tmp/pre_trained_tokenizer/vocab.json",
-        "/tmp/pre_trained_tokenizer/merges.txt"
-    )
+    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     serializer = Serializer()
     engine = Engine(model, tokenizer, serializer)
     tagged = engine.tag(text)
