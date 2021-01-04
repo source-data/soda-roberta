@@ -11,7 +11,7 @@ def compute_metrics(pred: EvalPrediction):
     labels = pred.label_ids[mask].flatten()
     preds = pred.predictions[mask].flatten()
     _, recall, _, _ = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='micro')
-    return recall
+    return {'recall': recall}
 
 
 def self_test():
@@ -29,9 +29,9 @@ def self_test():
             [   1,    7,    4]   # 1 true positive, irrelevant pos will be ignored
         ]) 
     )
-    recall = compute_metrics(pred)
-    print(f"recall={recall}")
-    assert recall == 0.75
+    m = compute_metrics(pred)
+    print(f"recall={m['recall']}")
+    assert m['recall'] == 0.75
     print("Looks like it is working!")
 
 
