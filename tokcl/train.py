@@ -54,6 +54,7 @@ training_args = TrainingArguments(
     eval_steps=100,
     save_steps=100,
     prediction_loss_only=False,
+    fp16=True
 )
 
 print("\nTraining arguments:")
