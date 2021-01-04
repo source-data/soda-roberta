@@ -36,11 +36,15 @@ class Engine:
         #       Only exists if the offsets are available within the tokenizer
         #     - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
         #       Only exists if the offsets are available within the tokenizer
-        serialized: str = self.serializer(tagged)
+        serialized: str = self.serializer(tagged, format='json')
         return serialized
 
 
 class Serializer:
+
+    def __call__(self, input: List[Dict], format: str = "json"):
+        if format == "json":
+            s = self.to_json(input)
 
     def to_json(self, tagged):
         j = tagged
