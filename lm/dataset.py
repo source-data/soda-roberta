@@ -37,8 +37,8 @@ def self_test():
     dataset = BioDataset(Path(LM_DATASET), tokenizer, "test")
     assert len(dataset) > 0
     for i, e in enumerate(dataset.examples):
-        progress(i, len(dataset), f"len({i}) <= {max_len}                                ")
-        assert len(e) <= max_len
+        progress(i, len(dataset), f"len({i}) <= {max_len + 2}                                ")
+        assert len(e) <= max_len + 2, f"{len(e)} != {max_len + 2}" # +2 because of </s> and <s> token
     print("\nLooks OK!")
 
 
