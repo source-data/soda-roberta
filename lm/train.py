@@ -33,7 +33,7 @@ print(f"Evaluating on {len(eval_dataset)} examples.")
 
 config = RobertaConfig(
     vocab_size=config.vocab_size,
-    # max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token?
+    max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token?
     num_attention_heads=12,
     num_hidden_layers=6,
     type_vocab_size=1,
@@ -48,7 +48,6 @@ training_args = TrainingArguments(
     num_train_epochs=50,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    # eval_accumulation_steps=50,
     evaluation_strategy='steps',
     eval_steps=500,
     save_steps=10_000,
