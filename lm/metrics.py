@@ -4,18 +4,14 @@ import numpy as np
 
 
 def compute_metrics(pred: EvalPrediction):
-    labels = pred.label_ids.flatten()
-    preds = pred.predictions.flatten()
-    # need to ignore the padding labels -100
-    set_of_labels = set(labels)
-    set_of_labels.remove(-100)
-    set_of_labels = list(set_of_labels)
-    precision, recall, f1, _ = precision_recall_fscore_support(y_true=labels, y_pred=preds, labels=set_of_labels, average='micro')
-    return {
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
+    """Compute recall at the masked position
+    """
+    mask = pred.label_ids != -100
+    # filter everything except the masked position and flatten tensors
+    labels = pred.label_ids[mask].flatten()
+    preds = pred.predictions[mask].flatten()
+    _, recall, _, _ = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='micro')
+    return recall
 
 
 def self_test():
@@ -29,14 +25,13 @@ def self_test():
         predictions=np.array([
             [-100,    1, -100],  # 1 true positive
             [   2, -100, -100],  # 1 true positive
-            [   1,    1,    1],  # 3 false negatives
-            [   1,    1,    1]   # 3 false negatives
-        ])  # => 2 TP / 8 calls = 0.25 precision; 2 TP / 4 P = 50%  recall
+            [   2,    6,    8],  # 1 false positive, irrelevant pos will be ignored
+            [   1,    7,    4]   # 1 true positive, irrelevant pos will be ignored
+        ]) 
     )
-    metrics = compute_metrics(pred)
-    print(metrics)
-    assert metrics['precision'] == 0.25
-    assert metrics['recall'] == 0.50
+    recall = compute_metrics(pred)
+    print(f"recall={recall}")
+    assert recall == 0.75
     print("Looks like it is working!")
 
 

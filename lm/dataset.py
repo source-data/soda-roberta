@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from transformers import RobertaTokenizerFast
 from common.utils import progress
 from common.config import config
-from common import DATASET, TOKENIZER_PATH
+from common import LM_DATASET, TOKENIZER_PATH
 
 
 class BioDataset(Dataset):
@@ -30,7 +30,7 @@ class BioDataset(Dataset):
 def self_test():
     max_len = config.max_length
     tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=max_len)
-    dataset = BioDataset(Path(DATASET), tokenizer, "test")
+    dataset = BioDataset(Path(LM_DATASET), tokenizer, "test")
     assert len(dataset) > 0
     for i, e in enumerate(dataset.examples):
         progress(i, len(dataset), f"len({i}) <= {max_len}                                ")
