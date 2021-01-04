@@ -10,7 +10,7 @@ from .metrics import compute_metrics
 from .dataset import BioDataset
 
 from common.config import config
-from common import TOKENIZER_PATH, LM_DATASET, MODEL_PATH
+from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH
 
 
 print(f"Loading tokenizer from {TOKENIZER_PATH}.")
@@ -43,7 +43,7 @@ model = RobertaForMaskedLM(config=config)
 
 
 training_args = TrainingArguments(
-    output_dir="./model",
+    output_dir=f"{LM_MODEL_PATH}",
     overwrite_output_dir=False,
     num_train_epochs=50,
     per_device_train_batch_size=16,
@@ -70,7 +70,7 @@ trainer = MyTrainer(
 )
 
 trainer.train()
-trainer.save_model(f"{MODEL_PATH}")
+trainer.save_model(f"{LM_MODEL_PATH}")
 
 print(f"Testing on {len(test_dataset)}.")
 pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
