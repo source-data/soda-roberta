@@ -56,6 +56,7 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
         per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         save_total_limit=3,
+        logging_steps=100,
         eval_steps=100,
         save_steps=100,
         prediction_loss_only=False
