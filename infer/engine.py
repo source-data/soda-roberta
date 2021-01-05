@@ -50,7 +50,7 @@ class Serializer:
 
     def to_json(self, tagged):
         j = tagged
-        return json.dumps(j, indent=4)
+        return j # json.dumps(j, indent=4)
 
 
 if __name__ == "__main__":
