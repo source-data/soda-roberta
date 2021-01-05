@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
+from typing import List, Dict
 
 
 @dataclass
@@ -22,10 +22,15 @@ class CodeMap:
 
     def __post_init__(self):
         self.all_labels: List[str] = [c['label'] for c in self.constraints.values()]
-        self.iob2_labels: List[str] = ['O']  # generate labels of IOB2 schema tagging
+        self.iob2_labels: List[str] = ['O']  # generate labels of IOB2 schema tagging, including prefix combinations
         for label in self.all_labels:
             for prefix in ['I', 'B']:
                 self.iob2_labels.append(f"{prefix}-{label}")
+
+    def from_label(self, label: str) -> Dict:
+        idx = self.all_labels.index(label)
+        constraint = self.constraints[idx + 1]  # constraints keys start at 1
+        return constraint
 
 
 class SourceDataCodes(Enum):
@@ -58,13 +63,18 @@ class SourceDataCodes(Enum):
         """
         return self.value.constraints
 
+    def from_label(self, label) -> Dict:
+        """Returns (Dict): the constraint corresponding to the given label.
+        """
+        return self.value.from_label(label)
+
     GENEPROD_ROLE = CodeMap(
         constraints=OrderedDict({
             1: {
                 'label': 'CONTROLLED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['gene', 'protein', 'geneprot'],
+                    'type': ['geneprod', 'gene', 'protein'],
                     'role': ['intervention'],
                 }
             },
@@ -72,7 +82,7 @@ class SourceDataCodes(Enum):
                 'label': 'MEASURED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['gene', 'protein', 'geneprot'],
+                    'type': ['geneprod', 'gene', 'protein'],
                     'role': ['assayed'],
                 }
             },
@@ -92,7 +102,7 @@ class SourceDataCodes(Enum):
                 'label': 'GENEPROD',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['gene', 'protein', 'geneprod'],
+                    'type': ['geneprod', 'gene', 'protein'],
                 }
             },
             3: {
