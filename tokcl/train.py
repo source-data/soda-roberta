@@ -23,6 +23,7 @@ print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
 train_dataset, eval_dataset, test_dataset = load_dataset(
     './tokcl/dataset.py',
     'NER',
+    data_dir=NER_DATASET,
     split=["train", "validation", "test"],
     # download_mode=GenerateMode.FORCE_REDOWNLOAD,
     cache_dir=HUGGINGFACE_CACHE
@@ -44,7 +45,7 @@ compute_metrics = MetricsComputer(label_list=label_list)
 model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
 training_args = TrainingArguments(
-    output_dir=f"{NER_MODEL_PATH}",
+    output_dir=NER_MODEL_PATH,
     overwrite_output_dir=False,
     num_train_epochs=10,
     per_device_train_batch_size=32,
@@ -53,7 +54,7 @@ training_args = TrainingArguments(
     save_total_limit=3,
     eval_steps=100,
     save_steps=100,
-    prediction_loss_only=False,
+    prediction_loss_only=False
 )
 
 print("\nTraining arguments:")
@@ -65,13 +66,13 @@ trainer = Trainer(
     data_collator=data_collator,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
-    compute_metrics=compute_metrics,
+    compute_metrics=compute_metrics
 )
 
 print(f"CUDA available: {torch.cuda.is_available()}")
 
 trainer.train()
-trainer.save_model(f"{NER_MODEL_PATH}")
+trainer.save_model(NER_MODEL_PATH)
 
 print(f"Testing on {len(test_dataset)}.")
 pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')

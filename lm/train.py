@@ -1,25 +1,38 @@
 # https://github.com/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb
-from pathlib import Path
+# Just for reference... 
+# Roberta:
+# The model was trained on 1024 V100 GPUs for 500K steps with a batch size of 8K 
+# and a sequence length of 512. 
+# The optimizer used is Adam with a learning rate of 6e-4, 
+# \beta_{1} = 0.9  \beta_{2} = 0.98β and \epsilon = 1e-6
+# a weight decay of 0.01, learning rate warmup for 24,000 steps 
+# and linear decay of the learning rate after.
+
 from typing import NamedTuple
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForLanguageModeling,
 )
+from datasets import load_dataset
 from .trainer import MyTrainer
 from .metrics import compute_metrics
-from .dataset import BioDataset
 
 from common.config import config
-from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH
+from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, HUGGINGFACE_CACHE
 
 
 print(f"Loading tokenizer from {TOKENIZER_PATH}.")
 tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 
 print(f"\nLoading and tokenizing datasets found in {LM_DATASET}.")
-train_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="train")
-eval_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="eval")
-test_dataset = BioDataset(Path(LM_DATASET), tokenizer, subset="test")
+train_dataset, eval_dataset, test_dataset = load_dataset(
+    './tokcl/dataset.py',
+    'MLM',
+    data_dir=LM_DATASET,
+    split=["train", "validation", "test"],
+    # download_mode=GenerateMode.FORCE_REDOWNLOAD,
+    cache_dir=HUGGINGFACE_CACHE
+)
 
 
 data_collator = DataCollatorForLanguageModeling(
@@ -43,7 +56,7 @@ model = RobertaForMaskedLM(config=config)
 
 
 training_args = TrainingArguments(
-    output_dir=f"{LM_MODEL_PATH}",
+    output_dir=LM_MODEL_PATH,
     overwrite_output_dir=False,
     num_train_epochs=50,
     per_device_train_batch_size=16,
@@ -69,7 +82,7 @@ trainer = MyTrainer(
 )
 
 trainer.train()
-trainer.save_model(f"{LM_MODEL_PATH}")
+trainer.save_model(LM_MODEL_PATH)
 
 print(f"Testing on {len(test_dataset)}.")
 pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')

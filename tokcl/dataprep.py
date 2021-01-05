@@ -6,9 +6,8 @@ import json
 import shutil
 from random import shuffle
 from argparse import ArgumentParser
-from tokenizers import Encoding, ByteLevelBPETokenizer
-from tokenizers.processors import RobertaProcessing
-from transformers import RobertaTokenizerFast, RobertaTokenizer
+from tokenizers import Encoding
+from transformers import RobertaTokenizerFast
 from .encoder import XMLEncoder
 from .xmlcode import (
     CodeMap, SourceDataCodes
@@ -38,7 +37,7 @@ class Preparator:
         self,
         source_dir_path: Path,
         dest_dir_path: Path,
-        tokenizer: ByteLevelBPETokenizer,
+        tokenizer: RobertaTokenizerFast,
         code_map: CodeMap,
         max_length: int = config.max_length,
         split_ratio: Dict = config.split_ratio
@@ -52,9 +51,10 @@ class Preparator:
         self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
-    def _dest_dir_is_empty(self):
+    def _dest_dir_is_empty(self) -> bool:
         if self.dest_dir_path.exists():
-            return len(list(self.dest_dir_path.iterdir())) == 0
+            # https://stackoverflow.com/a/57968977
+            return not any([True for _ in self.dest_dir_path.iterdir()])
         else:
             return True
 
@@ -197,8 +197,8 @@ def self_test():
         'ĠCre', 'b', '-', '1',
         'Ġwith', 'Ġsome',
         'Ġtail',
-        '.', 'ĠEnd', '.', 
-        '________________________________________________________________', 
+        '.', 'ĠEnd', '.',
+        '________________________________________________________________',
         '________________________________________________________________',
         '</s>'
     ]

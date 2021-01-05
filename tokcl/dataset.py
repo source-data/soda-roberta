@@ -20,8 +20,8 @@ import json
 from pathlib import Path
 from .xmlcode import SourceDataCodes
 import datasets
-from common import NER_DATASET, HUGGINGFACE_CACHE
-
+from common import HUGGINGFACE_CACHE
+import shutil
 
 _NER_LABEL_NAMES = SourceDataCodes.ENTITY_TYPES.iob2_labels
 
@@ -127,7 +127,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
         # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive 
         # my_urls = _URLs[self.config.name]
         # data_dir = dl_manager.download_and_extract(my_urls)
-        data_dir = Path(NER_DATASET)
+        data_dir = Path(self.config.data_dir)
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
@@ -179,18 +179,36 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
 def self_test():
     from datasets import load_dataset
-    train_dataset, eval_dataset, test_dataset = load_dataset(
-        './tokcl/dataset.py',
-        'NER',
-        split=["train", "validation", "test"],
-        download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-        cache_dir=HUGGINGFACE_CACHE
-    )
-    print(len(train_dataset))
-    print(len(eval_dataset))
-    print(len(test_dataset))
-    print(f"Number of classes: {train_dataset.info.features['labels'].feature.num_classes}")
-    # train_10_80pct_ds = datasets.load_dataset('bookcorpus', split='train[:10%]+train[-80%:]')
+    data_dir = "/tmp/dataset"
+    p = Path(data_dir)
+    p.mkdir()
+    try:
+        p_train = p / "train.jsonl"
+        p_eval = p / "eval.jsonl"
+        p_test = p / "test.jsonl"
+        d = {
+            "input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0],
+            "label_ids": ["O", "O", "B-CELL", "I-CELL", "O", "O", "O", "O", "O", "O"]
+        }
+        p_train.write_text(json.dumps(d))
+        p_eval.write_text(json.dumps(d))
+        p_test.write_text(json.dumps(d))
+        train_dataset, eval_dataset, test_dataset = load_dataset(
+            './tokcl/dataset.py',
+            'NER',
+            data_dir=data_dir,
+            split=["train", "validation", "test"],
+            download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
+            cache_dir=HUGGINGFACE_CACHE
+        )
+        print(len(train_dataset))
+        print(len(eval_dataset))
+        print(len(test_dataset))
+        print(f"Number of classes: {train_dataset.info.features['labels'].feature.num_classes}")
+        # train_10_80pct_ds = datasets.load_dataset('bookcorpus', split='train[:10%]+train[-80%:]')
+    finally:
+        shutil.rmtree(data_dir)
+
 
 if __name__ == "__main__":
     self_test()
