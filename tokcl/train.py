@@ -1,6 +1,7 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 from typing import NamedTuple
 from argparse import ArgumentParser
+from pathlib import Path
 import torch
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast,
@@ -14,7 +15,7 @@ from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
 
-def train(no_cacher, data_config_name):
+def train(no_cacher, data_config_name, model_path):
     # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
@@ -46,7 +47,7 @@ def train(no_cacher, data_config_name):
     model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
     training_args = TrainingArguments(
-        output_dir=NER_MODEL_PATH,
+        output_dir=model_path,
         overwrite_output_dir=True,
         num_train_epochs=10,
         per_device_train_batch_size=32,
@@ -73,7 +74,7 @@ def train(no_cacher, data_config_name):
     print(f"CUDA available: {torch.cuda.is_available()}")
 
     trainer.train()
-    trainer.save_model(NER_MODEL_PATH)
+    trainer.save_model(model_path)
 
     print(f"Testing on {len(test_dataset)}.")
     pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
@@ -87,4 +88,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     no_cache = args.no_cache
     data_config_name = args.data_config_name
-    train(no_cache, data_config_name)
+    model_path = Path(f"{NER_MODEL_PATH}/data_config_name")
+    if not model_path.exists:
+        model_path.mkdir()
+    train(no_cache, data_config_name, model_path)
