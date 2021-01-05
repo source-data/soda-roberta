@@ -76,6 +76,8 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="NER", version="0.0.1", description="Dataset for entity recognition"),
         datasets.BuilderConfig(name="SEMROLES", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="SEMROLES_ATTN_MASK", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="SEMROLES_NO_MASK", version="0.0.1", description="Dataset for semantic roles."),
         # datasets.BuilderConfig(name="panelization", version=0.1, description="Dataset for figure legend segmentation into panel-specific legends."),
     ]
 
@@ -112,6 +114,19 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 }
             )
         elif self.config.name == "SEMROLES_ATTN_MASK":
+            features = datasets.Features(
+                {
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "labels": datasets.Sequence(
+                        feature=datasets.ClassLabel(
+                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES),
+                            names=_SEMANTIC_ROLES_LABEL_NAMES
+                        )
+                    ),
+                    "attention_mask": datasets.Sequence(feature=datasets.Value("int8")),
+                }
+            )
+        elif self.config.name == "SEMROLES_NO_MASK":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
@@ -213,6 +228,12 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "labels": labels,
                         "attention_mask": attention_mask
                     }
+                elif self.config.name == "SEMROLES_NO_MASK":
+                    # masking of labeled entities to enforce learning from context
+                    yield id_, {
+                        "input_ids": data["input_ids"],
+                        "labels": data["label_ids"]["geneprod_roles"],
+                    }
 
 
 def self_test():
@@ -236,7 +257,7 @@ def self_test():
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
-        for configuration in ["NER", "SEMROLES"]:
+        for configuration in ["NER", "SEMROLES" , "SEMROLES_ATTN_MASK", "SEMROLES_NO_MASK"]:
             train_dataset, eval_dataset, test_dataset = load_dataset(
                 './tokcl/dataset.py',
                 configuration,

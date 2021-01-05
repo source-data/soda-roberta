@@ -85,7 +85,7 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Traing script.")
-    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "SEMROLES", "SEMROLES_ATTN_MASK"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "SEMROLES", "SEMROLES_ATTN_MASK", "SEMROLES_NO_MASK"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     args = parser.parse_args()
     no_cache = args.no_cache
