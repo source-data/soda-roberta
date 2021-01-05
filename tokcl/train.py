@@ -15,7 +15,7 @@ from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
 
-def train(no_cacher, data_config_name, model_path):
+def train(no_cacher: bool, data_config_name: str, model_path: str):
     # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
@@ -91,6 +91,6 @@ if __name__ == "__main__":
     no_cache = args.no_cache
     data_config_name = args.data_config_name
     model_path = Path(f"{NER_MODEL_PATH}/data_config_name")
-    if not model_path.exists:
+    if not model_path.exists():
         model_path.mkdir()
-    train(no_cache, data_config_name, model_path)
+    train(no_cache, data_config_name, str(model_path))
