@@ -100,10 +100,10 @@ class Preparator:
         return tokenized, token_level_labels
 
     def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text, code_map: CodeMap) -> List[int]:
-        # prefil with outside of entity label 'O' using IOB2 scheme
+        # prefill with outside of entity label 'O' using IOB2 scheme
         token_level_labels = ['O'] * len(tokenized.input_ids)
         # tokenizer may have truncated the example
-        last_token_start, last_token_end = tokenized.offset_mapping[-2]  # -2 because the last token is </2> with offsets (0,0) by convention
+        last_token_start, last_token_end = tokenized.offset_mapping[-2]  # -2 because the last token is </s> with offsets (0,0) by convention
         for element_start, element_end in xml_encoded['offsets']:
             # check we are still within the truncated example
             if (element_start <= last_token_start) & (element_end <= last_token_end):
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     source_dir_path = args.source_dir
     if source_dir_path:
         dest_dir_path = args.dest_dir
-        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLE]
+        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
         sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_maps)
         sdprep.run()

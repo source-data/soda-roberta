@@ -76,8 +76,8 @@ class SourceDataCodes(Enum):
         """
         return self.value.from_label(label)
 
-    GENEPROD_ROLE = CodeMap(
-        name="geneprod_role",
+    GENEPROD_ROLES = CodeMap(
+        name="geneprod_roles",
         constraints=OrderedDict({
             1: {
                 'label': 'CONTROLLED_VAR',

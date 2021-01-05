@@ -18,13 +18,15 @@ from __future__ import absolute_import, division, print_function
 
 import json
 from pathlib import Path
-from .xmlcode import SourceDataCodes
+from .xmlcode import SourceDataCodes as sd
 import datasets
+from transformers import RobertaTokenizerFast
 from common import HUGGINGFACE_CACHE
+from common.config import config
 import shutil
 
-_NER_LABEL_NAMES = SourceDataCodes.ENTITY_TYPES.iob2_labels
-_SEMANTIC_ROLES_LABEL_NAMES = SourceDataCodes.GENEPROD_ROLE.iob2_labels
+_NER_LABEL_NAMES = sd.ENTITY_TYPES.iob2_labels
+_SEMANTIC_ROLES_LABEL_NAMES = sd.GENEPROD_ROLES.iob2_labels
 
 _CITATION = """\
 @Unpublished{
@@ -79,6 +81,10 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
     DEFAULT_CONFIG_NAME = "NER"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
+    def __init__(self, *args, tokenizer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenizer = tokenizer
+
     def _info(self):
         # TODO: This method specifies the datasets.DatasetInfo object which contains informations and typings for the dataset
         if self.config.name == "NER":  # This is the name of the configuration selected in BUILDER_CONFIGS above 
@@ -94,6 +100,18 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 }
             )
         elif self.config.name == "SEMROLES":
+            features = datasets.Features(
+                {
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "labels": datasets.Sequence(
+                        feature=datasets.ClassLabel(
+                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES),
+                            names=_SEMANTIC_ROLES_LABEL_NAMES
+                        )
+                    ),
+                }
+            )
+        elif self.config.name == "SEMROLES_ATTN_MASK":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
@@ -175,16 +193,26 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "labels": data["label_ids"]["entity_types"],
                     }
                 elif self.config.name == "SEMROLES":
+                    # masking of labeled entities to enforce learning from context
+                    input_ids = data["input_ids"]
+                    labels = data["label_ids"]["geneprod_roles"]
+                    for i, t in enumerate(labels):
+                        if t != "O":
+                            input_ids[i] = self.tokenizer.mask_token_id
                     yield id_, {
-                        "input_ids": data["input_ids"],
-                        "labels": data["label_ids"]["geneprod_roles"],
+                        "input_ids": input_ids,
+                        "labels": labels,
                     }
-                # else:
-                #     yield id_, {
-                #         "sentence": data["sentence"],
-                #         "option2": data["option2"],
-                #         "second_domain_answer": "" if split == "test" else data["second_domain_answer"],
-                #     }
+                elif self.config.name == "SEMROLES_ATTN_MASK":
+                    # masking of labeled entities to enforce learning from context
+                    input_ids = data["input_ids"]
+                    labels = data["label_ids"]["geneprod_roles"]
+                    attention_mask = [1 if t == "O" else 0 for t in labels]
+                    yield id_, {
+                        "input_ids": input_ids,
+                        "labels": labels,
+                        "attention_mask": attention_mask
+                    }
 
 
 def self_test():
@@ -196,11 +224,13 @@ def self_test():
         p_train = p / "train.jsonl"
         p_eval = p / "eval.jsonl"
         p_test = p / "test.jsonl"
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+        batch_encoding = tokenizer("One two three four five six seven eight nine ten")
         d = {
-            "input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0],
+            "input_ids": batch_encoding.input_ids,
             "label_ids": {
-                "entity_types": ["O", "O", "B-GENEPROD", "B-GENEPROD", "O", "O", "O", "O", "O", "O"],
-                "geneprod_roles": ["O", "O", "B-CONTROLLED_VAR", "B-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O"]
+                "entity_types": ["O", "O", "O", "B-GENEPROD", "B-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
+                "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "B-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"]
             },
         }
         p_train.write_text(json.dumps(d))
@@ -213,7 +243,8 @@ def self_test():
                 data_dir=data_dir,
                 split=["train", "validation", "test"],
                 download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-                cache_dir=HUGGINGFACE_CACHE
+                cache_dir=HUGGINGFACE_CACHE,
+                tokenizer=tokenizer
             )
             print(len(train_dataset))
             print(len(eval_dataset))
