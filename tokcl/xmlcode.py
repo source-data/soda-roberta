@@ -18,6 +18,7 @@ class CodeMap:
     With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled with code 1, without any furter constaints on attributes and their values.
     Usage: call `python -m tokcl.encoder` for a demo.
     """
+    name: str = ''
     constraints: OrderedDict = None
 
     def __post_init__(self):
@@ -46,6 +47,13 @@ class SourceDataCodes(Enum):
     """
 
     @property
+    def name(self) -> str:
+        """The name of the code map. Will be used as column header or field name in dataset with multiple
+        tags.
+        """
+        return self.value.name
+
+    @property
     def iob2_labels(self) -> List[str]:
         """Returns (List[str]): all the generated IOB2 labels including outside "O".
         """
@@ -69,6 +77,7 @@ class SourceDataCodes(Enum):
         return self.value.from_label(label)
 
     GENEPROD_ROLE = CodeMap(
+        name="geneprod_role",
         constraints=OrderedDict({
             1: {
                 'label': 'CONTROLLED_VAR',
@@ -90,6 +99,7 @@ class SourceDataCodes(Enum):
     )
 
     ENTITY_TYPES = CodeMap(
+        name="entity_types",
         constraints=OrderedDict({
             1: {
                 'label': 'SMALL_MOLECULE',
@@ -143,7 +153,8 @@ class SourceDataCodes(Enum):
         })
     )
 
-    PANEL_START = CodeMap(
+    PANEL = CodeMap(
+        name="panel",
         constraints=OrderedDict({
             1: {
                 'label': 'PANEL',
