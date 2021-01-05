@@ -3,6 +3,7 @@
 *.ipynb
 dataset/
 ner_dataset/
+ner_model/
 sourcedata/
 191012/
 191012.zip
@@ -18,6 +19,7 @@ runs/
 __pycache__/
 *.py[cod]
 *$py.class
+*.py.lock
 
 # C extensions
 *.so

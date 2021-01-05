@@ -6,12 +6,11 @@ import json
 import shutil
 from random import shuffle
 from argparse import ArgumentParser
-from tokenizers import Encoding, ByteLevelBPETokenizer
-from tokenizers.processors import RobertaProcessing
-from transformers import RobertaTokenizerFast, RobertaTokenizer
+from tokenizers import Encoding
+from transformers import RobertaTokenizerFast, BatchEncoding
 from .encoder import XMLEncoder
 from .xmlcode import (
-    CodeMap, SourceDataCodes
+    CodeMap, SourceDataCodes as sd
 )
 from common.utils import innertext, progress
 from common import TOKENIZER_PATH, NER_DATASET
@@ -31,30 +30,30 @@ class Preparator:
             The path of the destination directory where the files with the encoded labeled examples should be saved.
         tokenizer (ByteLevelBPETokenizer):
             The pre-trained tokenizer to use for processing the inner text.
-        code_map (CodeMap):
-            The XML-to-code constraints mapping label codes to specific combinations of tag name and attribute values.
+        code_maps (List[CodeMap)]:
+            A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
     """
     def __init__(
         self,
         source_dir_path: Path,
         dest_dir_path: Path,
-        tokenizer: ByteLevelBPETokenizer,
-        code_map: CodeMap,
+        tokenizer: RobertaTokenizerFast,
+        code_maps: List[CodeMap],
         max_length: int = config.max_length,
         split_ratio: Dict = config.split_ratio
     ):
         self.source_dir_path = source_dir_path
         self.dest_dir_path = dest_dir_path
-        self.code_map = code_map
-        self.xml_encoder = XMLEncoder(self.code_map)
+        self.code_maps = code_maps
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
-    def _dest_dir_is_empty(self):
+    def _dest_dir_is_empty(self) -> bool:
         if self.dest_dir_path.exists():
-            return len(list(self.dest_dir_path.iterdir())) == 0
+            # https://stackoverflow.com/a/57968977
+            return not any([True for _ in self.dest_dir_path.iterdir()])
         else:
             return True
 
@@ -83,8 +82,7 @@ class Preparator:
         self._save_json(split_examples)
         return labeled_examples
 
-    def _encode_example(self, xml: Element) -> List:
-        xml_encoded = self.xml_encoder.encode(xml)
+    def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         inner_text = innertext(xml)
         tokenized = self.tokenizer(
             inner_text,
@@ -92,12 +90,16 @@ class Preparator:
             truncation=True,
             return_offsets_mapping=True,
             add_special_tokens=True
-        )
-        # uses Whitespace as pre_processor
-        token_level_labels = self._align_labels(tokenized, xml_encoded, inner_text)
+        )  # uses Whitespace as pre_processor
+        token_level_labels = {}
+        for code_map in self.code_maps:
+            xml_encoder = XMLEncoder(code_map)
+            xml_encoded = xml_encoder.encode(xml)
+            labels = self._align_labels(tokenized, xml_encoded, inner_text, code_map)
+            token_level_labels[code_map.name] = labels
         return tokenized, token_level_labels
 
-    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text) -> Tuple[List[int], List[str], List[int]]:
+    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text, code_map: CodeMap) -> List[int]:
         # prefil with outside of entity label 'O' using IOB2 scheme
         token_level_labels = ['O'] * len(tokenized.input_ids)
         # tokenizer may have truncated the example
@@ -112,17 +114,17 @@ class Preparator:
                 code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
                 assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
                 prefix = "B"  # for beginign token according to IOB2 scheme
-                for token_ids in range(start_token_idx, end_token_idx + 1):
-                    label = self._int_code_to_iob2_label(prefix, code)
-                    token_level_labels[token_ids] = label
+                for token_idx in range(start_token_idx, end_token_idx + 1):
+                    label = self._int_code_to_iob2_label(prefix, code, code_map)
+                    token_level_labels[token_idx] = label
                     prefix = "I"  # for subsequet inside tokens
             else:
                 # the last token has been reached, no point scanner further elemnts
                 break
         return token_level_labels
 
-    def _int_code_to_iob2_label(self, prefix: str, code: int) -> str:
-        label = self.code_map.constraints[code]['label']
+    def _int_code_to_iob2_label(self, prefix: str, code: int, code_map: CodeMap) -> str:
+        label = code_map.constraints[code]['label']
         iob2_label = f"{prefix}-{label}"
         return iob2_label
 
@@ -151,7 +153,7 @@ class Preparator:
                     j = {
                         'tokens': example['tokenized'].tokens(),
                         'input_ids': example['tokenized'].input_ids,
-                        'label_ids':  example['label_ids'],
+                        'label_ids':  example['label_ids']
                     }
                     f.write(f"{json.dumps(j)}\n")
 
@@ -161,9 +163,11 @@ class Preparator:
             with p.open() as f:
                 for n, line in enumerate(f):
                     j = json.loads(line)
-                    assert len(j['tokens']) <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
-                    assert len(j['tokens']) == len(j['input_ids']), f"mismatch in number of tokens and input_ids: error line {n} in {p}"
-                    assert len(j['tokens']) == len(j['label_ids']), f"mismatch in number of tokens and label_ids: error line {n} in {p}"
+                    L = len(j['tokens'])
+                    assert L <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
+                    assert len(j['input_ids']) == L, f"mismatch in number of tokens and input_ids: error line {n} in {p}"
+                    for k, label_ids in j['label_ids'].items():
+                        assert len(label_ids) == L, f"mismatch in number of tokens and {k} label_ids: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 
@@ -197,19 +201,19 @@ def self_test():
         'ĠCre', 'b', '-', '1',
         'Ġwith', 'Ġsome',
         'Ġtail',
-        '.', 'ĠEnd', '.', 
-        '________________________________________________________________', 
+        '.', 'ĠEnd', '.',
+        '________________________________________________________________',
         '________________________________________________________________',
         '</s>'
     ]
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, SourceDataCodes.ENTITY_TYPES, max_length=max_length)
+        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES], max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])
         print('\nTokens')
         print(labeled_examples[0]['tokenized'].tokens())
-        assert labeled_examples[0]['label_ids'] == expected_label_codes, labeled_examples[0]['label_ids']
+        assert labeled_examples[0]['label_ids']['entity_types'] == expected_label_codes, labeled_examples[0]['label_ids']
         assert labeled_examples[0]['tokenized'].tokens() == expected_tokens
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
@@ -233,9 +237,9 @@ if __name__ == "__main__":
     source_dir_path = args.source_dir
     if source_dir_path:
         dest_dir_path = args.dest_dir
-        code_map = SourceDataCodes.ENTITY_TYPES
+        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLE]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
-        sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_map)
+        sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_maps)
         sdprep.run()
         sdprep.verify()
         print("\nDone!")
