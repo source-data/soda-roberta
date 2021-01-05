@@ -27,7 +27,8 @@ def train(no_cacher, data_config_name):
         data_dir=NER_DATASET,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
-        cache_dir=HUGGINGFACE_CACHE
+        cache_dir=HUGGINGFACE_CACHE,
+        tokenizer=tokenizer
     )
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
