@@ -198,9 +198,10 @@ class SourceDataCodes(Enum):
                 'attributes': {
                     'role': ['reporter', 'normalizing', 'component']
                 }
-            }
+            },
         })
     )
+
 
     PANELIZATION = CodeMap(
         name="panel_start",

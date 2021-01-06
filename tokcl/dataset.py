@@ -220,15 +220,11 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "labels": labels,
                     }
                 elif self.config.name == "BORING":
-                    # masking of labeled entities to enforce learning from context
-                    input_ids = data["input_ids"]
-                    labels = data["label_ids"]["boring"]
                     yield id_, {
-                        "input_ids": input_ids,
-                        "labels": labels
+                        "input_ids": data["input_ids"],
+                        "labels": data["label_ids"]["boring"]
                     }
                 elif self.config.name == "PANELIZATION":
-                    # masking of labeled entities to enforce learning from context
                     yield id_, {
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["panel_start"],
