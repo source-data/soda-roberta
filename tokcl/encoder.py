@@ -67,8 +67,11 @@ class XMLEncoder:
         for code, constraint in self.code_map.constraints.items():
             if element.tag == constraint['tag']:
                 if constraint['attributes']:
-                    if all([element.attrib[a] in allowed_values for a, allowed_values in constraint['attributes'].items()]):
-                       return code
+                    if all([
+                        element.attrib.get(a, None) in allowed_values
+                        for a, allowed_values in constraint['attributes'].items()
+                    ]):
+                        return code
                 else:  # no constraints beyond the tag name
                     return code
         # the element does not match any of the constraints
