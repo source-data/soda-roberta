@@ -8,15 +8,19 @@ from typing import List, Dict
 class CodeMap:
     """CodeMaps are used to encode XML elements for token classification tasks. 
     CodeMaps map unique codes to a specific set of conditions an XML tag needs to satisfie to be labeled with this code.
-    For each code, an XML element will be assign this code if:
+    For each code, an XML element will be assigned this code if:
     - it has the specified tag name,
     - AND the listed attributes are ALL present,
     - AND the attribute have a value IN the provided list.
     Each code as a label (str) that can be used when encoding the features of the dataset.
 
     For example, with the constraints held in EntityTypeCodeMap, the element <sd-tag type='protein'>...</sd-tag> will be labeled with code 2.
-    With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled with code 1, without any furter constaints on attributes and their values.
+    With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled with code 1, without any furter constraints on attributes and their values.
     Usage: call `python -m tokcl.encoder` for a demo.
+
+    Properties:
+        name (str): the name of the CodeMap. Useful when serializing codes from several CodeMaps.
+        contraints (Dict): the constraintts on tag name and attribute values to assign a code to an xml element.
     """
     name: str = ''
     constraints: OrderedDict = None
@@ -29,6 +33,8 @@ class CodeMap:
                 self.iob2_labels.append(f"{prefix}-{label}")
 
     def from_label(self, label: str) -> Dict:
+        """Returns (Dict): the constraint corresponding to the given label (for example 'GENEPROD' OR 'CONTROLLED_VAR').
+        """
         idx = self.all_labels.index(label)
         constraint = self.constraints[idx + 1]  # constraints keys start at 1
         return constraint
@@ -42,7 +48,9 @@ class SourceDataCodes(Enum):
             CodeMap that holds codes to label the role of gene products, according to the SourceData nomenclature.
         ENTITY_TYPES (CodeMap):
             CodeMap that holds codes to label entities of 8 types, according to the SourceData nomenclature.
-        PANEL_START (CodeMap):
+        BORING (CodeMap):
+            CodeMap specifying the attributes of potentially uninteresting entities ('boring').
+        PANELIZATION (CodeMap):
             Start of panel legends within a figure legend.
     """
 
@@ -52,6 +60,14 @@ class SourceDataCodes(Enum):
         tags.
         """
         return self.value.name
+
+    @property
+    def type(self) -> str:
+        """Specifies the kind of features:
+            - 'whole_entity': the whole entity will be tagged from the begining (B-prefixed tag) to the end (I-prefixed tags).
+            - 'boundary_start': the feature indicate the boudary between text segments and only the begining of the segment will be labeled (with B-prefixed tag)
+        """
+        return self.value.type
 
     @property
     def iob2_labels(self) -> List[str]:
@@ -72,12 +88,13 @@ class SourceDataCodes(Enum):
         return self.value.constraints
 
     def from_label(self, label) -> Dict:
-        """Returns (Dict): the constraint corresponding to the given label.
+        """Returns (Dict): the constraint corresponding to the given label (for example 'GENEPROD' OR 'CONTROLLED_VAR').
         """
         return self.value.from_label(label)
 
     GENEPROD_ROLES = CodeMap(
         name="geneprod_roles",
+        type="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'CONTROLLED_VAR',
@@ -95,27 +112,28 @@ class SourceDataCodes(Enum):
                     'role': ['assayed'],
                 }
             },
-            3: {
-                'label': 'NORMALIZING_VAR',
-                'tag': 'sd-tag',
-                'attributes': {
-                    'type': ['geneprod', 'gene', 'protein'],
-                    'role': ['normalizing'],
-                }
-            },
-            4: {
-                'label': 'REPORTER_VAR',
-                'tag': 'sd-tag',
-                'attributes': {
-                    'type': ['geneprod', 'gene', 'protein'],
-                    'role': ['reporter'],
-                }
-            }
+            # 3: {
+            #     'label': 'NORMALIZING_VAR',
+            #     'tag': 'sd-tag',
+            #     'attributes': {
+            #         'type': ['geneprod', 'gene', 'protein'],
+            #         'role': ['normalizing'],
+            #     }
+            # },
+            # 4: {
+            #     'label': 'REPORTER_VAR',
+            #     'tag': 'sd-tag',
+            #     'attributes': {
+            #         'type': ['geneprod', 'gene', 'protein'],
+            #         'role': ['reporter'],
+            #     }
+            # }
         })
     )
 
     ENTITY_TYPES = CodeMap(
         name="entity_types",
+        type="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'SMALL_MOLECULE',
@@ -169,11 +187,26 @@ class SourceDataCodes(Enum):
         })
     )
 
-    PANEL = CodeMap(
-        name="panel",
+    POTENTIALLY_BORING = CodeMap(
+        name="boring",
+        type="whole_entity",
         constraints=OrderedDict({
             1: {
-                'label': 'PANEL',
+                'label': 'BORING',
+                'tag': 'sd-panel',
+                'attributes': {
+                    'role': ['reporter', 'normalizing', 'component']
+                }
+            }
+        })
+    )
+
+    PANELIZATION = CodeMap(
+        name="panel",
+        type="boundary_start",
+        constraints=OrderedDict({
+            1: {
+                'label': 'PANEL_START',
                 'tag': 'sd-panel',
             },
         })
