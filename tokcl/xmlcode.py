@@ -23,6 +23,7 @@ class CodeMap:
         contraints (Dict): the constraintts on tag name and attribute values to assign a code to an xml element.
     """
     name: str = ''
+    type: str = ''
     constraints: OrderedDict = None
 
     def __post_init__(self):

@@ -27,6 +27,8 @@ import shutil
 
 _NER_LABEL_NAMES = sd.ENTITY_TYPES.iob2_labels
 _SEMANTIC_ROLES_LABEL_NAMES = sd.GENEPROD_ROLES.iob2_labels
+_BORING_LABEL_NAMES = sd.POTENTIALLY_BORING.iob2_labels
+_PANELIZATION_LABEL_NAMES = sd.PANELIZATION.iob2_labels
 
 _CITATION = """\
 @Unpublished{
@@ -75,9 +77,9 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
     # data = datasets.load_dataset('my_dataset', 'second_domain')
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="NER", version="0.0.1", description="Dataset for entity recognition"),
-        datasets.BuilderConfig(name="SEMROLES", version="0.0.1", description="Dataset for semantic roles."),
-        datasets.BuilderConfig(name="SEMROLES_ATTN_MASK", version="0.0.1", description="Dataset for semantic roles."),
-        datasets.BuilderConfig(name="SEMROLES_NO_MASK", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="ROLES", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="BORING", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="PANELIZATION", version="0.0.1", description="Dataset for semantic roles."),
         # datasets.BuilderConfig(name="panelization", version=0.1, description="Dataset for figure legend segmentation into panel-specific legends."),
     ]
 
@@ -101,7 +103,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     ),
                 }
             )
-        elif self.config.name == "SEMROLES":
+        elif self.config.name == "ROLES":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
@@ -113,27 +115,26 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     ),
                 }
             )
-        elif self.config.name == "SEMROLES_ATTN_MASK":
+        elif self.config.name == "BORING":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
                         feature=datasets.ClassLabel(
-                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES),
-                            names=_SEMANTIC_ROLES_LABEL_NAMES
+                            num_classes=len(_BORING_LABEL_NAMES),
+                            names=_BORING_LABEL_NAMES
                         )
                     ),
-                    "attention_mask": datasets.Sequence(feature=datasets.Value("int8")),
                 }
             )
-        elif self.config.name == "SEMROLES_NO_MASK":
+        elif self.config.name == "PANELIZATION":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
                         feature=datasets.ClassLabel(
-                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES),
-                            names=_SEMANTIC_ROLES_LABEL_NAMES
+                            num_classes=len(_PANELIZATION_LABEL_NAMES),
+                            names=_PANELIZATION_LABEL_NAMES
                         )
                     ),
                 }
@@ -207,7 +208,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["entity_types"],
                     }
-                elif self.config.name == "SEMROLES":
+                elif self.config.name == "ROLES":
                     # masking of labeled entities to enforce learning from context
                     input_ids = data["input_ids"]
                     labels = data["label_ids"]["geneprod_roles"]
@@ -218,21 +219,19 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "input_ids": input_ids,
                         "labels": labels,
                     }
-                elif self.config.name == "SEMROLES_ATTN_MASK":
+                elif self.config.name == "BORING":
                     # masking of labeled entities to enforce learning from context
                     input_ids = data["input_ids"]
-                    labels = data["label_ids"]["geneprod_roles"]
-                    attention_mask = [1 if t == "O" else 0 for t in labels]
+                    labels = data["label_ids"]["boring"]
                     yield id_, {
                         "input_ids": input_ids,
-                        "labels": labels,
-                        "attention_mask": attention_mask
+                        "labels": labels
                     }
-                elif self.config.name == "SEMROLES_NO_MASK":
+                elif self.config.name == "PANELIZATION":
                     # masking of labeled entities to enforce learning from context
                     yield id_, {
                         "input_ids": data["input_ids"],
-                        "labels": data["label_ids"]["geneprod_roles"],
+                        "labels": data["label_ids"]["panelization"],
                     }
 
 
@@ -250,14 +249,16 @@ def self_test():
         d = {
             "input_ids": batch_encoding.input_ids,
             "label_ids": {
-                "entity_types": ["O", "O", "O", "B-GENEPROD", "B-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
-                "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "B-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"]
+                "entity_types": ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
+                "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "I-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"],
+                "boring": ["O", "O", "O", "B-BORING", "I-BORING", "O", "O", "O", "O", "O", "O", "O"],
+                "panelization": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
             },
         }
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
-        for configuration in ["NER", "SEMROLES" , "SEMROLES_ATTN_MASK", "SEMROLES_NO_MASK"]:
+        for configuration in ["NER", "ROLES", "BORING", "PANELIZATION"]:
             train_dataset, eval_dataset, test_dataset = load_dataset(
                 './tokcl/dataset.py',
                 configuration,
