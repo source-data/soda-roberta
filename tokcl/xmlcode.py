@@ -23,7 +23,7 @@ class CodeMap:
         contraints (Dict): the constraintts on tag name and attribute values to assign a code to an xml element.
     """
     name: str = ''
-    type: str = ''
+    mode: str = ''
     constraints: OrderedDict = None
 
     def __post_init__(self):
@@ -63,12 +63,12 @@ class SourceDataCodes(Enum):
         return self.value.name
 
     @property
-    def type(self) -> str:
-        """Specifies the kind of features:
+    def mode(self) -> str:
+        """Specifies the tagging mode:
             - 'whole_entity': the whole entity will be tagged from the begining (B-prefixed tag) to the end (I-prefixed tags).
             - 'boundary_start': the feature indicate the boudary between text segments and only the begining of the segment will be labeled (with B-prefixed tag)
         """
-        return self.value.type
+        return self.value.mode
 
     @property
     def iob2_labels(self) -> List[str]:
@@ -95,7 +95,7 @@ class SourceDataCodes(Enum):
 
     GENEPROD_ROLES = CodeMap(
         name="geneprod_roles",
-        type="whole_entity",
+        mode="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'CONTROLLED_VAR',
@@ -134,7 +134,7 @@ class SourceDataCodes(Enum):
 
     ENTITY_TYPES = CodeMap(
         name="entity_types",
-        type="whole_entity",
+        mode="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'SMALL_MOLECULE',
@@ -190,7 +190,7 @@ class SourceDataCodes(Enum):
 
     POTENTIALLY_BORING = CodeMap(
         name="boring",
-        type="whole_entity",
+        mode="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'BORING',
@@ -203,8 +203,8 @@ class SourceDataCodes(Enum):
     )
 
     PANELIZATION = CodeMap(
-        name="panel",
-        type="boundary_start",
+        name="panel_start",
+        mode="boundary_start",
         constraints=OrderedDict({
             1: {
                 'label': 'PANEL_START',

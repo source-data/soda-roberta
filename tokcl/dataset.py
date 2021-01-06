@@ -231,7 +231,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     # masking of labeled entities to enforce learning from context
                     yield id_, {
                         "input_ids": data["input_ids"],
-                        "labels": data["label_ids"]["panelization"],
+                        "labels": data["label_ids"]["panel_start"],
                     }
 
 
@@ -252,7 +252,7 @@ def self_test():
                 "entity_types": ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
                 "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "I-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"],
                 "boring": ["O", "O", "O", "B-BORING", "I-BORING", "O", "O", "O", "O", "O", "O", "O"],
-                "panelization": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+                "panel_start": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
             },
         }
         p_train.write_text(json.dumps(d))

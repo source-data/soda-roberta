@@ -66,7 +66,7 @@ class XMLEncoder:
     def _get_code(self, element: Element) -> int:
         for code, constraint in self.code_map.constraints.items():
             if element.tag == constraint['tag']:
-                if constraint['attributes']:
+                if constraint.get('attributes', None) is not None:
                     if all([
                         element.attrib.get(a, None) in allowed_values
                         for a, allowed_values in constraint['attributes'].items()

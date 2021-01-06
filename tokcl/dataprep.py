@@ -113,12 +113,15 @@ class Preparator:
                 assert end_token_idx is not None, f"\n\nproblem with end token for text {inner_text[element_start:element_end]}\n\n{inner_text}\n\n{tokenized.tokens}"
                 code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
                 assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
-                prefix = "B"  # for beginign token according to IOB2 scheme
-                label = ''
-                for token_idx in range(start_token_idx, end_token_idx + 1):
+                prefix = "B"  # for B-eginign token according to IOB2 scheme
+                if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
+                    for token_idx in range(start_token_idx, end_token_idx + 1):
+                        label = self._int_code_to_iob2_label(prefix, code, code_map)
+                        token_level_labels[token_idx] = label
+                        prefix = "I"  # for subsequet I-nside tokens
+                elif code_map.mode == 'boundary_start':  # label only the B-egining
                     label = self._int_code_to_iob2_label(prefix, code, code_map)
-                    token_level_labels[token_idx] = label
-                    prefix = "I"  # for subsequet inside tokens
+                    token_level_labels[start_token_idx] = label
             else:
                 # the last token has been reached, no point scanner further elemnts
                 break
@@ -173,7 +176,7 @@ class Preparator:
 
 
 def self_test():
-    example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>."
+    example = "<xml>Here <sd-panel>it is: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>."
     example += '_' * 150 + '</xml>'  # to test truncation
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     path = Path('/tmp/test_dataprep')
@@ -206,6 +209,28 @@ def self_test():
             'O',
             'O',
             'O'
+        ],
+        'boring': [
+            'O',
+            'O', 'O', 'O', 'O', 'O', 'B-BORING',
+            'O', 'O', 'O', 'O',
+            'O', 'O',
+            'O',
+            'O', 'O', 'O',
+            'O',
+            'O',
+            'O'
+        ],
+        'panlization': [
+            'O',
+            'O', 'B-PANEL_SATART', 'O', 'O', 'O', 'O',
+            'O', 'O', 'O', 'O',
+            'O', 'O',
+            'O',
+            'O', 'O', 'O',
+            'O',
+            'O',
+            'O'
         ]
     }
     expected_tokens = [
@@ -220,7 +245,7 @@ def self_test():
         '</s>'
     ]
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES], max_length=max_length)
+        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.POTENTIALLY_BORING, sd.PANELIZATION], max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])
@@ -252,7 +277,7 @@ if __name__ == "__main__":
     source_dir_path = args.source_dir
     if source_dir_path:
         dest_dir_path = args.dest_dir
-        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES]
+        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.POTENTIALLY_BORING, sd.PANELIZATION]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
         sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_maps)
         sdprep.run()
