@@ -56,7 +56,7 @@ class XMLEncoder:
             encoded = [None] * L_text
             pos += L_text
             # check child elements
-            for child in list(element):
+            for child in element:
                 child_encoded, pos = self._encode(child, offsets=offsets, pos=pos)
                 encoded += child_encoded
         encoded = encoded + [None] * L_tail

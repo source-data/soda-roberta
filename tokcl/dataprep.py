@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List, Tuple, Dict
-from xml.etree.ElementTree import parse, Element, ElementTree
+from xml.etree.ElementTree import parse, Element, ElementTree, fromstring, tostring
 from math import floor
 import json
 import shutil
@@ -8,6 +8,7 @@ from random import shuffle
 from argparse import ArgumentParser
 from tokenizers import Encoding
 from transformers import RobertaTokenizerFast, BatchEncoding
+import regex as re
 from .encoder import XMLEncoder
 from .xmlcode import (
     CodeMap, SourceDataCodes as sd
@@ -32,6 +33,10 @@ class Preparator:
             The pre-trained tokenizer to use for processing the inner text.
         code_maps (List[CodeMap)]:
             A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
+        max_length (int):
+            Maximum number of token in one example. Examples will be truncated.
+        split_ratio (Dict[str, float]):
+            Proportion of examples in train, eval and test subsets.
     """
     def __init__(
         self,
@@ -77,7 +82,6 @@ class Preparator:
                 'tokenized': tokenized,
                 'label_ids': token_level_labels
             })
-            # self._save_individual_example(filepath, labeled_token)
         split_examples = self._split(labeled_examples)
         self._save_json(split_examples)
         return labeled_examples
@@ -90,16 +94,16 @@ class Preparator:
             truncation=True,
             return_offsets_mapping=True,
             add_special_tokens=True
-        )  # uses Whitespace as pre_processor
+        )
         token_level_labels = {}
         for code_map in self.code_maps:
             xml_encoder = XMLEncoder(code_map)
             xml_encoded = xml_encoder.encode(xml)
-            labels = self._align_labels(tokenized, xml_encoded, inner_text, code_map)
+            labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
             token_level_labels[code_map.name] = labels
         return tokenized, token_level_labels
 
-    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, inner_text, code_map: CodeMap) -> List[int]:
+    def _align_labels(self, tokenized: Encoding, xml_encoded: Dict, code_map: CodeMap, inner_text) -> List[int]:
         # prefill with outside of entity label 'O' using IOB2 scheme
         token_level_labels = ['O'] * len(tokenized.input_ids)
         # tokenizer may have truncated the example
@@ -107,12 +111,21 @@ class Preparator:
         for element_start, element_end in xml_encoded['offsets']:
             # check we are still within the truncated example
             if (element_start <= last_token_start) & (element_end <= last_token_end):
-                start_token_idx = tokenized.char_to_token(element_start)
-                end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
-                assert start_token_idx is not None, f"\n\nproblem with start token for text {inner_text[element_start:element_end]}\n\n{inner_text}\n\n{tokenized.tokens}"
-                assert end_token_idx is not None, f"\n\nproblem with end token for text {inner_text[element_start:element_end]}\n\n{inner_text}\n\n{tokenized.tokens}"
                 code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
                 assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
+                # nasty: if the element start or ends with a space, that position does not correspond to any token
+                # proper token will be found only from first or last non space charater, respectively
+                while (inner_text[element_start] == ' ') & (element_start < element_end):
+                    element_start += 1
+                while (inner_text[element_end - 1] == ' ') & (element_end > element_start):
+                    element_end -= 1
+                start_token_idx = tokenized.char_to_token(element_start)
+                end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
+                try:
+                    assert start_token_idx is not None, f"\n\nproblem with start token None for text\n\n{tokenized.tokens}"
+                    assert end_token_idx is not None, f"\n\nproblem with end token None for text\n\n{tokenized.tokens}"
+                except Exception:
+                    import pdb; pdb.set_trace()
                 prefix = "B"  # for B-eginign token according to IOB2 scheme
                 if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
                     for token_idx in range(start_token_idx, end_token_idx + 1):
@@ -176,8 +189,9 @@ class Preparator:
 
 
 def self_test():
-    example = "<xml>Here <sd-panel>it is: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>."
-    example += '_' * 150 + '</xml>'  # to test truncation
+    # example = "<xml><a>This </a>.</xml>"
+    example = "<xml>Here <sd-panel>it is: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </sd-panel>."
+    example += ' 1 2 3 4 5 6 7 8 9 0' + '</xml>'  # to test truncation
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     path = Path('/tmp/test_dataprep')
     path.mkdir()
@@ -239,9 +253,8 @@ def self_test():
         'ĠCre', 'b', '-', '1',
         'Ġwith', 'Ġsome',
         'Ġtail',
-        '.', 'ĠEnd', '.',
-        '________________________________________________________________',
-        '________________________________________________________________',
+        '.', 'ĠEnd', 'Ġ.',
+        'Ġ1', 'Ġ2',
         '</s>'
     ]
     try:
@@ -254,7 +267,7 @@ def self_test():
         labeled_example_label_ids = labeled_examples[0]['label_ids']
         assert labeled_example_label_ids['entity_types'] == expected_label_codes['entity_types'], labeled_example_label_ids['entity_types']
         assert labeled_example_label_ids['geneprod_roles'] == expected_label_codes['geneprod_roles'], labeled_example_label_ids['geneprod_roles']
-        assert labeled_examples[0]['tokenized'].tokens() == expected_tokens
+        assert labeled_examples[0]['tokenized'].tokens() == expected_tokens, labeled_examples[0]['tokenized'].tokens()
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
         for filepath in filepaths:
