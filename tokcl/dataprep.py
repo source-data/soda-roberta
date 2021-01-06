@@ -114,6 +114,7 @@ class Preparator:
                 code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
                 assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
                 prefix = "B"  # for beginign token according to IOB2 scheme
+                label = ''
                 for token_idx in range(start_token_idx, end_token_idx + 1):
                     label = self._int_code_to_iob2_label(prefix, code, code_map)
                     token_level_labels[token_idx] = label
@@ -134,7 +135,6 @@ class Preparator:
         valid_fraction = min(floor(N * self.split_ratio['eval']), self.split_ratio['max_eval'] - 1)
         test_fraction = min(floor(N * self.split_ratio['test']), self.split_ratio['max_test'] - 1)
         train_fraction = N - valid_fraction - test_fraction
-        assert train_fraction + valid_fraction + test_fraction == N
         split_examples = {}
         split_examples['train'] = [e for e in examples[0:train_fraction]]
         split_examples['eval'] = [e for e in examples[train_fraction:train_fraction + valid_fraction]]
@@ -173,7 +173,7 @@ class Preparator:
 
 
 def self_test():
-    example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='assayed'>Creb-1</sd-tag> with some <sd-tag type='cell'>tail</sd-tag></i>. End</sd-panel>."
+    example = "<xml>Here <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>."
     example += '_' * 150 + '</xml>'  # to test truncation
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     path = Path('/tmp/test_dataprep')
@@ -184,17 +184,30 @@ def self_test():
     source_file_path = source_path / 'example.xml'
     source_file_path.write_text(example)
     max_length = 20  # in token!
-    expected_label_codes = [
-        'O',
-        'O', 'O', 'O', 'O', 'O', 'O',
-        'B-GENEPROD', 'I-GENEPROD', 'I-GENEPROD', 'I-GENEPROD',
-        'O', 'O',
-        'B-CELL',
-        'O', 'O', 'O',
-        'O',
-        'O',
-        'O'
-    ]
+    expected_label_codes = {
+        'entity_types': [
+            'O',
+            'O', 'O', 'O', 'O', 'O', 'O',
+            'B-GENEPROD', 'I-GENEPROD', 'I-GENEPROD', 'I-GENEPROD',
+            'O', 'O',
+            'B-GENEPROD',
+            'O', 'O', 'O',
+            'O',
+            'O',
+            'O'
+        ],
+        'geneprod_roles': [
+            'O',
+            'O', 'O', 'O', 'O', 'O', 'O',
+            'B-CONTROLLED_VAR', 'I-CONTROLLED_VAR', 'I-CONTROLLED_VAR', 'I-CONTROLLED_VAR',
+            'O', 'O',
+            'B-MEASURED_VAR',
+            'O', 'O', 'O',
+            'O',
+            'O',
+            'O'
+        ]
+    }
     expected_tokens = [
         '<s>',
         'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin',
@@ -207,13 +220,15 @@ def self_test():
         '</s>'
     ]
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES], max_length=max_length)
+        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES], max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])
         print('\nTokens')
         print(labeled_examples[0]['tokenized'].tokens())
-        assert labeled_examples[0]['label_ids']['entity_types'] == expected_label_codes, labeled_examples[0]['label_ids']
+        labeled_example_label_ids = labeled_examples[0]['label_ids']
+        assert labeled_example_label_ids['entity_types'] == expected_label_codes['entity_types'], labeled_example_label_ids['entity_types']
+        assert labeled_example_label_ids['geneprod_roles'] == expected_label_codes['geneprod_roles'], labeled_example_label_ids['geneprod_roles']
         assert labeled_examples[0]['tokenized'].tokens() == expected_tokens
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
