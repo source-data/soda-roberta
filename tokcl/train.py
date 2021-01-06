@@ -91,7 +91,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     no_cache = args.no_cache
     data_config_name = args.data_config_name
-    model_path = Path(f"{NER_MODEL_PATH}/data_config_name")
+    model_path = Path(f"{NER_MODEL_PATH}/{data_config_name}")
     if not model_path.exists():
         model_path.mkdir()
     train(no_cache, data_config_name, str(model_path))
