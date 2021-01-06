@@ -42,6 +42,9 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
 
     num_labels = train_dataset.info.features['labels'].feature.num_classes
     label_list = train_dataset.info.features['labels'].feature.names
+    print(f"\nTraining on {num_labels} features:")
+    print(label_list)
+
     compute_metrics = MetricsComputer(label_list=label_list)
 
     model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
