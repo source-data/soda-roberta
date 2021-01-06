@@ -95,6 +95,22 @@ class SourceDataCodes(Enum):
                     'role': ['assayed'],
                 }
             },
+            3: {
+                'label': 'NORMALIZING_VAR',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'type': ['geneprod', 'gene', 'protein'],
+                    'role': ['normalizing'],
+                }
+            },
+            4: {
+                'label': 'REPORTER_VAR',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'type': ['geneprod', 'gene', 'protein'],
+                    'role': ['reporter'],
+                }
+            }
         })
     )
 
