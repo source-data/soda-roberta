@@ -28,12 +28,15 @@ class XMLEncoder:
                 The XML Element to encode
 
         Returns:
-            (Dict[List[int], List[Tubple[int, int]]]):
-                A dictionary with the list of label ids and the offsets indicating the start and end postition of each labeled element
+            (Dict[List[int], List[Tuple[int, int]]]):
+                A dictionary with:
+                   - 'label_ids' (List): the list of label ids
+                   - 'offsets' (Tuple[int, int]): the offsets indicating the start and end postition of each labeled element
+                   - 'xml' (str): the xml as string for reference and degbuging
         """
         offsets = []
         encoded, _ = self._encode(element, offsets)
-        labels_and_offsets = {'label_ids': encoded, 'offsets': offsets}
+        labels_and_offsets = {'label_ids': encoded, 'offsets': offsets, 'xml': tostring(element)}
         for start, end in offsets:
             assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(element)}\n{innertext(element)[start:end]}\n{tostring(element)}"
         return labels_and_offsets
