@@ -79,11 +79,11 @@ class XMLEncoder:
 
 
 def demo():
-    example = "<xml><span>Here</span> <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>.</xml>"
+    example = "<xml><span>Here</span> <sd-panel>it is: <i>nested in <sd-tag category='entity' type='gene' role='reporter'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End</sd-panel>.</xml>"
     # example = '<sd-panel><p><strong>F</strong> <em><sd-tag category="" role="intervention" type="gene">FUNDC1</sd-tag></em></p></sd-panel>'
     xml = fromstring(example)
     inner_text = innertext(xml)
-    xe = XMLEncoder(sd.GENEPROD_ROLES)
+    xe = XMLEncoder(sd.BORING)
     encoded = xe.encode(xml)
     assert len(encoded['label_ids']) == len(inner_text)
     text = ''.join([c + '  ' for c in inner_text])

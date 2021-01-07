@@ -27,8 +27,7 @@ import shutil
 
 _NER_LABEL_NAMES = sd.ENTITY_TYPES.iob2_labels
 _SEMANTIC_ROLES_LABEL_NAMES = sd.GENEPROD_ROLES.iob2_labels
-_BORING_LABEL_NAMES = sd.POTENTIALLY_BORING.iob2_labels
-_PANELIZATION_LABEL_NAMES = sd.PANELIZATION.iob2_labels
+_BORING_LABEL_NAMES = sd.BORING.iob2_labels
 
 _CITATION = """\
 @Unpublished{
@@ -127,18 +126,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     ),
                 }
             )
-        elif self.config.name == "PANELIZATION":
-            features = datasets.Features(
-                {
-                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
-                    "labels": datasets.Sequence(
-                        feature=datasets.ClassLabel(
-                            num_classes=len(_PANELIZATION_LABEL_NAMES),
-                            names=_PANELIZATION_LABEL_NAMES
-                        )
-                    ),
-                }
-            )
+
         return datasets.DatasetInfo(
             # This is the description that will appear on the datasets page.
             description=_DESCRIPTION,
@@ -248,13 +236,12 @@ def self_test():
                 "entity_types": ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
                 "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "I-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"],
                 "boring": ["O", "O", "O", "B-BORING", "I-BORING", "O", "O", "O", "O", "O", "O", "O"],
-                "panel_start": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
             },
         }
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
-        for configuration in ["NER", "ROLES", "BORING", "PANELIZATION"]:
+        for configuration in ["NER", "ROLES", "BORING"]:
             train_dataset, eval_dataset, test_dataset = load_dataset(
                 './tokcl/dataset.py',
                 configuration,
