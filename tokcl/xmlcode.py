@@ -112,23 +112,7 @@ class SourceDataCodes(Enum):
                     'type': ['geneprod', 'gene', 'protein'],
                     'role': ['assayed'],
                 }
-            },
-            # 3: {
-            #     'label': 'NORMALIZING_VAR',
-            #     'tag': 'sd-tag',
-            #     'attributes': {
-            #         'type': ['geneprod', 'gene', 'protein'],
-            #         'role': ['normalizing'],
-            #     }
-            # },
-            # 4: {
-            #     'label': 'REPORTER_VAR',
-            #     'tag': 'sd-tag',
-            #     'attributes': {
-            #         'type': ['geneprod', 'gene', 'protein'],
-            #         'role': ['reporter'],
-            #     }
-            # }
+            }
         })
     )
 
@@ -188,13 +172,13 @@ class SourceDataCodes(Enum):
         })
     )
 
-    POTENTIALLY_BORING = CodeMap(
+    BORING = CodeMap(
         name="boring",
         mode="whole_entity",
         constraints=OrderedDict({
             1: {
                 'label': 'BORING',
-                'tag': 'sd-panel',
+                'tag': 'sd-tag',
                 'attributes': {
                     'role': ['reporter', 'normalizing', 'component']
                 }
