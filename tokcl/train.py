@@ -23,7 +23,7 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
 
     print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        './tokcl/dataset.py',
+        './tokcl/loader.py',
         data_config_name,
         data_dir=NER_DATASET,
         split=["train", "validation", "test"],
