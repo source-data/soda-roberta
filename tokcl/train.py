@@ -55,13 +55,13 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
         learning_rate=1e-5,
         warmup_steps=500,
         num_train_epochs=10,
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         save_total_limit=3,
-        logging_steps=1,
-        eval_steps=1,
-        save_steps=1,
+        logging_steps=100,
+        eval_steps=100,
+        save_steps=100,
         prediction_loss_only=False
     )
 
