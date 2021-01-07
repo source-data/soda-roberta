@@ -119,22 +119,25 @@ class Preparator:
                     element_start += 1
                 while (inner_text[element_end - 1] == ' ') & (element_end > element_start):
                     element_end -= 1
-                start_token_idx = tokenized.char_to_token(element_start)
-                end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
-                try:
-                    assert start_token_idx is not None, f"\n\nproblem with start token None for text\n\n{tokenized.tokens}"
-                    assert end_token_idx is not None, f"\n\nproblem with end token None for text\n\n{tokenized.tokens}"
-                except Exception:
-                    import pdb; pdb.set_trace()
-                prefix = "B"  # for B-eginign token according to IOB2 scheme
-                if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
-                    for token_idx in range(start_token_idx, end_token_idx + 1):
+                if (element_start == element_end):  # empty element cannot not correspond to any token
+                    print(f"WARNING: emtpy element {code_map.constraints[code]['tag']} at position {element_start} in >>>{inner_text[element_start:element_start+50]}...<<<")
+                else:
+                    start_token_idx = tokenized.char_to_token(element_start)
+                    end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
+                    try:
+                        assert start_token_idx is not None, f"\n\nproblem with start token None for text\n\n{tokenized.tokens}"
+                        assert end_token_idx is not None, f"\n\nproblem with end token None for text\n\n{tokenized.tokens}"
+                    except Exception:
+                        import pdb; pdb.set_trace()
+                    prefix = "B"  # for B-eginign token according to IOB2 scheme
+                    if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
+                        for token_idx in range(start_token_idx, end_token_idx + 1):
+                            label = self._int_code_to_iob2_label(prefix, code, code_map)
+                            token_level_labels[token_idx] = label
+                            prefix = "I"  # for subsequet I-nside tokens
+                    elif code_map.mode == 'boundary_start':  # label only the B-egining
                         label = self._int_code_to_iob2_label(prefix, code, code_map)
-                        token_level_labels[token_idx] = label
-                        prefix = "I"  # for subsequet I-nside tokens
-                elif code_map.mode == 'boundary_start':  # label only the B-egining
-                    label = self._int_code_to_iob2_label(prefix, code, code_map)
-                    token_level_labels[start_token_idx] = label
+                        token_level_labels[start_token_idx] = label
             else:
                 # the last token has been reached, no point scanner further elemnts
                 break
@@ -190,7 +193,7 @@ class Preparator:
 
 def self_test():
     # example = "<xml><a>This </a>.</xml>"
-    example = "<xml>Here <sd-panel>it is: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </sd-panel>."
+    example = "<xml>Here <sd-panel>it is<sd-tag role='reporter'> </sd-tag>: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </sd-panel>."
     example += ' 1 2 3 4 5 6 7 8 9 0' + '</xml>'  # to test truncation
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     path = Path('/tmp/test_dataprep')
@@ -249,7 +252,7 @@ def self_test():
     }
     expected_tokens = [
         '<s>',
-        'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin',
+        'Here', 'Ġit', 'Ġis', 'Ġ:', 'Ġnested', 'Ġin',
         'ĠCre', 'b', '-', '1',
         'Ġwith', 'Ġsome',
         'Ġtail',
