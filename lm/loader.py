@@ -161,12 +161,6 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     yield id_, {
                         "input_ids": data["input_ids"],
                     }
-                # else:
-                #     yield id_, {
-                #         "sentence": data["sentence"],
-                #         "option2": data["option2"],
-                #         "second_domain_answer": "" if split == "test" else data["second_domain_answer"],
-                #     }
 
 
 def self_test():
@@ -183,7 +177,7 @@ def self_test():
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
         train_dataset, eval_dataset, test_dataset = load_dataset(
-            './lm/dataset.py',
+            './lm/loader.py',
             'MLM',
             data_dir=data_dir,
             split=["train", "validation", "test"],
