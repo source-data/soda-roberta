@@ -87,7 +87,8 @@ class Preparator:
         return labeled_examples
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
-        inner_text = innertext(xml)
+        xml_encoder = XMLEncoder(xml)
+        inner_text = innertext(xml_encoder.element)
         tokenized = self.tokenizer(
             inner_text,
             max_length=self.max_length,
@@ -97,8 +98,7 @@ class Preparator:
         )
         token_level_labels = {}
         for code_map in self.code_maps:
-            xml_encoder = XMLEncoder(code_map)
-            xml_encoded = xml_encoder.encode(xml)
+            xml_encoded = xml_encoder.encode(code_map)
             labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
             token_level_labels[code_map.name] = labels
         return tokenized, token_level_labels
@@ -113,25 +113,17 @@ class Preparator:
             if (element_start <= last_token_start) & (element_end <= last_token_end):
                 code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
                 assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
-                # nasty: if the element start or ends with a space, that position does not correspond to any token
-                # proper token will be found only from first or last non space charater, respectively
-                while (inner_text[element_start] == ' ') & (element_start < element_end):
-                    element_start += 1
-                while (inner_text[element_end - 1] == ' ') & (element_end > element_start):
-                    element_end -= 1
-                if (element_start == element_end):  # empty element cannot not correspond to any token
+                start_token_idx = self._char_to_token(element_start, inner_text, tokenized)
+                end_token_idx = self._char_to_token(element_end, inner_text, tokenized)
+                # sanity check
+                assert start_token_idx is not None, f"\n\nproblem with start token None."
+                assert end_token_idx is not None, f"\n\nproblem with end token None."
+                if (start_token_idx == end_token_idx):  # empty element cannot not correspond to any token
                     print(f"WARNING: emtpy element {code_map.constraints[code]['tag']} at position {element_start} in >>>{inner_text[element_start:element_start+50]}...<<<")
                 else:
-                    start_token_idx = tokenized.char_to_token(element_start)
-                    end_token_idx = tokenized.char_to_token(element_end - 1)  # element_end is the position just after the last token
-                    try:
-                        assert start_token_idx is not None, f"\n\nproblem with start token None for text\n\n{tokenized.tokens}"
-                        assert end_token_idx is not None, f"\n\nproblem with end token None for text\n\n{tokenized.tokens}"
-                    except Exception:
-                        import pdb; pdb.set_trace()
-                    prefix = "B"  # for B-eginign token according to IOB2 scheme
+                    prefix = "B"  # for B-egining token according to IOB2 scheme
                     if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
-                        for token_idx in range(start_token_idx, end_token_idx + 1):
+                        for token_idx in range(start_token_idx, end_token_idx):
                             label = self._int_code_to_iob2_label(prefix, code, code_map)
                             token_level_labels[token_idx] = label
                             prefix = "I"  # for subsequet I-nside tokens
@@ -139,11 +131,36 @@ class Preparator:
                         label = self._int_code_to_iob2_label(prefix, code, code_map)
                         token_level_labels[start_token_idx] = label
             else:
-                # the last token has been reached, no point scanner further elemnts
+                # the last token has been reached, no point scanning further elemnts
                 break
         return token_level_labels
 
-    def _int_code_to_iob2_label(self, prefix: str, code: int, code_map: CodeMap) -> str:
+    @staticmethod
+    def _char_to_token(element_pos, inner_text, tokenized):
+        # Nasty: because of RobertaTokenizer's behavior with spaces, 
+        # a space before a word is included in token. When this happens across xml element boundary, 
+        # the character at the boundary position is a space and is included in the next or previous token outside the element.
+        # In addition, BatchEncoding.char_to_token() will return None if the token is a single space
+        # proper token will be found only from next or previous character, respectively
+        # This gymnastic is to try to circumven this.
+        pos = element_pos
+        if inner_text[pos] != ' ':  # usual case, not in a space, all fine
+            return tokenized.char_to_token(pos)
+        while (inner_text[pos] == ' ') and (pos < len(inner_text)): pos += 1  # scanning for non space on the right
+        if inner_text[pos] == ' ':  # we are still in a run of space and at the end of the string!
+            token_idx = len(tokenized.tokens()) - 1
+        else:
+            # __.token    is tokenized into two single spaces plus one .token (dot is spacial character produced by RobertaTokenizer)
+            #    ^        need to scan until non space character
+            # 5           element_start = 5
+            # 5678        pos = 8 after scanning
+            # 234         actual start_token_idx 2, first non space token is 4, tokens 2 and 3 are single spaces
+            num_single_space_tokens = pos - 1 - element_pos
+            token_idx = tokenized.char_to_token(pos) - num_single_space_tokens
+        return token_idx
+
+    @staticmethod
+    def _int_code_to_iob2_label(prefix: str, code: int, code_map: CodeMap) -> str:
         label = code_map.constraints[code]['label']
         iob2_label = f"{prefix}-{label}"
         return iob2_label
@@ -192,7 +209,7 @@ class Preparator:
 
 
 def self_test():
-    # example = "<xml><a>This </a>.</xml>"
+    # example = "<xml><a>  </a>.</xml>"
     example = "<xml>Here <sd-panel>it is<sd-tag role='reporter'> </sd-tag>: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </sd-panel>."
     example += ' 1 2 3 4 5 6 7 8 9 0' + '</xml>'  # to test truncation
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
@@ -204,6 +221,16 @@ def self_test():
     source_file_path = source_path / 'example.xml'
     source_file_path.write_text(example)
     max_length = 20  # in token!
+    expected_tokens = [
+        '<s>',
+        'Here', 'Ġit', 'Ġis', 'Ġ:', 'Ġnested', 'Ġin',
+        'ĠCre', 'b', '-', '1',
+        'Ġwith', 'Ġsome',
+        'Ġtail',
+        '.', 'ĠEnd', 'Ġ.',
+        'Ġ1', 'Ġ2',
+        '</s>'
+    ]
     expected_label_codes = {
         'entity_types': [
             'O',
@@ -238,9 +265,9 @@ def self_test():
             'O',
             'O'
         ],
-        'panlization': [
+        'panel_start': [
             'O',
-            'O', 'B-PANEL_SATART', 'O', 'O', 'O', 'O',
+            'O', 'B-PANEL_START', 'O', 'O', 'O', 'O',
             'O', 'O', 'O', 'O',
             'O', 'O',
             'O',
@@ -250,27 +277,22 @@ def self_test():
             'O'
         ]
     }
-    expected_tokens = [
-        '<s>',
-        'Here', 'Ġit', 'Ġis', 'Ġ:', 'Ġnested', 'Ġin',
-        'ĠCre', 'b', '-', '1',
-        'Ġwith', 'Ġsome',
-        'Ġtail',
-        '.', 'ĠEnd', 'Ġ.',
-        'Ġ1', 'Ġ2',
-        '</s>'
-    ]
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION], max_length=max_length)
+        data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.PANELIZATION], max_length=max_length)
         labeled_examples = data_prep.run()
+        print("\nXML examples:")
+        print(example)
         print("\nLabel codes: ")
         print(labeled_examples[0]['label_ids'])
         print('\nTokens')
         print(labeled_examples[0]['tokenized'].tokens())
+        print("Decoded tokens:")
+        print(tokenizer.decode(labeled_examples[0]['tokenized']['input_ids']))
         labeled_example_label_ids = labeled_examples[0]['label_ids']
+        assert labeled_examples[0]['tokenized'].tokens() == expected_tokens, labeled_examples[0]['tokenized'].tokens()
         assert labeled_example_label_ids['entity_types'] == expected_label_codes['entity_types'], labeled_example_label_ids['entity_types']
         assert labeled_example_label_ids['geneprod_roles'] == expected_label_codes['geneprod_roles'], labeled_example_label_ids['geneprod_roles']
-        assert labeled_examples[0]['tokenized'].tokens() == expected_tokens, labeled_examples[0]['tokenized'].tokens()
+        assert labeled_example_label_ids['panel_start'] == expected_label_codes['panel_start'], labeled_example_label_ids['panel_start']
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
         for filepath in filepaths:
