@@ -21,24 +21,28 @@ import torch
 
 class ShowExample(TrainerCallback):
 
-    def __init__(self, tokenizer, *args, **kwargs):
+    def __init__(self, tokenizer, label_list, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tokenzier = tokenizer
+        self.tokenizer = tokenizer
+        self.label_list = label_list
 
-    def on_evaluate(self, model, eval_dataloader):
+    def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         N = len(eval_dataloader.dataset)
         idx = randrange(N)
         with torch.no_grad():
-            inputs = eval_dataloader.dataset[idx].unsqueeze(0)
-            loss, logits, labels = model(**inputs)
-            label_idx = logits.argmax(-1)[0][0].cpu()
-            input_ids = inputs[0].cpu()
-        label_idx = label_idx.numpy()
-        input_ids = input_ids.numpy()
+            inputs = eval_dataloader.dataset[idx]
+            for k, v in inputs.items():
+                inputs[k] = torch.tensor(v).unsqueeze(0)
+            # inputs['attention_mask'] = torch.ones_like(inputs['input_ids'])
+            pred = model(**inputs)
+            label_idx = pred['logits'].argmax(-1)[0].cpu()
+            input_ids = inputs['input_ids'][0].cpu()
+        label_idx = [e.item() for e in label_idx]
+        input_ids = [e.item() for e in input_ids]
         tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
-        print(f"Example: {self.tokenizer.decode(input_ids)}")
+        print(f"\n\nExample: {self.tokenizer.decode(input_ids)}")
         for i in range(len(input_ids)):
-            print(f"{i}\t{tokens[i]}\t{labels[label_idx[i]]}")
+            print(f"{i}\t{tokens[i]}\t{self.label_list[label_idx[i]]}")
 
 
 def train(no_cache: bool, data_config_name: str, model_path: str):
@@ -81,12 +85,12 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
         learning_rate=1e-5,
         warmup_steps=500,
         num_train_epochs=10,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
+        per_device_train_batch_size=2,
+        per_device_eval_batch_size=2,
         evaluation_strategy='steps',
         save_total_limit=3,
         logging_steps=100,
-        eval_steps=100,
+        eval_steps=1,
         save_steps=100,
         prediction_loss_only=False
     )
@@ -101,7 +105,7 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[ShowExample(TOKENIZER)]
+        callbacks=[ShowExample(TOKENIZER, label_list)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")
