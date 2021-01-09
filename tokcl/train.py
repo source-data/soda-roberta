@@ -14,12 +14,38 @@ from .metrics import MetricsComputer
 from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
+from transformers import TrainerCallback, RobertaTokenizerFast
+from random import randrange
+import torch
 
-def train(no_cacher: bool, data_config_name: str, model_path: str):
+
+class ShowExample(TrainerCallback):
+
+    def __init__(self, tokenizer, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenzier = tokenizer
+
+    def on_evaluate(self, model, eval_dataloader):
+        N = len(eval_dataloader.dataset)
+        idx = randrange(N)
+        with torch.no_grad():
+            inputs = eval_dataloader.dataset[idx].unsqueeze(0)
+            loss, logits, labels = model(**inputs)
+            label_idx = logits.argmax(-1)[0][0].cpu()
+            input_ids = inputs[0].cpu()
+        label_idx = label_idx.numpy()
+        input_ids = input_ids.numpy()
+        tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
+        print(f"Example: {self.tokenizer.decode(input_ids)}")
+        for i in range(len(input_ids)):
+            print(f"{i}\t{tokens[i]}\t{labels[label_idx[i]]}")
+
+
+def train(no_cache: bool, data_config_name: str, model_path: str):
     # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
-    print(f"tokenizer vocab size: {tokenizer.vocab_size}")
+    TOKENIZER = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+    print(f"tokenizer vocab size: {TOKENIZER.vocab_size}")
 
     print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
@@ -29,13 +55,13 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=HUGGINGFACE_CACHE,
-        tokenizer=tokenizer
+        tokenizer=TOKENIZER
     )
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
     data_collator = DataCollatorForTokenClassification(
-        tokenizer=tokenizer,
+        tokenizer=TOKENIZER,
         #padding=True,
         max_length=config.max_length
     )
@@ -74,7 +100,8 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics
+        compute_metrics=compute_metrics,
+        callbacks=[ShowExample(TOKENIZER)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")
