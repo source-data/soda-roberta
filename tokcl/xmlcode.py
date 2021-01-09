@@ -34,7 +34,7 @@ class CodeMap:
                 self.iob2_labels.append(f"{prefix}-{label}")
 
     def from_label(self, label: str) -> Dict:
-        """Returns (Dict): the constraint corresponding to the given label (for example 'GENEPROD' OR 'CONTROLLED_VAR').
+        """Returns (Dict): the constraint corresponding to the given label WITHOUT prefix (for example 'GENEPROD' OR 'CONTROLLED_VAR').
         """
         idx = self.all_labels.index(label)
         constraint = self.constraints[idx + 1]  # constraints keys start at 1
@@ -185,7 +185,6 @@ class SourceDataCodes(Enum):
             },
         })
     )
-
 
     PANELIZATION = CodeMap(
         name="panel_start",
