@@ -36,7 +36,7 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
 
     data_collator = DataCollatorForTokenClassification(
         tokenizer=tokenizer,
-        padding=True,
+        #padding=True,
         max_length=config.max_length
     )
 
@@ -52,15 +52,15 @@ def train(no_cacher: bool, data_config_name: str, model_path: str):
     training_args = TrainingArguments(
         output_dir=model_path,
         overwrite_output_dir=True,
-        learning_rate=1e-5,
-        warmup_steps=500,
+        learning_rate=5e-5,
+        warmup_steps=0,
         num_train_epochs=10,
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         save_total_limit=3,
-        logging_steps=100,
-        eval_steps=100,
+        logging_steps=10,
+        eval_steps=10,
         save_steps=100,
         prediction_loss_only=False
     )
