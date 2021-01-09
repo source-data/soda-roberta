@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from transformers import pipeline, RobertaForTokenClassification, RobertaTokenizerFast
+from transformers import pipeline, RobertaTokenizerFast, RobertaForTokenClassification
 from common import NER_MODEL_PATH
 from common.config import config
 
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     text = args.text
     model_path = args.model_path
     model = RobertaForTokenClassification.from_pretrained(model_path)
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     pipe = pipeline('ner', model, tokenizer=tokenizer)
     res = pipe(text)
     for r in res:
