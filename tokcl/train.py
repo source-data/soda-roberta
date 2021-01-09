@@ -32,7 +32,7 @@ class ShowExample(TrainerCallback):
         with torch.no_grad():
             inputs = eval_dataloader.dataset[idx]
             for k, v in inputs.items():
-                inputs[k] = torch.tensor(v).unsqueeze(0)
+                inputs[k] = torch.tensor(v).unsqueeze(0).cpu()
             # inputs['attention_mask'] = torch.ones_like(inputs['input_ids'])
             pred = model(**inputs)
             label_idx = pred['logits'].argmax(-1)[0].cpu()
