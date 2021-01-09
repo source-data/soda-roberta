@@ -79,19 +79,19 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
 
     model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
-    training_args = TrainingArguments(
+   training_args = TrainingArguments(
         output_dir=model_path,
         overwrite_output_dir=True,
-        learning_rate=1e-5,
-        warmup_steps=500,
-        num_train_epochs=10,
-        per_device_train_batch_size=2,
-        per_device_eval_batch_size=2,
+        learning_rate=5e-5,
+        warmup_steps=0,
+        num_train_epochs=3,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         save_total_limit=3,
-        logging_steps=100,
-        eval_steps=1,
-        save_steps=100,
+        logging_steps=10,
+        eval_steps=10,
+        save_steps=50,
         prediction_loss_only=False
     )
 
