@@ -28,7 +28,7 @@ class CodeMap:
 
     def __post_init__(self):
         self.all_labels: List[str] = [c['label'] for c in self.constraints.values()]
-        self.iob2_labels: List[str] = ['O']  # generate labels of IOB2 schema tagging, including prefix combinations
+        self.iob2_labels: List[str] = ['O']  # generated labels of IOB2 schema tagging, including prefix combinations
         for label in self.all_labels:
             for prefix in ['I', 'B']:
                 self.iob2_labels.append(f"{prefix}-{label}")
@@ -72,7 +72,7 @@ class SourceDataCodes(Enum):
 
     @property
     def iob2_labels(self) -> List[str]:
-        """Returns (List[str]): all the generated IOB2 labels including outside "O".
+        """Returns (List[str]): all the generated IOB2 labels (WITH prefixes) including outside "O".
         """
         return self.value.iob2_labels
 
@@ -89,7 +89,7 @@ class SourceDataCodes(Enum):
         return self.value.constraints
 
     def from_label(self, label) -> Dict:
-        """Returns (Dict): the constraint corresponding to the given label (for example 'GENEPROD' OR 'CONTROLLED_VAR').
+        """Returns (Dict): the constraint corresponding to the given label WITHOUT prefix (for example 'GENEPROD' OR 'CONTROLLED_VAR').
         """
         return self.value.from_label(label)
 

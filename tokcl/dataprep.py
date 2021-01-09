@@ -21,7 +21,7 @@ from common.config import config
 class Preparator:
     """Processes source xml documents into examples that can be used in a token classification task.
     It tokenizes the text with the provided tokenizer. 
-    The XML is used to generate labels according to the provided CodeMap.
+    The XML is used to generate labels according to the provided CodeMaps.
     The datset is then split into train, eval, and test set and saved into json line files.
 
     Args:

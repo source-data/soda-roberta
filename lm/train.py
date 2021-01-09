@@ -26,7 +26,7 @@ tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.
 
 print(f"\nLoading and tokenizing datasets found in {LM_DATASET}.")
 train_dataset, eval_dataset, test_dataset = load_dataset(
-    './tokcl/dataset.py',
+    './lm/loader.py',
     'MLM',
     data_dir=LM_DATASET,
     split=["train", "validation", "test"],
