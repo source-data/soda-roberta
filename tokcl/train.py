@@ -13,12 +13,12 @@ from datasets import load_dataset, GenerateMode
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
-from common import tokenizer_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
+from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
 
 def train(no_cache: bool, data_config_name: str, model_path: str):
-    # print(f"Loading tokenizer from {tokenizer_PATH}.")
-    # tokenizer = RobertaTokenizerFast.from_pretrained(tokenizer_PATH, max_len=config.max_length)
+    # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
+    # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
