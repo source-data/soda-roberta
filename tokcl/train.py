@@ -2,11 +2,12 @@
 from typing import NamedTuple
 from argparse import ArgumentParser
 from pathlib import Path
+from dataclasses import dataclass, field
 import torch
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForTokenClassification,
-    Trainer
+    Trainer, HfArgumentParser,
 )
 from datasets import load_dataset, GenerateMode
 # from datasets.utils.download_manager import GenerateMode
@@ -16,7 +17,7 @@ from common.config import config
 from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
 
 
-def train(no_cache: bool, data_config_name: str, model_path: str):
+def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments):
     # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
@@ -49,22 +50,6 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
 
     model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
 
-    training_args = TrainingArguments(
-        output_dir=model_path,
-        overwrite_output_dir=True,
-        learning_rate=5e-5,
-        warmup_steps=0,
-        num_train_epochs=3,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
-        evaluation_strategy='steps',
-        save_total_limit=3,
-        logging_steps=10,
-        eval_steps=10,
-        save_steps=50,
-        prediction_loss_only=False
-    )
-
     print("\nTraining arguments:")
     print(training_args)
 
@@ -81,7 +66,7 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
     print(f"CUDA available: {torch.cuda.is_available()}")
 
     trainer.train()
-    trainer.save_model(model_path)
+    trainer.save_model(training_args.output_dir)
 
     print(f"Testing on {len(test_dataset)}.")
     pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
@@ -89,13 +74,11 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Traing script.")
+
+    parser = HfArgumentParser((TrainingArguments), description="Traing script.")
     parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
-    args = parser.parse_args()
+    training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
     data_config_name = args.data_config_name
-    model_path = Path(f"{NER_MODEL_PATH}/{data_config_name}")
-    if not model_path.exists():
-        model_path.mkdir()
-    train(no_cache, data_config_name, str(model_path))
+    train(no_cache, data_config_name, training_args)
