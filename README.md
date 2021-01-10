@@ -7,7 +7,7 @@ SourceData database: https://sourcedata.io, "SourceData: a semantic platform for
 Liechti R, George N, Götz L, El-Gebali S, Chasapi A, Crespo I, Xenarios I, Lemberger T, Nature Methods, https://doi.org/10.1038/nmeth.4471
 Roberta transformers is a BERT derivative: https://huggingface.co/transformers/model_doc/roberta.html, "RoBERTa: A Robustly Optimized BERT Pretraining Approach" by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov
 
-The resource uses the huggingface (https://huggingface.co) and PyTorch frameworks.
+The resource uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
 
 The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. SmartTag uses a 3 step pipeline: 
 
@@ -15,7 +15,7 @@ The models trained below are used in the SmartTag engine that tags biological en
 2. Named Entity Recognition of bioentities and experimental methods.
 3. Semantic tagging of the experimental role of generoducts as measured variable or controlled variable.
 
-Accordingle, 3 models are trained with the respective tasks: PANELIZATION, NER, ROLES. 
+Accordingle, 3 models are trained with the respective tasks: PANELIZATION, NER, ROLES. We provide below the instructions on how to train these three models eiter using a specialized language model trained on biological text from PubMedCentral or using pre-trained Roberta transformers.
 
 # Use pretrained models
 
@@ -132,16 +132,16 @@ Train the PANELIZATION task to learn panel segmentation:
 
 ```
 python -m tokcl.train PANELIZATION \
---output_dir=ner_model/PANELIZATION \ \
---overwrite_output_dir \ \
---learning_rate=1e-5 \ \
---num_train_epochs=100 \ \
---per_device_train_batch_size=32 \ \
---per_device_eval_batch_size=32 \ \
---evaluation_strategy='steps' \ \
---save_total_limit=3 \ \
---logging_steps=50 \ \
---eval_steps=50 \ \
+--output_dir=ner_model/PANELIZATION \
+--overwrite_output_dir \
+--learning_rate=1e-5 \
+--num_train_epochs=100 \
+--per_device_train_batch_size=32 \
+--per_device_eval_batch_size=32 \
+--evaluation_strategy='steps' \
+--save_total_limit=3 \
+--logging_steps=50 \
+--eval_steps=50 \
 --save_steps=100
 ```
 
