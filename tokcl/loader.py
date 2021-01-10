@@ -212,9 +212,9 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 elif self.config.name == "ROLES":
                     # masking of labeled entities to enforce learning from context
                     input_ids = data["input_ids"]
-                    labels = data["label_ids"]["geneprod_roles"]
+                    labels = data["label_ids"]["entity_types"]
                     for i, t in enumerate(labels):
-                        if t != "O":
+                        if t in ["B-GENEPROD", "I-GENEPROD", "B-PROTEIN", "I-PROTEIN", "B-GENE", "I-GENE"]:
                             input_ids[i] = self.tokenizer.mask_token_id
                     yield id_, {
                         "input_ids": input_ids,
