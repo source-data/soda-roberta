@@ -4,7 +4,6 @@ from typing import List
 import torch
 
 
-
 class ShowExample(TrainerCallback):
 
     def __init__(self, tokenizer: RobertaTokenizerFast, label_list: List[str], *args, **kwargs):
@@ -34,8 +33,8 @@ class ShowExample(TrainerCallback):
         colored = ""
         for input_id, label_idx in zip(input_ids, labels_idx):
             decoded = self.tokenizer.decode(input_id)
-            colored += f"\033[38;5;{idx if idx != 0 else 255}m{decoded}\033[0m"
-        print(colored)
+            colored += f"{'\033[38;5;'+str(label_idx)+'m' if label_idx != 0 else ''}{decoded}{'\033[0m' if label_idx !=0 else ''}"
+        print(f"\n{colored}\n")
 
 
 # decode() -> the whole string
@@ -45,7 +44,7 @@ class ShowExample(TrainerCallback):
 #for i = 1, 32 do COLORS[i] = "\27[38;5;"..(8*i-7).."m" end
 # printf "\e[30;1mTesting color\e[0m"
 # for i in range(25,50): print(f"\033[{i};1mTesting color {i}\033[0m")
-# for i in range(256): print(f"\033[38;5;{i}mBlahblah color={i}\033[0m")
+# for i in range(256): print(f"\033[38;5;{i}mBlahblah color={i}\033[0mAnd normal")
 
 # "\033[48;1m", #grey
 # "\033[34;1m", #blue first since often assayed
