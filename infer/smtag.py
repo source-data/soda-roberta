@@ -227,7 +227,7 @@ class Tagger:
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Tags text.")
-    parser.add_argument("text", nargs="?", default="We studies mice with genetic ablation of the ERK1 gene in brain and muscle.", help="Directory where the xml files are located.")
+    parser.add_argument("text", nargs="?", default="We studied mice with genetic ablation of the ERK1 gene in brain and muscle.", help="The text to tag.")
     args = parser.parse_args()
     text = args.text
     panel_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/PANELIZATION")
