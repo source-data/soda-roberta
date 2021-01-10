@@ -2,7 +2,7 @@
 SODA-ROBERTA
 ============
 
-SODA-ROBERTA is a **So**urce **Da**ta reource for training __Roberta__ transfomers for nlp tasks in cell and molecular biology.
+SODA-ROBERTA is a **So**urce **Da**ta resource for training __Roberta__ transfomers for natural language processing tasks in cell and molecular biology.
 
 SourceData database: https://sourcedata.io, "SourceData: a semantic platform for curating and searching figures"
 Liechti R, George N, Götz L, El-Gebali S, Chasapi A, Crespo I, Xenarios I, Lemberger T, Nature Methods, https://doi.org/10.1038/nmeth.4471
