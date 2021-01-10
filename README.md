@@ -55,7 +55,10 @@ Build and start the Docker container:
 docker-compose build
 docker-compose up -d
 ```
-Start a tmux session and run  from the lm service:
+
+This will start both the lm service and a tensorboard service on port 6007, which allows to visualize training on https://localhost:6007
+
+Start a tmux session (more convenient when training lasts a while) and run bash from the lm service:
 
 ```
 tmux
