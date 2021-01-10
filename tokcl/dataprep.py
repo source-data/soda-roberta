@@ -44,15 +44,13 @@ class Preparator:
         dest_dir_path: Path,
         tokenizer: RobertaTokenizerFast,
         code_maps: List[CodeMap],
-        max_length: int = config.max_length,
-        split_ratio: Dict = config.split_ratio
+        max_length: int = config.max_length
     ):
         self.source_dir_path = source_dir_path
         self.dest_dir_path = dest_dir_path
         self.code_maps = code_maps
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
     def _dest_dir_is_empty(self) -> bool:
@@ -82,8 +80,7 @@ class Preparator:
                 'tokenized': tokenized,
                 'label_ids': token_level_labels
             })
-        split_examples = self._split(labeled_examples)
-        self._save_json(split_examples)
+        self._save_json(labeled_examples)
         return labeled_examples
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
@@ -188,33 +185,19 @@ class Preparator:
         iob2_label = f"{prefix}-{label}"
         return iob2_label
 
-    def _split(self, examples: List) -> Dict:
-        shuffle(examples)
-        N = len(examples)
-        valid_fraction = min(floor(N * self.split_ratio['eval']), self.split_ratio['max_eval'] - 1)
-        test_fraction = min(floor(N * self.split_ratio['test']), self.split_ratio['max_test'] - 1)
-        train_fraction = N - valid_fraction - test_fraction
-        split_examples = {}
-        split_examples['train'] = [e for e in examples[0:train_fraction]]
-        split_examples['eval'] = [e for e in examples[train_fraction:train_fraction + valid_fraction]]
-        split_examples['test'] = [p for p in examples[train_fraction + valid_fraction:]]
-        return split_examples
-
-    def _save_json(self, split_examples: Dict):
+    def _save_json(self, examples: List):
         if not self.dest_dir_path.exists():
             self.dest_dir_path.mkdir()
-        # basename = "_".join([self.code_map.__name__, now()])
-        for subset, examples in split_examples.items():
-            # saving line by line to json-line file
-            filepath = self.dest_dir_path / f"{subset}.jsonl"
-            with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
-                for example in examples:
-                    j = {
-                        'tokens': example['tokenized'].tokens(),
-                        'input_ids': example['tokenized'].input_ids,
-                        'label_ids':  example['label_ids']
-                    }
-                    f.write(f"{json.dumps(j)}\n")
+        # saving line by line to json-line file
+        filepath = self.dest_dir_path / "data.jsonl"
+        with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            for example in examples:
+                j = {
+                    'tokens': example['tokenized'].tokens(),
+                    'input_ids': example['tokenized'].input_ids,
+                    'label_ids':  example['label_ids']
+                }
+                f.write(f"{json.dumps(j)}\n")
 
     def verify(self):
         filepaths = self.dest_dir_path.glob("**/*.jsonl")
@@ -318,13 +301,12 @@ def self_test():
         assert labeled_example_label_ids['geneprod_roles'] == expected_label_codes['geneprod_roles'], labeled_example_label_ids['geneprod_roles']
         assert labeled_example_label_ids['panel_start'] == expected_label_codes['panel_start'], labeled_example_label_ids['panel_start']
         assert data_prep.verify()
-        filepaths = list(dest_dir_path.glob("*.jsonl"))
-        for filepath in filepaths:
-            print(f"\nContent of saved file ({filepath}):")
-            with filepath.open() as f:
-                for line in f:
-                    j = json.loads(line)
-                    print(json.dumps(j))
+        filepath = dest_dir_path / "data.jsonl"
+        print(f"\nContent of saved file ({filepath}):")
+        with filepath.open() as f:
+            for line in f:
+                j = json.loads(line)
+                print(json.dumps(j))
     finally:
         shutil.rmtree('/tmp/test_dataprep/')
         print("cleaned up and removed /tmp/test_corpus")
@@ -338,12 +320,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if source_dir_path:
-        dest_dir_path = args.dest_dir
         code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
-        sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer, code_maps)
-        sdprep.run()
-        sdprep.verify()
+        dest_dir_path = args.dest_dir
+        dest_dir_path = Path(dest_dir_path)
+        source_dir_path = Path(source_dir_path)
+        for subset in ["train", "eval", "test"]:
+            print(f"Preparing: {subset}")
+            sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer, code_maps)
+            sdprep.run()
+            sdprep.verify()
         print("\nDone!")
     else:
         self_test()

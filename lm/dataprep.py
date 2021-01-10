@@ -30,14 +30,12 @@ class Preparator:
         source_dir_path: Path,
         dest_dir_path: Path,
         tokenizer: RobertaTokenizerFast,
-        max_length: int = config.max_length,
-        split_ratio: Dict = config.split_ratio
+        max_length: int = config.max_length
     ):
         self.source_dir_path = source_dir_path
         self.dest_dir_path = dest_dir_path
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.split_ratio = split_ratio
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
     def _dest_dir_is_empty(self) -> bool:
@@ -68,37 +66,21 @@ class Preparator:
                 add_special_tokens=True
             )
             examples.append(tokenized)
-        split_examples = self._split(examples)
-        self._save_json(split_examples)
+        self._save_json(examples)
         return examples
 
-    def _split(self, examples: List) -> Dict:
-        shuffle(examples)
-        N = len(examples)
-        valid_fraction = min(floor(N * self.split_ratio['eval']), self.split_ratio['max_eval'] - 1)
-        test_fraction = min(floor(N * self.split_ratio['test']), self.split_ratio['max_test'] - 1)
-        train_fraction = N - valid_fraction - test_fraction
-        assert train_fraction + valid_fraction + test_fraction == N
-        split_examples = {}
-        split_examples['train'] = [e for e in examples[0:train_fraction]]
-        split_examples['eval'] = [e for e in examples[train_fraction:train_fraction + valid_fraction]]
-        split_examples['test'] = [p for p in examples[train_fraction + valid_fraction:]]
-        return split_examples
-
-    def _save_json(self, split_examples: Dict):
+    def _save_json(self, examples: Dict):
         if not self.dest_dir_path.exists():
             self.dest_dir_path.mkdir()
-        # basename = "_".join([self.code_map.__name__, now()])
-        for subset, examples in split_examples.items():
-            # saving line by line to json-line file
-            filepath = self.dest_dir_path / f"{subset}.jsonl"
-            with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
-                for example in examples:
-                    j = {
-                        'tokens': example.tokens(),
-                        'input_ids': example.input_ids,
-                    }
-                    f.write(f"{json.dumps(j)}\n")
+        # saving line by line to json-line file
+        filepath = self.dest_dir_path / "data.jsonl"
+        with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            for example in examples:
+                j = {
+                    'tokens': example.tokens(),
+                    'input_ids': example.input_ids,
+                }
+                f.write(f"{json.dumps(j)}\n")
 
     def verify(self):
         filepaths = self.dest_dir_path.glob("**/*.jsonl")
@@ -162,9 +144,13 @@ if __name__ == "__main__":
     tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
     if source_dir_path:
         dest_dir_path = args.dest_dir
-        sdprep = Preparator(Path(source_dir_path), Path(dest_dir_path), tokenizer)
-        sdprep.run()
-        sdprep.verify()
+        dest_dir_path = Path(dest_dir_path)
+        source_dir_path = Path(source_dir_path)
+        for subset in ["train", "eval", "test"]:
+            print(f"Preparing: {subset}")
+            sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer)
+            sdprep.run()
+            sdprep.verify()
         print("\nDone!")
     else:
         self_test()

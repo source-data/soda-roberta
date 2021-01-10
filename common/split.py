@@ -77,7 +77,7 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description='Splitting a corpus into train, valid and testsets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('corpus', nargs="?", help='path to the corpus of documents to use.')
-    parser.add_argument('-X', '--extension', default='txt', help='Extension for allowed files in the corpus.')
+    parser.add_argument('-X', '--extension', default='txt', help='Extension (WITHOUT THE DOT) for allowed files in the corpus.')
     args = parser.parse_args()
 
     if not args.corpus:

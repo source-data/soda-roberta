@@ -58,91 +58,51 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     VERSION = datasets.Version("0.0.1")
 
-    # This is an example of a dataset with multiple configurations.
-    # If you don't want/need to define several sub-sets in your dataset,
-    # just remove the BUILDER_CONFIG_CLASS and the BUILDER_CONFIGS attributes.
-
-    # If you need to make complex sub-parts in the datasets with configurable options
-    # You can create your own builder configuration class to store attribute, inheriting from datasets.BuilderConfig
-    # BUILDER_CONFIG_CLASS = MyBuilderConfig
-
-    # You will be able to load one or the other configurations in the following list with
-    # data = datasets.load_dataset('my_dataset', 'first_domain')
-    # data = datasets.load_dataset('my_dataset', 'second_domain')
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for masked language model."),
-        # datasets.BuilderConfig(name="semantic_roles", version=0.1, description="Dataset for semantic roles."),
-        # datasets.BuilderConfig(name="panelization", version=0.1, description="Dataset for figure legend segmentation into panel-specific legends."),
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
     def _info(self):
-        # TODO: This method specifies the datasets.DatasetInfo object which contains informations and typings for the dataset
         if self.config.name == "MLM":  # This is the name of the configuration selected in BUILDER_CONFIGS above 
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32"))
                 }
             )
-        # elif self.config.name == "semantic_roles":  # This is an example to show how to have different features for "first_domain" and "second_domain"
-        #     features = datasets.Features(
-        #         {
-        #             "tokens": datasets.Value("list_()"),
-        #             "label_ids": datasets.Value("list_()"),
-        #             "mask": datasets.Value("list_()")
-        #         }
-        #     )
+
         return datasets.DatasetInfo(
-            # This is the description that will appear on the datasets page.
             description=_DESCRIPTION,
-            # This defines the different columns of the dataset and their types
             features=features,  # Here we define them above because they are different between the two configurations
-            # If there's a common (input, target) tuple from the features,
-            # specify them here. They'll be used if as_supervised=True in
-            # builder.as_dataset.
             supervised_keys=("input_ids", "labels"),
-            # Homepage of the dataset for documentation
             homepage=_HOMEPAGE,
-            # License for the dataset if available
             license=_LICENSE,
-            # Citation for the dataset
             citation=_CITATION,
         )
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        # TODO: This method is tasked with downloading/extracting the data and defining the splits depending on the configuration
-        # If several configurations are possible (listed in BUILDER_CONFIGS), the configuration selected by the user is in self.config.name
-
-        # dl_manager is a datasets.download.DownloadManager that can be used to download and extract URLs
-        # It can accept any type or nested list/dict and will give back the same structure with the url replaced with path to local files.
-        # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive 
-        # my_urls = _URLs[self.config.name]
-        # data_dir = dl_manager.download_and_extract(my_urls)
         data_dir = Path(self.config.data_dir)
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": str(data_dir / "train.jsonl"),
+                    "filepath": str(data_dir / "train/data.jsonl"),
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
-                # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": str(data_dir / "test.jsonl"),
+                    "filepath": str(data_dir / "test/data.jsonl"),
                     "split": "test"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": str(data_dir / "eval.jsonl"),
+                    "filepath": str(data_dir / "eval/data.jsonl"),
                     "split": "eval",
                 },
             ),
@@ -150,10 +110,6 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath, split):
         """ Yields examples. """
-        # TODO: This method will receive as arguments the `gen_kwargs` defined in the previous `_split_generators` method.
-        # It is in charge of opening the given file and yielding (key, example) tuples from the dataset
-        # The key is not important, it's more here for legacy reason (legacy from tfds)
-
         with open(filepath, encoding="utf-8") as f:
             for id_, row in enumerate(f):
                 data = json.loads(row)
@@ -169,9 +125,15 @@ def self_test():
     p = Path(data_dir)
     p.mkdir()
     try:
-        p_train = p / "train.jsonl"
-        p_eval = p / "eval.jsonl"
-        p_test = p / "test.jsonl"
+        p_train = p / "train"
+        p_train.mkdir()
+        p_train = p_train / "data.jsonl"
+        p_eval = p / "eval"
+        p_eval.mkdir()
+        p_eval = p_eval / "data.jsonl"
+        p_test = p / "test"
+        p_test.mkdir()
+        p_test = p_test / "data.jsonl"
         d = {"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0]}
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
@@ -187,7 +149,7 @@ def self_test():
         print(len(train_dataset))
         print(len(eval_dataset))
         print(len(test_dataset))
-        # train_10_80pct_ds = datasets.load_dataset('bookcorpus', split='train[:10%]+train[-80%:]')
+
     finally:
         shutil.rmtree(data_dir)
 
