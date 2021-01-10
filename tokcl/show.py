@@ -33,7 +33,10 @@ class ShowExample(TrainerCallback):
         colored = ""
         for input_id, label_idx in zip(input_ids, labels_idx):
             decoded = self.tokenizer.decode(input_id)
-            colored += f"{'\033[38;5;'+str(label_idx)+'m' if label_idx != 0 else ''}{decoded}{'\033[0m' if label_idx !=0 else ''}"
+            if labels_idx > 0:
+                colored += f"\033[38;5;{label_idx}m{decoded}\033[0m"
+            else:
+                colored += decoded
         print(f"\n{colored}\n")
 
 
