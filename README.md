@@ -3,11 +3,13 @@ SODA-ROBERTA
 ============
 
 SODA-ROBERTA is a **So**urce **Da**ta reource for training __Roberta__ transfomers for nlp tasks in cell and molecular biology.
+
 SourceData database: https://sourcedata.io, "SourceData: a semantic platform for curating and searching figures"
 Liechti R, George N, Götz L, El-Gebali S, Chasapi A, Crespo I, Xenarios I, Lemberger T, Nature Methods, https://doi.org/10.1038/nmeth.4471
+
 Roberta transformers is a BERT derivative: https://huggingface.co/transformers/model_doc/roberta.html, "RoBERTa: A Robustly Optimized BERT Pretraining Approach" by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov
 
-The resource uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
+SODA-ROBERTA uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
 
 The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. Tagging biological entites that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature.
 
@@ -18,6 +20,8 @@ SmartTag uses a 3-step pipeline:
 3. Semantic tagging of the experimental role of generoducts as measured variable or controlled variable.
 
 Accordingly, 3 models are trained with the respective tasks: PANELIZATION, NER, ROLES. We provide below the instructions on how to train these 3 models either using a specialized language model trained on biological text from PubMedCentral or using pre-trained Roberta transformers.
+
+The training data is in the form of XML data. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
 
 # Use pretrained models
 
