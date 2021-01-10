@@ -13,7 +13,7 @@ from common import NER_MODEL_PATH
 
 class Entity:
 
-    def __init__(self, input_id, ner_label, role_label, ner_code_map, role_code_map):
+    def __init__(self, input_id: int, ner_label: str, role_label: str, ner_code_map: CodeMap, role_code_map: CodeMap):
         self.input_ids = [input_id]
         self.ner_label = ner_label
         self.role_label = role_label
@@ -25,7 +25,7 @@ class Entity:
             self.attrib = {attr: val[0] for attr, val in role_constraint['attributes'].items()}
         self.text = ''
 
-    def to_dict(self, tokenizer):
+    def to_dict(self, tokenizer: RobertaTokenizerFast):
         self.text = tokenizer.decode(self.input_ids)
         d = {'text': self.text}
         for k, v in self.attrib.items():
@@ -45,53 +45,52 @@ class Serializer:
         self.role_code_map = role_code_map
         self.tokenizer = tokenizer
 
-    def __call__(self, input: List[List[Dict]], format: str = "json") -> str:
+    def __call__(self, *args, format: str = "json") -> str:
         if format == "json":
-            return self.to_json(input)
+            return self.to_json(*args)
         else:
             return input
 
-    def to_json(self, input: Dict[str, List[int]]):
+    def to_json(self, pred_types: List[Dict[str, List]], pred_roles: List[Dict[str, List]]) -> str:
 
         j = {'smtag': []}
-        for p in input:
+        for entity_types, entity_roles in zip(pred_types, pred_roles):
             entity_list = []
-            ner_tokens = input['entity_types']
-            role_tokens = input['geneprod_roles']
             entity = None
-            for i, in range(len(ner_tokens)):
-                t_ner = ner_tokens[i]
-                idx_ner = t_ner['label_idx']
+            for i in range(len(entity_types['input_ids'])):
+                input_id_ner = entity_types['input_ids'][i]
+                idx_ner = entity_types['labels_idx'][i]
                 iob_ner = self.ner_code_map.iob2_labels[idx_ner]  # convert label idx into IOB2 label
-                t_role = role_tokens[i]
-                idx_role = t_role['label_idx']
+                idx_role = entity_roles['labels_idx'][i]
                 iob_role = self.role_code_map.iob2_labels[idx_role]
                 if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
                     prefix = iob_ner[0:2]  # for example B-
-                    ner_label = iob_ner[2:]  # for example GENEPROD
+                    label_ner = iob_ner[2:]  # for example GENEPROD
                     if prefix == "B-":  # begining of a new entity
                         if entity is not None:  # save current entity before creating new one
                             entity_list.append(entity.to_dict(self.tokenizer))
                         entity = Entity(
-                            input_id=t_ner['input_id'],
-                            ner_label=ner_label,
+                            input_id=input_id_ner,
+                            ner_label=label_ner,
                             role_label=iob_role[2:] if iob_role != "O" else "",
                             ner_code_map=self.ner_code_map,
+                            role_code_map=self.role_code_map
                         )
                     elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
-                        entity.input_ids.append(t['input_id'])
+                        entity.input_ids.append(input_id_ner)
                     # if currently I-nside and entity predicted but no prior B-eginging detected.
                     # Would be an inference mistake.
                     elif prefix == "I-" and entity is None:  # should not happen, but who knows...
                         entity = Entity(
-                            input_id=t_ner['input_id'],
-                            ner_label=ner_label,
+                            input_id=input_id_ner,
+                            ner_label=label_ner,
                             role_label=iob_role[2:] if iob_role != "O" else "",
                             ner_code_map=self.ner_code_map,
+                            role_code_map=self.role_code_map
                         )
                     else:
                         # something is wrong...
-                        print(f"Something is wrong at token {t_ner} with IOB label {iob_ner}.")
+                        print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
                         print(j)
                         raise Exception("serialization failed")
                 elif entity is not None:
@@ -118,21 +117,17 @@ class Tagger:
         self.ner_code_map = sd.ENTITY_TYPES
         self.role_code_map = sd.GENEPROD_ROLES
         self.serializer = Serializer(
-            self.tokenizer,  # for decoding
             self.ner_code_map,
-            self.role_code_map
+            self.role_code_map,
+            self.tokenizer,  # for decoding
         )
 
     def pipeline(self, text: str) -> str:
         output = self._tokenize(text)
-        # panelized: List[BatchEncoding] = self.panelize(output)
-        entity_types: List[Dict[List]] = self.ner([output])
-        import pdb; pdb.set_trace()
+        panelized: List[BatchEncoding] = self.panelize(output)
+        entity_types: List[Dict[List]] = self.ner(panelized)
         geneprod_roles: List[Dict[List]] = self.roles(entity_types)
-        serialized = self.serializer({
-            'entity_types': entity_types,
-            'geneprod_roles': geneprod_roles
-        }, format='json')
+        serialized = self.serializer(entity_types, geneprod_roles, format='json')
         return serialized
 
     def _tokenize(self, text) -> BatchEncoding:
@@ -146,7 +141,7 @@ class Tagger:
         return tokens
 
     def panelize(self, input: BatchEncoding) -> List[BatchEncoding]:
-        labeled = self.predict([input], self.panel_model, filter_special_tokens=True)
+        labeled = self.predict([input], self.panel_model)
         labeled = labeled[0]
         panel_start_label_code = self.panel_code_map.iob2_labels.index('B-PANEL_START')
         panels = []
@@ -165,7 +160,7 @@ class Tagger:
         return panels
 
     def ner(self, input: List[BatchEncoding]) -> List[Dict[str, List]]:
-        output = self.predict(input, self.ner_model, filter_special_tokens=False)
+        output = self.predict(input, self.ner_model)
         return output
 
     def roles(self, input) -> List[Dict[str, List]]:
@@ -177,7 +172,7 @@ class Tagger:
         masked_input = []
         for panel in input:
             masked_input_ids = []
-            for i in range(len(panel)):
+            for i in range(len(panel['input_ids'])):
                 input_id = panel['input_ids'][i]
                 label_idx = panel['labels_idx'][i]
                 if label_idx in geneprod_codes:
@@ -192,10 +187,10 @@ class Tagger:
             }
             masked_input.append(masked_panel)
         # tensorify
-        output = self.predict(masked_input, self.role_model, filter_special_tokens=True)
+        output = self.predict(masked_input, self.role_model)
         return output
 
-    def predict(self, input: List[BatchEncoding], model: RobertaForTokenClassification, filter_special_tokens: bool = True) -> List[Dict[str, List]]:
+    def predict(self, input: List[BatchEncoding], model: RobertaForTokenClassification) -> List[Dict[str, List]]:
         # what follows is taken from TokenClassificationPipeline but avoiding transforming labels_idx into str
         # returning a List[Dict[List]] instead of List[List[Dict]] to faciliate serial input-output predictions
         # TODO handle this as a batch rather than one by one
@@ -209,33 +204,23 @@ class Tagger:
                 input_ids = tokens["input_ids"][0].cpu()
                 scores = entities.softmax(-1)
                 labels_idx = entities.argmax(-1)
-            import pdb; pdb.set_trace()
-            # score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)  # why not softmax(-1) in torch before np?
             special_tokens_mask = special_tokens_mask.numpy()
             labels_idx = labels_idx.numpy()
             entities = entities.numpy()
             scores = scores.numpy()
-            if filter_special_tokens:
-                filtered_labels_idx = [
-                    (idx, label_idx)
-                    for idx, label_idx in enumerate(labels_idx)
-                    if (not special_tokens_mask[idx])
-                ]
-            else:
-                filtered_labels_idx = [(idx, label_idx) for idx, label_idx in enumerate(labels_idx)]
+            labels_idx = [(idx, label_idx) for idx, label_idx in enumerate(labels_idx)]
             entities = {
                 "input_ids": [],
                 "scores": [],
                 "labels_idx": []
             }
-            for idx, label_idx in filtered_labels_idx:
+            for idx, label_idx in labels_idx:
                 input_id = int(input_ids[idx])
                 score = scores[idx][label_idx].item()
                 entities["input_ids"].append(input_id)
                 entities["scores"].append(score)
                 entities["labels_idx"].append(label_idx)
-            if not filter_special_tokens:  # restore special_tokens_mask for potential carry over to next serial model
-                entities["special_tokens_mask"] = special_tokens_mask
+            entities["special_tokens_mask"] = special_tokens_mask  # restore special_tokens_mask for potential carry over to next serial model
             output.append(entities)
         return output
 
@@ -246,18 +231,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     text = args.text
     panel_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/PANELIZATION")
-    ner_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/NER/checkpoint-1270")
+    ner_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/NER/")
     role_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/ROLES")
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
-    from transformers import pipeline
-    pipe = pipeline(
-        'ner',
-        ner_model,
-        tokenizer=tokenizer
-    )
-    res = pipe(text)
-    for r in res:
-        print(r['word'], r['entity'])
     tagger = Tagger(
         tokenizer,
         panel_model,
