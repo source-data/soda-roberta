@@ -110,6 +110,7 @@ class Preparator:
         # tokenizer may have truncated the example
         last_token_start, last_token_end = tokenized.offset_mapping[-2]  # -2 because the last token is </s> with offsets (0,0) by convention
         # get the character-level start end end of the xml element and try to map to tokens
+        inner_text = inner_text[:last_token_end]
         for element_start, element_end in xml_encoded['offsets']:
             # check we are still within the truncated example
             if (element_start <= last_token_start) & (element_end < last_token_end):
@@ -158,14 +159,14 @@ class Preparator:
         # proper token will be found only from next or previous character, respectively
         # This gymnastic is to try to circumven this.
         pos = element_pos
-        _, last_pos = tokenized.offset_mapping[-2]  # end of last non special token
+        # _, last_pos = tokenized.offset_mapping[-2]  # end of last non special token
         if pos >= len(inner_text):
             token_idx = len(tokenized.input_ids)
             return token_idx
         elif inner_text[pos] != ' ':  # usual case, not in a space, all fine
             token_idx = tokenized.char_to_token(pos)
             return token_idx
-        while (inner_text[pos] == ' ') and (pos < last_pos - 1): pos += 1  # scanning for non space on the right
+        while (inner_text[pos] == ' ') and (pos < len(inner_text) - 1): pos += 1  # scanning for non space on the right
         if inner_text[pos] == ' ':  # we are still in a run of space and at the end of the string!
             token_idx = len(tokenized.input_ids) - 1
         else:
