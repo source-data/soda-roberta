@@ -54,14 +54,14 @@ def train(no_cache: bool, data_config_name: str, model_path: str):
         overwrite_output_dir=True,
         learning_rate=5e-5,
         warmup_steps=0,
-        num_train_epochs=3,
+        num_train_epochs=20,
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         save_total_limit=3,
-        logging_steps=10,
-        eval_steps=10,
-        save_steps=50,
+        logging_steps=20,
+        eval_steps=20,
+        save_steps=100,
         prediction_loss_only=False
     )
 
