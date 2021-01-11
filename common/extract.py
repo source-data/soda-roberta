@@ -79,7 +79,6 @@ class ExtractorXML:
             if remove_tail:
                 for e in elements:
                     if e.tail is not None:
-                        print(f"tail: {e.tail} in {e.tag} with text='{e.text}'")
                         e.tail = None
         return elements
 
