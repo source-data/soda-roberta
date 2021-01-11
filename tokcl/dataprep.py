@@ -320,7 +320,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if source_dir_path:
-        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION]
+        code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION, sd.GENEPROD, sd.CELL_TYPE_LINE]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)

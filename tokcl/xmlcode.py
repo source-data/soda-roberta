@@ -172,6 +172,34 @@ class SourceDataCodes(Enum):
         })
     )
 
+    CELL_TYPE_LINE = CodeMap(
+        name="cell_type_line",
+        mode="whole_entity",
+        constraints=OrderedDict({
+            1: {
+                'label': 'CELL',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'type': ['cell']
+                }
+            },
+        })
+    )
+
+    GENEPROD = CodeMap(
+        name="geneprod",
+        mode="whole_entity",
+        constraints=OrderedDict({
+            1: {
+                'label': 'GENEPROD',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'type': ['geneprod', 'gene', 'protein']
+                }
+            },
+        })
+    )
+
     BORING = CodeMap(
         name="boring",
         mode="whole_entity",

@@ -29,6 +29,8 @@ _NER_LABEL_NAMES = sd.ENTITY_TYPES.iob2_labels
 _SEMANTIC_ROLES_LABEL_NAMES = sd.GENEPROD_ROLES.iob2_labels
 _BORING_LABEL_NAMES = sd.BORING.iob2_labels
 _PANEL_START_NAMES = sd.PANELIZATION.iob2_labels
+_GENEPROD = sd.GENEPROD.iob2_labels
+_CELL_TYPE_LINE = sd.CELL_TYPE_LINE.iob2_labels
 
 _CITATION = """\
 @Unpublished{
@@ -77,6 +79,8 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
     # data = datasets.load_dataset('my_dataset', 'second_domain')
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="NER", version="0.0.1", description="Dataset for entity recognition"),
+        datasets.BuilderConfig(name="CELL_TYPE_LINE", version="0.0.1", description="Dataset fortagging cell types and cell lines."),
+        datasets.BuilderConfig(name="GENEPROD", version="0.0.1", description="Dataset for tagging geneproducts."),
         datasets.BuilderConfig(name="ROLES", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(name="BORING", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(name="PANELIZATION", version="0.0.1", description="Dataset for semantic roles."),
@@ -91,7 +95,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         # TODO: This method specifies the datasets.DatasetInfo object which contains informations and typings for the dataset
-        if self.config.name == "NER":  # This is the name of the configuration selected in BUILDER_CONFIGS above 
+        if self.config.name == "NER":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
@@ -99,6 +103,30 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         feature=datasets.ClassLabel(
                             num_classes=len(_NER_LABEL_NAMES),
                             names=_NER_LABEL_NAMES
+                        )
+                    ),
+                }
+            )
+        elif self.config.name == "GENEPROD":
+            features = datasets.Features(
+                {
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "labels": datasets.Sequence(
+                        feature=datasets.ClassLabel(
+                            num_classes=len(_GENEPROD),
+                            names=_GENEPROD
+                        )
+                    ),
+                }
+            )
+        elif self.config.name == "CELL_TYPE_LINE":
+            features = datasets.Features(
+                {
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "labels": datasets.Sequence(
+                        feature=datasets.ClassLabel(
+                            num_classes=len(_CELL_TYPE_LINE),
+                            names=_CELL_TYPE_LINE
                         )
                     ),
                 }
@@ -192,6 +220,16 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["entity_types"],
                     }
+                elif self.config.name == "GENEPROD":
+                    yield id_, {
+                        "input_ids": data["input_ids"],
+                        "labels": data["label_ids"]["geneprod"],
+                    }
+                elif self.config.name == "CELL_TYPE_LINE":
+                    yield id_, {
+                        "input_ids": data["input_ids"],
+                        "labels": data["label_ids"]["cell_type_line"],
+                    }
                 elif self.config.name == "ROLES":
                     # masking of labeled entities to enforce learning from context
                     input_ids = data["input_ids"]
@@ -237,6 +275,8 @@ def self_test():
             "input_ids": batch_encoding.input_ids,
             "label_ids": {
                 "entity_types": ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
+                "geneprod":  ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
+                "cell_type_line":  ["O", "O", "O", "B-CELL", "I-CELL", "O", "O", "O", "O", "O", "O", "O"],
                 "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "I-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"],
                 "boring": ["O", "O", "O", "B-BORING", "I-BORING", "O", "O", "O", "O", "O", "O", "O"],
                 "panel_start": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
@@ -245,7 +285,7 @@ def self_test():
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
-        for configuration in ["NER", "ROLES", "BORING", "PANELIZATION"]:
+        for configuration in ["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"]:
             train_dataset, eval_dataset, test_dataset = load_dataset(
                 './tokcl/loader.py',
                 configuration,

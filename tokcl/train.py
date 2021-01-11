@@ -76,7 +76,7 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 if __name__ == "__main__":
 
     parser = HfArgumentParser((TrainingArguments), description="Traing script.")
-    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
