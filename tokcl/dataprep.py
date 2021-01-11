@@ -283,7 +283,7 @@ def self_test():
         ]
     }
     try:
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
         data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.PANELIZATION], max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nXML examples:")
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     source_dir_path = args.source_dir
     if source_dir_path:
         code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION]
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)
         source_dir_path = Path(source_dir_path)

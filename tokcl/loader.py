@@ -231,7 +231,7 @@ def self_test():
         p_test = p / "test"
         p_test.mkdir()
         p_test = p_test / "data.jsonl"
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
         batch_encoding = tokenizer("One two three four five six seven eight nine ten")
         d = {
             "input_ids": batch_encoding.input_ids,

@@ -20,7 +20,7 @@ from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACH
 def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments):
     # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
@@ -48,7 +48,7 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
     compute_metrics = MetricsComputer(label_list=label_list)
 
-    model = RobertaForTokenClassification.from_pretrained('roberta-base', num_labels=num_labels)
+    model = RobertaForTokenClassification.from_pretrained('roberta-large', num_labels=num_labels)
 
     print("\nTraining arguments:")
     print(training_args)
