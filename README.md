@@ -1,15 +1,15 @@
 
-SODA-ROBERTA
+SoDa-RoBERTa
 ============
 
-SODA-ROBERTA is a **So**urce **Da**ta resource for training __Roberta__ transfomers for natural language processing tasks in cell and molecular biology.
+SODA-RoBERTa is a **So**urce **Da**ta resource for training __RoBERTa__ transformers for natural language processing tasks in cell and molecular biology.
 
 SourceData database: https://sourcedata.io, "SourceData: a semantic platform for curating and searching figures"
 Liechti R, George N, Götz L, El-Gebali S, Chasapi A, Crespo I, Xenarios I, Lemberger T, Nature Methods, https://doi.org/10.1038/nmeth.4471
 
-Roberta transformers is a BERT derivative: https://huggingface.co/transformers/model_doc/roberta.html, "RoBERTa: A Robustly Optimized BERT Pretraining Approach" by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov
+RoBERTa transformer is a BERT derivative: https://huggingface.co/transformers/model_doc/roberta.html, "RoBERTa: A Robustly Optimized BERT Pretraining Approach" by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov
 
-SODA-ROBERTA uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
+SODA-RoBERTa uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
 
 The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. Tagging biological entites that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature.
 
@@ -23,31 +23,23 @@ Accordingly, 3 models are trained with the respective tasks: PANELIZATION, NER, 
 
 The training data is in the form of XML data. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
 
-# Use pretrained models
+# Quick access to the pretrained SoDa-RoBERTa models and SmartTag pipeline.
 
-Under construction
+Under construction.
 
-# Train specialized language model based on PubMed
-
-Under construction
-
-# Train models by fine tuning pre-trained Roberta model:
+# General Setup
 
 Create the appropriate layout
 
 ```
+mkdir lm_dataset #LM_DATASET
+mkdir lm_model # LM_MODEL and TOKENIZER
 mkdir ner_dataset  # NER_DATASET
 mkdir tokcl_models  # NER_MODEL_PATH
 mkdir cache  # HUGGINGFACE_CACHE
 ```
 
 Edit .env.example accordingly and save as .env
-
-Download the SourceData raw dataset (xml files):
-
-```
-wget <url>
-```
 
 Build and start the Docker container:
 
@@ -63,6 +55,93 @@ Start a tmux session (more convenient when training lasts a while) and run bash 
 ```
 tmux
 docker-compose run --rm lm 
+```
+
+# Train specialized language model based on PubMed Central
+
+## Setup
+
+Download Open Access content from PubMed Central (takes a while!):
+
+```
+mkdir oapmc
+cd oapmc
+```
+
+Connect to the EMBL-EBI ftp server:
+
+```
+ftp --no-prompt ftp.ebi.ac.uk 
+# Name: anonymous
+```
+
+Navigate to to the PubMed Central Open Access subset directory and initiate the download:
+
+```
+cd /pub/databases/pmc/oa
+mget *.xml.gz
+exit
+```
+
+Expand the files:
+
+```
+gunzip *.gz
+cd ..
+```
+
+The next steps need to be run form within the docker container:
+
+```
+tmux a # or tmux if ession does not exist
+docker-compose run --rm lm bash
+```
+
+Extract articles from the JATS XML files but keep the XML so that sub-section of articles can be extracted later.
+
+```
+python -m common.extract oapmc oapmc_articles -P .//article --keep-xml
+```
+
+Randomly split aticles into train, eval, test sets. It is better to do this now, so that these subsets remain as independent as possible. It is important to do so when sevral examples (i.e. figure legends) are extracted per article otherwise accuracy metrics may be over optimistic (i.e. examples extracted from the same article should NOT be distributed across train, eval and test).
+
+```
+python -m common.split oapmc_articles
+```
+
+Extract text from the abstracts
+
+```
+python -m common.extracts oapmc_articles/train oapmc_abstracts/train -P .//abstract
+python -m common.extracts oapmc_articles/eval oapmc_abstracts/eval -P .//abstract
+python -m common.extracts oapmc_articles/test oapmc_abstracts/test -P .//abstract
+```
+
+## Train tokenizer
+
+```
+python -m lm.tokentrain oapmc_abstracts
+```
+
+## Tokenize and prepare dataset
+
+python -m lm.dataprep oapmc_abstracts
+
+
+## Train language model
+
+```
+python -m lm.train
+```
+
+# Fine tuning of pre-trained language model
+
+## Setup
+
+Download the SourceData raw dataset (xml files):
+
+```
+wget <url>
 ```
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
@@ -95,6 +174,8 @@ Prepare the dataset for NER and ROLE labels:
 python -m tokcl.dataprep sourcedata
 ```
 
+## Train the models
+
 Train the NER task to learn entity types:
 
 ```
@@ -109,7 +190,7 @@ python -m tokcl.train NER \
 --save_total_limit=3 \
 --logging_steps=20 \
 --eval_steps=20 \
---save_steps=100 \
+--save_steps=100
 ```
 
 
@@ -153,6 +234,8 @@ python -m tokcl.train PANELIZATION \
 --eval_steps=50 \
 --save_steps=100
 ```
+
+## Use the pipeline
 
 Try smtag tagging:
 
