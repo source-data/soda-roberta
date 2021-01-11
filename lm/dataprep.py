@@ -5,8 +5,8 @@ import json
 import shutil
 from random import shuffle
 from argparse import ArgumentParser
-from tokenizers import Encoding
-from transformers import RobertaTokenizerFast
+from transformers import RobertaTokenizerFast, BatchEncoding
+import spacy
 from common.utils import progress
 from common import TOKENIZER_PATH, NER_DATASET
 from common.config import config
@@ -36,6 +36,7 @@ class Preparator:
         self.dest_dir_path = dest_dir_path
         self.max_length = max_length
         self.tokenizer = tokenizer
+        self.nlp = spacy.load('en_core_web_sm')
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
 
     def _dest_dir_is_empty(self) -> bool:
@@ -53,21 +54,42 @@ class Preparator:
             ext (str):
                The extension (WITHOUT THE DOT) of the files to be coded.
         """
-        examples = []
+        labeled_examples = []
         filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
         for i, filepath in enumerate(filepaths):
             progress(i, len(filepaths), f"{filepath.name}                 ")
             example = filepath.read_text()
-            tokenized: Encoding = self.tokenizer(
+            pos_words = self.nlp(example)
+            tokenized: BatchEncoding = self.tokenizer(
                 example,
                 max_length=self.max_length,
                 truncation=True,
                 return_offsets_mapping=True,
                 add_special_tokens=True
             )
-            examples.append(tokenized)
-        self._save_json(examples)
-        return examples
+            pos_labels = self._align_labels(example, pos_words, tokenized)
+            labeled_examples.append({
+                'tokenized': tokenized,
+                'label_ids': pos_labels
+            })
+        self._save_json(labeled_examples)
+        return labeled_examples
+
+    def _align_labels(self, example, pos_words, tokenized: BatchEncoding) -> List[str]:
+        # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
+        pos_char = [''] * len(example)  # pos for part-of-speech
+        # make a character-level pos from pos_word
+        for w in pos_words:
+            start = w.idx
+            end = start + len(w)
+            pos_char[start:end] = [w.pos_] * len(w)
+        # convert the character-level POS tags into token-level POS labels
+        pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
+        for idx, (start, end) in enumerate(tokenized.offset_mapping):
+            if not(start == end == 0):  # not a special token
+                pos = pos_char[start]
+                pos_token[idx] = pos
+        return pos_token
 
     def _save_json(self, examples: Dict):
         if not self.dest_dir_path.exists():
@@ -75,10 +97,11 @@ class Preparator:
         # saving line by line to json-line file
         filepath = self.dest_dir_path / "data.jsonl"
         with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            shuffle(examples)
             for example in examples:
                 j = {
-                    'tokens': example.tokens(),
-                    'input_ids': example.input_ids,
+                    'input_ids': example['tokenized'].input_ids,
+                    'label_ids': example['label_ids']
                 }
                 f.write(f"{json.dumps(j)}\n")
 
@@ -88,14 +111,14 @@ class Preparator:
             with p.open() as f:
                 for n, line in enumerate(f):
                     j = json.loads(line)
-                    assert len(j['tokens']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length + 2}."
-                    assert len(j['tokens']) == len(j['input_ids']), f"mismatch in number of tokens and input_ids: error line {n} in {p}"
+                    assert len(j['input_ids']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
+                    assert len(j['label_ids']) == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 
 
 def self_test():
-    example = "Here it is: nested in Creb-1 with some tail. End."
+    example = "Here it is: nested in Creb-1 with some tail. The end."
     example += ' 1 2 3 4 5 6 7 8 9 0'  # to test truncation
     path = Path('/tmp/test_dataprep')
     path.mkdir()
@@ -106,21 +129,23 @@ def self_test():
     source_file_path.write_text(example)
     max_length = 20  # in token!
     expected_tokens = [
-        '<s>',
-        'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin',
-        'ĠCre', 'b', '-', '1',
-        'Ġwith', 'Ġsome',
-        'Ġtail',
-        '.', 'ĠEnd', '.',
-        'Ġ1', 'Ġ2',
-        '</s>'
+        '<s>', 'Here', 'Ġit', 'Ġis', ':', 'Ġnested', 'Ġin', 'ĠCre', 'b', '-', '1', 'Ġwith', 'Ġsome', 'Ġtail', '.', 'ĠThe', 'Ġend', '.', 'Ġ1', '</s>'
+    ]
+    expected_labels = [
+        'X', 'ADV', 'PRON', 'AUX', 'PUNCT', 'VERB', 'ADP', 'PROPN', 'PROPN', 'PROPN', 'PROPN', 'ADP', 'DET', 'NOUN', 'PUNCT', 'DET', 'NOUN', 'PUNCT', 'NUM', 'X'
     ]
     try:
         data_prep = Preparator(source_path, dest_dir_path, tokenizer, max_length=max_length)
         examples = data_prep.run()
+        tokens = examples[0]['tokenized'].tokens()
+        input_ids = examples[0]['tokenized'].input_ids
+        pos_labels = examples[0]['label_ids']
+        print(pos_labels)
         print('\nTokens')
-        print(examples[0].tokens())
-        assert examples[0].tokens() == expected_tokens
+        for i in range(len(tokens)):
+            print(f"{tokens[i]}\t{tokenizer.decode(input_ids[i])}\t{pos_labels[i]}")
+        assert tokens == expected_tokens
+        assert pos_labels == expected_labels
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
         for filepath in filepaths:
@@ -128,7 +153,7 @@ def self_test():
             with filepath.open() as f:
                 for line in f:
                     j = json.loads(line)
-                    print(json.dumps(j, indent=2))
+                    print(json.dumps(j))
     finally:
         shutil.rmtree('/tmp/test_dataprep/')
         print("cleaned up and removed /tmp/test_corpus")
@@ -136,8 +161,8 @@ def self_test():
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Prepares the conversion of xml documents into datasets ready for NER learning tasks.")
-    parser.add_argument("source_dir", nargs="?", help="Directory where the xml files are located.")
+    parser = ArgumentParser(description="Tokenize text and prepares the datasets ready for NER learning tasks.")
+    parser.add_argument("source_dir", nargs="?", help="Directory where the source files are located.")
     parser.add_argument("dest_dir", nargs="?", default=NER_DATASET, help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
