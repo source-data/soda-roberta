@@ -66,6 +66,7 @@ class Preparator:
                     max_length=self.max_length,
                     truncation=True,
                     return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
                     add_special_tokens=True
                 )
                 pos_labels = self._align_labels(example, pos_words, tokenized)
@@ -87,7 +88,7 @@ class Preparator:
         # convert the character-level POS tags into token-level POS labels
         pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
         for idx, (start, end) in enumerate(tokenized.offset_mapping):
-            if not(start == end == 0):  # not a special token
+            if not(start == end):  # not a special or empty token
                 try:
                     pos = pos_char[start]
                 except Exception:
@@ -105,7 +106,8 @@ class Preparator:
             for example in examples:
                 j = {
                     'input_ids': example['tokenized'].input_ids,
-                    'label_ids': example['label_ids']
+                    'label_ids': example['label_ids'],
+                    'special_tokens_mask': example['tokenized'].special_tokens_mask
                 }
                 f.write(f"{json.dumps(j)}\n")
 
@@ -117,6 +119,7 @@ class Preparator:
                     j = json.loads(line)
                     assert len(j['input_ids']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
                     assert len(j['label_ids']) == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
+                    assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 

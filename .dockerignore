@@ -3,6 +3,7 @@ cache/*
 emboj_all/*
 lm_model/*
 ner_model/*
+tokcl_models/*
 tokenizer/*
 dataset*/*
 ner_dataset/*
