@@ -6,3 +6,4 @@ nltk
 tensorboard
 sklearn
 seqeval
+spacy
