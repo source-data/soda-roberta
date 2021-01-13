@@ -61,7 +61,9 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
-        datasets.BuilderConfig(name="MASKED_DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+        datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+        datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -77,7 +79,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32"))
                 }
             )
-        elif self.config.name in ["MASKED_DET"]:
+        elif self.config.name in ["DET", "VERB"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "pos_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -129,10 +131,20 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     yield id_, {
                         "input_ids": data["input_ids"],
                     }
-                elif self.config.name == "MASKED_DET":
+                elif self.config.name == "DET":
                     pos_mask = [0] * len(data['input_ids'])
                     for idx, label in enumerate(data['label_ids']):
                         if label == 'DET':
+                            pos_mask[idx] = 1
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "pos_mask": pos_mask,
+                        "special_tokens_mask": data['special_tokens_mask']
+                    }
+                elif self.config.name == "VERB":
+                    pos_mask = [0] * len(data['input_ids'])
+                    for idx, label in enumerate(data['label_ids']):
+                        if label == 'VERB':
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],
@@ -167,7 +179,7 @@ def self_test():
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
         train_dataset, eval_dataset, test_dataset = load_dataset(
             './lm/loader.py',
-            'MASKED_DET',
+            'DET',
             data_dir=data_dir,
             split=["train", "validation", "test"],
             download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,

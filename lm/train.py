@@ -18,6 +18,7 @@ from transformers import (
 from datasets import load_dataset, GenerateMode
 from .trainer import MyTrainer
 from .data_collator import DataCollatorForPOSMaskedLanguageModeling
+from .show import ShowExample
 from .metrics import compute_metrics
 
 from common.config import config
@@ -41,7 +42,7 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
         cache_dir=HUGGINGFACE_CACHE,
         tokenizer=tokenizer
     )
-    if data_config_name == "MASKED_DET":
+    if data_config_name in ["DET", "VERB"]:
         data_collator = DataCollatorForPOSMaskedLanguageModeling(
             tokenizer=tokenizer,
             mlm_probability=mlm_probability,
@@ -78,7 +79,8 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics
+        compute_metrics=compute_metrics,
+        callbacks=[ShowExample(tokenizer)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")
@@ -92,7 +94,7 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
 if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArguments), description="Traing script.")
-    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "MASKED_DET"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     parser.add_argument("--mlm_probability", default=1.0, type=float, help="Probability of masking.")
     training_args, args = parser.parse_args_into_dataclasses()
