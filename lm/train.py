@@ -24,7 +24,7 @@ from common.config import config
 from common import TOKENIZER_PATH, LM_DATASET, HUGGINGFACE_CACHE
 
 
-def train(no_cache, data_config_name, training_args, mlm_probability):
+def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments, mlm_probability: float):
     print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     tokenizer = RobertaTokenizerFast.from_pretrained(
         TOKENIZER_PATH,
@@ -67,8 +67,8 @@ def train(no_cache, data_config_name, training_args, mlm_probability):
     )
 
     model = RobertaForMaskedLM(config=model_config)
-    # training_args.label_names = ["pos_mask", "special_tokens_mask"]
     training_args.remove_unused_columns = False
+    training_args.prediction_loss_only = False
     print("\nTraining arguments:")
     print(training_args)
 
