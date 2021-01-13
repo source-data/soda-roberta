@@ -13,7 +13,7 @@ import torch
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     TrainingArguments, HfArgumentParser,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling, EvaluationStrategy
 )
 from datasets import load_dataset, GenerateMode
 from .trainer import MyTrainer
@@ -68,10 +68,9 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
     model = RobertaForMaskedLM(config=model_config)
     training_args.remove_unused_columns = False
-    training_args.evaluation_strategy = 'steps'
+    training_args.evaluation_strategy = EvaluationStrategy.STEPS
     training_args.prediction_loss_only = False
     training_args.overwrite_output_dir = True
-
     print("\nTraining arguments:")
     print(training_args)
 
