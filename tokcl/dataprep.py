@@ -191,6 +191,7 @@ class Preparator:
         # saving line by line to json-line file
         filepath = self.dest_dir_path / "data.jsonl"
         with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            shuffle(examples)
             for example in examples:
                 j = {
                     'tokens': example['tokenized'].tokens(),

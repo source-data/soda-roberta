@@ -1,6 +1,5 @@
 FROM nvcr.io/nvidia/pytorch:20.12-py3
 
-
 RUN apt-get update
 RUN pip install --upgrade pip setuptools
 RUN pip install python-dotenv
@@ -13,6 +12,6 @@ RUN pip install datasets
 RUN pip uninstall -y nvidia-tensorboard
 RUN pip install tensorflow
 RUN pip install seqeval
-# RUN pip install nvidia-pyindex
-# RUN pip install nvidia-tensorflow
-# RUN python -c "import nltk; nltk.download('averaged_perceptron_tagger')" \
+RUN pip install spacy
+# download language models for spacy
+RUN python -m spacy download en_core_web_sm

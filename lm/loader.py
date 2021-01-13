@@ -23,7 +23,8 @@ from __future__ import absolute_import, division, print_function
 import json
 from pathlib import Path
 import datasets
-from common import LM_DATASET, HUGGINGFACE_CACHE
+from transformers import RobertaTokenizerFast, BatchEncoding
+from common import LM_DATASET, HUGGINGFACE_CACHE, TOKENIZER_PATH
 import shutil
 
 _CITATION = """\
@@ -59,23 +60,34 @@ class BioLang(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.1")
 
     BUILDER_CONFIGS = [
-        datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for masked language model."),
+        datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
+        datasets.BuilderConfig(name="MASKED_DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
+    def __init__(self, *args, tokenizer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenizer = tokenizer
+
     def _info(self):
-        if self.config.name == "MLM":  # This is the name of the configuration selected in BUILDER_CONFIGS above 
+        if self.config.name == "MLM":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32"))
                 }
             )
+        elif self.config.name in ["MASKED_DET"]:
+            features = datasets.Features({
+                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                "pos_mask": datasets.Sequence(feature=datasets.Value("int8")),
+                "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
+            })
 
         return datasets.DatasetInfo(
             description=_DESCRIPTION,
             features=features,  # Here we define them above because they are different between the two configurations
-            supervised_keys=("input_ids", "labels"),
+            supervised_keys=('input_ids', 'pos_mask'),
             homepage=_HOMEPAGE,
             license=_LICENSE,
             citation=_CITATION,
@@ -117,6 +129,16 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     yield id_, {
                         "input_ids": data["input_ids"],
                     }
+                elif self.config.name == "MASKED_DET":
+                    pos_mask = [0] * len(data['input_ids'])
+                    for idx, label in enumerate(data['label_ids']):
+                        if label == 'DET':
+                            pos_mask[idx] = 1
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "pos_mask": pos_mask,
+                        "special_tokens_mask": data['special_tokens_mask']
+                    }
 
 
 def self_test():
@@ -134,17 +156,23 @@ def self_test():
         p_test = p / "test"
         p_test.mkdir()
         p_test = p_test / "data.jsonl"
-        d = {"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0]}
+        d = {
+            "input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0],
+            "label_ids": ["X", "DET", "X", "X", "X", "X", "X", "X", "X", "X"],
+            "special_tokens_mask": [1, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        }
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
+        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
         train_dataset, eval_dataset, test_dataset = load_dataset(
             './lm/loader.py',
-            'MLM',
+            'MASKED_DET',
             data_dir=data_dir,
             split=["train", "validation", "test"],
             download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-            cache_dir=HUGGINGFACE_CACHE
+            cache_dir=HUGGINGFACE_CACHE,
+            tokenizer=tokenizer,
         )
         print(len(train_dataset))
         print(len(eval_dataset))
