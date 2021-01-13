@@ -60,7 +60,7 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
     model_config = RobertaConfig(
         vocab_size=config.vocab_size,
-        max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token?
+        max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
         num_attention_heads=12,
         num_hidden_layers=6,
         type_vocab_size=1,
@@ -68,7 +68,10 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
     model = RobertaForMaskedLM(config=model_config)
     training_args.remove_unused_columns = False
+    training_args.evaluation_strategy = 'steps'
     training_args.prediction_loss_only = False
+    training_args.overwrite_output_dir = True
+
     print("\nTraining arguments:")
     print(training_args)
 
