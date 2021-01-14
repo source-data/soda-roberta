@@ -55,15 +55,22 @@ class ShowExample(TrainerCallback):
             pred = model(**inputs)
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
         pred_idx = [e.item() for e in pred_idx]
+        input_ids = [e.item() for e in input_ids]
+        labels = [e.item() for e in labels]
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
             pred = pred_idx[i]
-            masked = labels[i] != -100
-            decoded = self.tokenizer.decode(pred) if masked else self.tokenizer.decode(input_id)
+            label = labels[i]
+            masked = label != -100
+            decoded_pred = self.tokenizer.decode(pred)
+            decoded_input = self.tokenizer.decode(input_id)
             if masked:
-                color = "blue" if (pred == input_id) else "red"
-                colored += f"{self.COLOR_CHAR[color]}{decoded}{self.COLOR_CHAR['close']}"
+                decoded_label = self.tokenizer.decode(label)
+                correct = (pred == label)
+                color = "blue" if correct else "red"
+                insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label}]"
+                colored += f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
             elif attention_mask[i] == 1:
-                colored += decoded
+                colored += decoded_input
         print(f"\n\n{colored}\n\n")
