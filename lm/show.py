@@ -27,14 +27,16 @@ import torch
 
 class ShowExample(TrainerCallback):
 
-    def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tokenizer = tokenizer
-        self.color_char = {
+    COLOR_CHAR = {
             "green": '\033[32;1m',
             "red": '\033[31;1m',
             "close": '\033[0m'
         }
+
+    def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenizer = tokenizer
+        
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
@@ -62,7 +64,7 @@ class ShowExample(TrainerCallback):
             decoded = self.tokenizer.decode(pred) if masked else self.tokenizer.decode(input_id)
             if masked:
                 color = "green" if pred == input_id else "red"
-                colored += f"{self.color_char[color]}{decoded}{self.color_char['close']}"
+                colored += f"{self.COLOR_CHAR[color]}{decoded}{self.COLOR_CHAR['close']}"
             elif attention_mask[i] == 1:
                 colored += decoded
         print(f"\n\n{colored}\n\n")
