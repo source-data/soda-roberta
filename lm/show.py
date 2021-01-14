@@ -28,7 +28,7 @@ import torch
 class ShowExample(TrainerCallback):
 
     COLOR_CHAR = {
-            "green": '\033[32;1m',
+            "blue": '\033[32;1m',
             "red": '\033[31;1m',
             "close": '\033[0m'
         }
@@ -63,7 +63,7 @@ class ShowExample(TrainerCallback):
             masked = labels[i] != -100
             decoded = self.tokenizer.decode(pred) if masked else self.tokenizer.decode(input_id)
             if masked:
-                color = "green" if pred == input_id else "red"
+                color = "blue" if pred == input_id else "red"
                 colored += f"{self.COLOR_CHAR[color]}{decoded}{self.COLOR_CHAR['close']}"
             elif attention_mask[i] == 1:
                 colored += decoded
