@@ -14,7 +14,7 @@ from .xmlcode import (
     CodeMap, SourceDataCodes as sd
 )
 from common.utils import innertext, progress
-from common import TOKENIZER_PATH, NER_DATASET
+from common import TOKENIZER_PATH, TOKCL_DATASET
 from common.config import config
 
 
@@ -317,7 +317,7 @@ def self_test():
 if __name__ == "__main__":
     parser = ArgumentParser(description="Prepares the conversion of xml documents into datasets ready for NER learning tasks.")
     parser.add_argument("source_dir", nargs="?", help="Directory where the xml files are located.")
-    parser.add_argument("dest_dir", nargs="?", default=NER_DATASET, help="The destination directory where the labeled dataset will be saved.")
+    parser.add_argument("dest_dir", nargs="?", default=TOKCL_DATASET, help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if source_dir_path:

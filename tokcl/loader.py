@@ -21,7 +21,7 @@ from pathlib import Path
 from .xmlcode import SourceDataCodes as sd
 import datasets
 from transformers import RobertaTokenizerFast
-from common import HUGGINGFACE_CACHE
+from common import CACHE
 from common.config import config
 import shutil
 
@@ -292,7 +292,7 @@ def self_test():
                 data_dir=data_dir,
                 split=["train", "validation", "test"],
                 download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-                cache_dir=HUGGINGFACE_CACHE,
+                cache_dir=CACHE,
                 tokenizer=tokenizer
             )
             print(len(train_dataset))

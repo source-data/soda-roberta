@@ -14,7 +14,7 @@ from datasets import load_dataset, GenerateMode
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
-from common import TOKENIZER_PATH, NER_DATASET, NER_MODEL_PATH, HUGGINGFACE_CACHE
+from common import TOKENIZER_PATH, TOKCL_DATASET, TOKCL_MODEL_PATH, CACHE
 
 
 def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments):
@@ -23,14 +23,14 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
     tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
-    print(f"\nLoading and tokenizing datasets found in {NER_DATASET}.")
+    print(f"\nLoading and tokenizing datasets found in {TOKCL_DATASET}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         './tokcl/loader.py',
         data_config_name,
-        data_dir=NER_DATASET,
+        data_dir=TOKCL_DATASET,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
-        cache_dir=HUGGINGFACE_CACHE,
+        cache_dir=CACHE,
         tokenizer=tokenizer
     )
     print(f"\nTraining with {len(train_dataset)} examples.")
