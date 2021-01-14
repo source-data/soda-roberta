@@ -49,7 +49,7 @@ class ShowExample(TrainerCallback):
                 'attention_mask': attention_mask
             }
             for k, v in inputs.items():
-                inputs[k] = torch.tensor(v).unsqueeze(0)  # single example UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+                inputs[k] = v.clone().unsqueeze(0)  # single example 
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
             pred = model(**inputs)
