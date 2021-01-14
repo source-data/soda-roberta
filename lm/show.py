@@ -37,30 +37,32 @@ class ShowExample(TrainerCallback):
         }
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
-        N = len(eval_dataloader.dataset)
-        idx = randrange(N)
         with torch.no_grad():
-            inputs = eval_dataloader.dataset[idx]
-            input_ids = inputs['input_ids']
-            pos_mask = inputs.pop('pos_mask')
-            special_tokens_mask = inputs.pop('special_tokens_mask')
+            rand_example = randrange(eval_dataloader.batch_size)
+            batch = next(iter(eval_dataloader))
+            input_ids = batch['input_ids'][rand_example]
+            attention_mask = batch['attention_mask'][rand_example]
+            labels = batch['labels'][rand_example]
+            inputs = {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask
+            }
             for k, v in inputs.items():
-                inputs[k] = torch.tensor(v).unsqueeze(0)
+                inputs[k] = torch.tensor(v).unsqueeze(0)  # single example
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
             pred = model(**inputs)
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
-            input_ids = inputs['input_ids'][0].cpu()
         pred_idx = [e.item() for e in pred_idx]
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
-            mask = pos_mask[i]
             pred = pred_idx[i]
-            decoded = self.tokenizer.decode(pred) if mask else self.tokenizer.decode(input_id)
-            if mask:
+            masked = labels[i] != -100
+            decoded = self.tokenizer.decode(pred) if masked else self.tokenizer.decode(input_id)
+            if masked:
                 color = "green" if pred == input_id else "red"
                 colored += f"{self.color_char[color]}{decoded}{self.color_char['close']}"
-            else:
+            elif attention_mask[i] == 1:
                 colored += decoded
         print(f"\n\n{colored}\n\n")

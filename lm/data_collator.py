@@ -88,33 +88,22 @@ class DataCollatorForPOSMaskedLanguageModeling:
             batch["pos_mask"] = [
                 [0] * (sequence_length - len(x)) + x for x in batch["pos_mask"]
             ]
-            batch["pos_special_tokens_masks"] = [
+            batch["special_tokens_masks"] = [
                 [0] * (sequence_length - len(x)) + x for x in batch["special_tokens_mask"]
             ]
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
-        batch["input_ids"], batch["labels"] = self.pos_mask_tokens(
-            batch["input_ids"], batch["pos_mask"], batch["special_tokens_mask"]
-        )
+        batch["input_ids"], batch["labels"] = self.pos_mask_tokens(batch["input_ids"], batch["pos_mask"])
         batch.pop("pos_mask")
         batch.pop("special_tokens_mask")
         return batch
 
-    def pos_mask_tokens(
-        self, inputs: torch.Tensor, mask: torch.Tensor, special_tokens_mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def pos_mask_tokens(self, inputs: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Masks the input as specified by the mask prepared by the loader"""
-        labels = inputs.clone()
-        if special_tokens_mask is None:
-            special_tokens_mask = [
-                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
-            ]
-            special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
-        else:
-            special_tokens_mask = special_tokens_mask.bool()
-        probability_matrix = torch.zeros_like(labels, dtype=torch.float64)
+        targets = inputs.clone()
+        probability_matrix = torch.zeros_like(targets, dtype=torch.float64)
         probability_matrix.masked_fill_(mask, value=self.mlm_probability)
         masked_indices = torch.bernoulli(probability_matrix).bool()
-        labels[~masked_indices] = -100  # We only compute loss on masked tokens
         inputs[masked_indices] = self.tokenizer.mask_token_id
-        return inputs, labels
+        targets[~masked_indices] = -100  # We only compute loss on masked tokens
+        return inputs, targets
 
