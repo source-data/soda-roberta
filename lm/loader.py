@@ -62,8 +62,8 @@ class BioLang(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
-        datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
-        datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+        datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
+        datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (small words) masked language model."),
 
     ]
 
