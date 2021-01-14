@@ -62,7 +62,8 @@ class BioLang(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
-        datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+        datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
+        datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
 
     ]
 
@@ -79,7 +80,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32"))
                 }
             )
-        elif self.config.name in ["DET", "VERB"]:
+        elif self.config.name in ["DET", "VERB", "SMALL"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "pos_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -145,6 +146,16 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     pos_mask = [0] * len(data['input_ids'])
                     for idx, label in enumerate(data['label_ids']):
                         if label == 'VERB':
+                            pos_mask[idx] = 1
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "pos_mask": pos_mask,
+                        "special_tokens_mask": data['special_tokens_mask']
+                    }
+                elif self.config.name == "SMALL":
+                    pos_mask = [0] * len(data['input_ids'])
+                    for idx, label in enumerate(data['label_ids']):
+                        if label in ['DET', 'CCONJ', 'SCONJ', 'ADP', 'PRON']:
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],
