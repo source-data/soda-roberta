@@ -36,7 +36,6 @@ class ShowExample(TrainerCallback):
     def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tokenizer = tokenizer
-        
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
@@ -50,7 +49,7 @@ class ShowExample(TrainerCallback):
                 'attention_mask': attention_mask
             }
             for k, v in inputs.items():
-                inputs[k] = torch.tensor(v).unsqueeze(0)  # single example
+                inputs[k] = torch.tensor(v).unsqueeze(0)  # single example UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
             pred = model(**inputs)
@@ -63,7 +62,7 @@ class ShowExample(TrainerCallback):
             masked = labels[i] != -100
             decoded = self.tokenizer.decode(pred) if masked else self.tokenizer.decode(input_id)
             if masked:
-                color = "blue" if pred == input_id else "red"
+                color = "blue" if (pred == input_id) else "red"
                 colored += f"{self.COLOR_CHAR[color]}{decoded}{self.COLOR_CHAR['close']}"
             elif attention_mask[i] == 1:
                 colored += decoded
