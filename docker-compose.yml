@@ -1,8 +1,7 @@
-# nvidia-docker run --shm-size 8G --rm -it -v /raid/lemberge/vsearch:/workspace/vsearch -p12345:6005 -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -e XAUTHORITY -e NVIDIA_DRIVER_CAPABILITIES=all tl/vsearch:last
 version: '2.3'
 
 services:
-  lm:
+  nlp:
     build:
       context: .
       dockerfile: './Dockerfile'
@@ -23,7 +22,7 @@ services:
       context: .
       dockerfile: './Dockerfile'
     depends_on:
-    - lm
+    - nlp
     runtime: nvidia
     ports:
     - 6007:6007

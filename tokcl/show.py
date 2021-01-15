@@ -26,11 +26,18 @@ import torch
 
 
 class ShowExample(TrainerCallback):
+    """Visualizes on the console the result of a prediction with the current state of the model.
+    It uses a randomly picked input example and decodes the input with the provided tokenizer.
+    Words are colored depending on the predicted class. Note that B- and I- IOB labels will have different colors.
 
-    def __init__(self, tokenizer: RobertaTokenizerFast, label_list: List[str], *args, **kwargs):
+    Args:
+
+        tokenizer (RobertaTokenizer): the tokenizer used to generate the dataset.
+    """
+
+    def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tokenizer = tokenizer
-        self.label_list = label_list
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         N = len(eval_dataloader.dataset)
@@ -41,7 +48,6 @@ class ShowExample(TrainerCallback):
                 inputs[k] = torch.tensor(v).unsqueeze(0)
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
-            # inputs['attention_mask'] = torch.ones_like(inputs['input_ids'])
             pred = model(**inputs)
             labels_idx = pred['logits'].argmax(-1)[0].cpu()
             input_ids = inputs['input_ids'][0].cpu()

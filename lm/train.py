@@ -1,6 +1,8 @@
 # https://github.com/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb
 # Just for reference... 
 # Roberta:
+# We consider five English-language corpora of varying sizes and domains, 
+# totaling over 160GB of uncompressed text.
 # The model was trained on 1024 V100 GPUs for 500K steps with a batch size of 8K 
 # and a sequence length of 512. 
 # The optimizer used is Adam with a learning rate of 6e-4, 
@@ -9,7 +11,9 @@
 # and linear decay of the learning rate after.
 
 from typing import NamedTuple
+from pathlib import Path
 import torch
+from dataclasses import dataclass, field
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     TrainingArguments, HfArgumentParser,
@@ -22,38 +26,35 @@ from .show import ShowExample
 from .metrics import compute_metrics
 
 from common.config import config
-from common import TOKENIZER_PATH, LM_DATASET, HUGGINGFACE_CACHE
+from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, CACHE
 
 
-def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments, mlm_probability: float):
+def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments):
     print(f"Loading tokenizer from {TOKENIZER_PATH}.")
     tokenizer = RobertaTokenizerFast.from_pretrained(
         TOKENIZER_PATH,
         # max_len=config.max_length
     )
 
-    print(f"\nLoading and tokenizing datasets found in {LM_DATASET}.")
+    print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         './lm/loader.py',
         data_config_name,
-        data_dir=LM_DATASET,
+        data_dir=dataset_path,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
-        cache_dir=HUGGINGFACE_CACHE,
+        cache_dir=CACHE,
         tokenizer=tokenizer
     )
     if data_config_name != "MLM":
         data_collator = DataCollatorForPOSMaskedLanguageModeling(
             tokenizer=tokenizer,
-            mlm_probability=mlm_probability,
-            padding=True,
             max_length=config.max_length
         )
     else:
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=tokenizer,
-            mlm=True,
-            mlm_probability=mlm_probability,
+            mlm=True
         )
 
     print(f"\nTraining with {len(train_dataset)} examples.")
@@ -93,12 +94,22 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((TrainingArguments), description="Traing script.")
+
+    @dataclass
+    class MyTrainingArguments(TrainingArguments):
+        output_dir: str = field(default=LM_MODEL_PATH)
+        overwrite_output_dir: bool = field(default=True)
+        logging_steps: int = field(default=50)
+
+    parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
+    parser.add_argument("dataset_path", nargs="?", default=LM_DATASET, help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
-    parser.add_argument("--mlm_probability", default=1.0, type=float, help="Probability of masking.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
+    dataset_path = args.dataset_path
     data_config_name = args.data_config_name
-    mlm_probability = args.mlm_probability
-    train(no_cache, data_config_name, training_args, mlm_probability)
+    if Path(training_args.output_dir).exists():
+        train(no_cache, dataset_path, data_config_name, training_args)
+    else:
+        print(f"{training_args.output_dir} does not exist! Cannot proceed.")

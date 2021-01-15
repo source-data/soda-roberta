@@ -170,12 +170,15 @@ if __name__ == "__main__":
     if source_dir_path:
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)
-        source_dir_path = Path(source_dir_path)
-        for subset in ["train", "eval", "test"]:
-            print(f"Preparing: {subset}")
-            sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer)
-            sdprep.run()
-            sdprep.verify()
-        print("\nDone!")
+        if dest_dir_path.exists():
+            source_dir_path = Path(source_dir_path)
+            for subset in ["train", "eval", "test"]:
+                print(f"Preparing: {subset}")
+                sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer)
+                sdprep.run()
+                sdprep.verify()
+            print("\nDone!")
+        else:
+            print(f"{dest_dir_path} does not exist. Cannot proceed.")
     else:
         self_test()

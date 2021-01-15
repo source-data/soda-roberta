@@ -29,25 +29,24 @@ of Tensors.
 @dataclass
 class DataCollatorForPOSMaskedLanguageModeling:
     """
-    Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
-    are not all of the same length.
+    Data collator used for masked part-of-speeach (POS) language modeling. 
+    Instead of masking any random token as in MLM, only token that belong to a defined POS class are masked.
+    Inputs, labels and masks are dynamically padded to the maximum length of a batch if they are not all of the same length.
 
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
-            The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+        mlm_probability (:obj:`float`, `optional`, defaults to 1.0):
+            The probability with which a  mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
 
     .. note::
 
-        For best performance, this data collator should be used with a dataset having items that are dictionaries or
-        BatchEncoding, with the :obj:`"special_tokens_mask"` key, as returned by a
-        :class:`~transformers.PreTrainedTokenizer` or a :class:`~transformers.PreTrainedTokenizerFast` with the
-        argument :obj:`return_special_tokens_mask=True`.
+        This data collator expects a dataset having items that are dictionaries 
+        with the "special_tokens_mask" and "pos_mask" keys.
     """
 
     tokenizer: PreTrainedTokenizerBase
-    mlm_probability: float = 0.15
+    mlm_probability: float = 1.0
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None

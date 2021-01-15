@@ -25,10 +25,10 @@ class ExtractorXML:
         print(f"found {len(self.filepaths)} files.")
 
     def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
-        """Runs the extractor and saves examples in the destination directory.
-        A XPath specifies which element to extract from each xml file.
+        """Extracts the examples from XML files and saves them in the destination directory.
+        The XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
-        It is also possible to prevent this and keep the xml markup, which is useful to train for token classification tasks.
+        It is also possible to prevent this and keep the xml markup, which is useful to train token classification tasks.
         If sentence tokenization is True, the text is first split into sentences which are individually saved.
 
         Args:
@@ -178,11 +178,23 @@ def main():
     if not args.corpus:
         self_test()
     else:
-        source_path = Path(args.corpus)
-        destination_path = Path(args.destination)
-        N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
-        print(f"Saved {N} examples.")
-
+        corpus_path = Path(args.corpus)
+        destination = Path(args.destination)
+        subsets = ["train", "eval", "test"]
+        source_paths = [corpus_path / subset for subset in subsets]
+        destination_paths = [destination / subset for subset in subsets]
+        if any([True if p.exists() else False for p in destination_paths]):
+            print(f"{destination} is not empty and has already {' or '.join(subsets)} sub-directories. Cannot proceed.")
+        else:
+            if all([True if p.exists() else False for p in source_paths]):
+                if not destination.exists():
+                    destination.mkdir()
+                    print(f"{destination} created!")
+                for source_path, destination_path in zip(source_paths, destination_paths):
+                    N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
+                    print(f"Saved {N} examples.")
+            else:
+                print(f"{corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
 
 if __name__ == '__main__':
     main()

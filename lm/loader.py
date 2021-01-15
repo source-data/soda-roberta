@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 import datasets
 from transformers import RobertaTokenizerFast, BatchEncoding
-from common import LM_DATASET, HUGGINGFACE_CACHE, TOKENIZER_PATH
+from common import LM_DATASET, CACHE, TOKENIZER_PATH
 import shutil
 
 _CITATION = """\
@@ -55,7 +55,7 @@ _URLs = {
 
 # TODO: Name of the dataset usually match the script name with CamelCase instead of snake_case
 class BioLang(datasets.GeneratorBasedBuilder):
-    """BioLang: a dataset to train language models biology."""
+    """BioLang: a dataset to train language models in biology."""
 
     VERSION = datasets.Version("0.0.1")
 
@@ -63,8 +63,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
         datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
-        datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (small words) masked language model."),
-
+        datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (determinants, conjunctions, prepositions, pronouns) masked language model."),
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -194,7 +193,7 @@ def self_test():
             data_dir=data_dir,
             split=["train", "validation", "test"],
             download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-            cache_dir=HUGGINGFACE_CACHE,
+            cache_dir=CACHE,
             tokenizer=tokenizer,
         )
         print(len(train_dataset))

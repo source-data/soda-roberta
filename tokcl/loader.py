@@ -83,8 +83,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
         datasets.BuilderConfig(name="GENEPROD", version="0.0.1", description="Dataset for tagging geneproducts."),
         datasets.BuilderConfig(name="ROLES", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(name="BORING", version="0.0.1", description="Dataset for semantic roles."),
-        datasets.BuilderConfig(name="PANELIZATION", version="0.0.1", description="Dataset for semantic roles."),
-        # datasets.BuilderConfig(name="panelization", version=0.1, description="Dataset for figure legend segmentation into panel-specific legends."),
+        datasets.BuilderConfig(name="PANELIZATION", version="0.0.1", description="ataset for figure legend segmentation into panel-specific legends."),
     ]
 
     DEFAULT_CONFIG_NAME = "NER"  # It's not mandatory to have a default configuration. Just use one if it make sense.
