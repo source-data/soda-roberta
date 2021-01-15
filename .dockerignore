@@ -1,13 +1,9 @@
-runs/**/*
-cache/**/*
-emboj_all/**/*
-lm_model/*
-ner_model/*
-tokcl_models/**/*
-tokenizer/*
-dataset*/*
-ner_dataset/*
-191012/**/*
-*.zip
-.venv/**/*
+./data
+./runs
+./cache
+./lm_dataset
+./lm_models
+./tokcl_dataset
+./tokcl_models
+.git
 
