@@ -26,6 +26,15 @@ import torch
 
 
 class ShowExample(TrainerCallback):
+    """Visualizes on the console the result of a prediction with the current state of the model.
+    It uses a randomly picked input example and decodes input and output with the provided tokenizer.
+    The predicted words are colored depending on whether the prediction is correct or not. 
+    If the prediction is incorrect, the expected word is displayed in square brackets.
+
+    Args:
+
+        tokenizer (RobertaTokenizer): the tokenizer used to generate the dataset.
+    """
 
     COLOR_CHAR = {
             "blue": '\033[32;1m',
@@ -38,9 +47,16 @@ class ShowExample(TrainerCallback):
         self.tokenizer = tokenizer
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
+        """Method called when evaluating the model. Only the neede args are unpacked.
+
+        Args:
+
+            model: the current model being trained.
+            eval_dataloader (torch.utils.data.DataLoader): the DataLoader used to produce the evaluation examples
+        """
         with torch.no_grad():
-            rand_example = randrange(eval_dataloader.batch_size)
             batch = next(iter(eval_dataloader))
+            rand_example = randrange(batch['input_ids'].size(0))
             input_ids = batch['input_ids'][rand_example]
             attention_mask = batch['attention_mask'][rand_example]
             labels = batch['labels'][rand_example]
@@ -49,7 +65,7 @@ class ShowExample(TrainerCallback):
                 'attention_mask': attention_mask
             }
             for k, v in inputs.items():
-                inputs[k] = v.clone().unsqueeze(0)  # single example 
+                inputs[k] = v.clone().unsqueeze(0)  # single example
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
             pred = model(**inputs)
