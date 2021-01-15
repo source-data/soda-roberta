@@ -33,10 +33,11 @@ Create the appropriate layout
 
 ```
 mkdir lm_dataset #LM_DATASET
-mkdir lm_model # LM_MODEL and TOKENIZER
-mkdir ner_dataset  # NER_DATASET
-mkdir tokcl_models  # NER_MODEL_PATH
-mkdir cache  # HUGGINGFACE_CACHE
+mkdir lm_models # LM_MODEL
+mkdir tokenizer # TOKENIZER
+mkdir tokcl_dataset  # TOKCL_DATASET
+mkdir tokcl_models  # TOKCL_MODEL_PATH
+mkdir cache  # CACHE
 ```
 
 Edit .env.example accordingly and save as .env
@@ -48,13 +49,24 @@ docker-compose build
 docker-compose up -d
 ```
 
-This will start both the lm service and a tensorboard service on port 6007, which allows to visualize training on https://localhost:6007
+This will start both the `nlp` service and a `tensorboard` service on port 6007, which allows to visualize training on https://localhost:6007
 
-Start a tmux session (more convenient when training lasts a while) and run bash from the lm service:
+Optionally start a tmux session (more convenient when training lasts a while) and run bash from the `nlp` service:
 
 ```
 tmux
-docker-compose run --rm lm 
+docker-compose run --rm nlp bash 
+```
+
+In the examples below we assume xml, text and data files are organized in the following way:
+
+```
+.
+├── data                    
+    ├── zipped          # zipped corpora
+    ├── xml             # XML files used as source of examples or for token classification
+    │── text            # text files used for languag modeling
+    └── json            # pre-tokenized and labeled datasets.
 ```
 
 # Train specialized language model based on PubMed Central
@@ -64,8 +76,8 @@ docker-compose run --rm lm
 Download Open Access content from PubMed Central (takes a while!):
 
 ```
-mkdir oapmc
-cd oapmc
+mkdir data/xml/oapmc
+cd data/xml/oapmc
 ```
 
 Connect to the EMBL-EBI ftp server:
@@ -87,51 +99,47 @@ Expand the files:
 
 ```
 gunzip *.gz
-cd ..
-```
-
-The next steps need to be run form within the docker container:
-
-```
-tmux a # or tmux if ession does not exist
-docker-compose run --rm lm bash
 ```
 
 Extract articles from the JATS XML files but keep the XML so that sub-section of articles can be extracted later.
 
 ```
-python -m common.extract oapmc oapmc_articles -P .//article --keep-xml
+python -m common.extract data/xml/oapmc data/xml/oapmc_articles -P .//article --keep-xml
 ```
 
-Randomly split aticles into train, eval, test sets. It is better to do this now, so that these subsets remain as independent as possible. It is important to do so when sevral examples (i.e. figure legends) are extracted per article otherwise accuracy metrics may be over optimistic (i.e. examples extracted from the same article should NOT be distributed across train, eval and test).
+Randomly split aticles into train, eval, test sets. It is better to do this now rather than later, so that these subsets remain as independent as possible. It is important to do so when several examples (i.e. figure legends) are extracted per xml document, otherwise accuracy metrics may be over optimistic (i.e. examples extracted from the same article should NOT be distributed across train, eval and test).
 
 ```
-python -m common.split oapmc_articles
+python -m common.split data/xml/oapmc_articles
 ```
 
 Extract text from the abstracts
 
 ```
-python -m common.extracts oapmc_articles/train oapmc_abstracts/train -P .//abstract
-python -m common.extracts oapmc_articles/eval oapmc_abstracts/eval -P .//abstract
-python -m common.extracts oapmc_articles/test oapmc_abstracts/test -P .//abstract
+python -m common.extract data/oapmc_articles data/text/oapmc_abstracts/train -P .//abstract
 ```
 
 ## Train tokenizer
 
 ```
-python -m lm.tokentrain oapmc_abstracts
+python -m lm.tokentrain data/text/oapmc_abstracts
 ```
 
 ## Tokenize and prepare dataset
 
-python -m lm.dataprep oapmc_abstracts
+python -m lm.dataprep data/text/oapmc_abstracts data/json/oapmc_abstracts
 
 
 ## Train language model
 
 ```
-python -m lm.train
+python -m lm.train data/json/oapmc_abstracts  # model 
+```
+
+## Try it:
+
+```
+python -m lm.try_it "The tumore suppressor <mask> is well studied."
 ```
 
 # Fine tuning of pre-trained language model
@@ -147,31 +155,27 @@ wget <url>
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 
 ```
-python -m common.split 191012/ -X xml
+python -m common.split data/xml/191012/ -X xml
 ```
 
 Extract the examples for NER using an XPAth that identifies individual panel legends within figure legends:
 
 ```
 mkdir sourcedata
-python -m common.extract 191012/train sourcedata/train -P .//sd-panel --keep-xml
-python -m common.extract 191012/eval sourcedata/eval -P .//sd-panel --keep-xml
-python -m common.extract 191012/test sourcedata/test -P .//sd-panel --keep-xml
+python -m common.extract data/xml/191012 data/xml/sd_panels -P .//sd-panel --keep-xml
 ```
 
 Same thing but using a XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
 ```
 mkdir panelization
-python -m common.extract 191012/train panelization/train -P .//fig --keep-xml
-python -m common.extract 191012/eval panelization/eval -P .//fig --keep-xml
-python -m common.extract 191012/test panelization/test -P .//fig --keep-xml
+python -m common.extract data/xml/191012 data/xml/sd_figs -P .//fig --keep-xml
 ```
 
 Prepare the dataset for NER and ROLE labels:
 
 ```
-python -m tokcl.dataprep sourcedata
+python -m tokcl.dataprep data/xml/sd_panels data/json/sourcedata
 ```
 
 ## Train the models
@@ -179,7 +183,7 @@ python -m tokcl.dataprep sourcedata
 Train the NER task to learn entity types:
 
 ```
-python -m tokcl.train NER \
+python -m tokcl.train data/json/sourcedata NER \
 --output_dir=ner_model/NER \
 --overwrite_output_dir \
 --learning_rate=1e-5 \
@@ -197,7 +201,7 @@ python -m tokcl.train NER \
 Train the ROLES task to learn entity roles:
 
 ```
-python -m tokcl.train ROLES \
+python -m tokcl.train data/xml/sourcedata ROLES \
 --output_dir=ner_model/ROLES \
 --overwrite_output_dir \
 --learning_rate=5e-5 \
@@ -215,13 +219,13 @@ Prepare the dataset for the PANELIZATION task:
 
 ```
 rm -fr ner_dataset  # dataprep does not overwrite to avoid disasters
-python -m tokcl.dataprep panelization
+python -m tokcl.dataprep data/xml/sd_figs sd/json/panelization
 ```
 
 Train the PANELIZATION task to learn panel segmentation:
 
 ```
-python -m tokcl.train PANELIZATION \
+python -m tokcl.train data/json/panelization PANELIZATION \
 --output_dir=ner_model/PANELIZATION \
 --overwrite_output_dir \
 --learning_rate=1e-5 \
