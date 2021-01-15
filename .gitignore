@@ -1,19 +1,12 @@
-#####################################################################################
-## vsearch
-*.ipynb
-dataset/
-ner_dataset/
-ner_model/
-sourcedata/
-191012/
-191012.zip
+data/
+lm_dataset/
+lm_models/
+tokcl_dataset/
+tokcl_models/
 tokenizer/
-model/
 cache/
 runs/
 
-##
-#####################################################################################
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
