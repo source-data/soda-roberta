@@ -166,7 +166,8 @@ if __name__ == "__main__":
     parser.add_argument("dest_dir", nargs="?", default=LM_DATASET, help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
-    tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+    # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     if source_dir_path:
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)
