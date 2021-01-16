@@ -30,12 +30,12 @@ from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, CACHE
 
 
 def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments):
-    # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
-    # tokenizer = RobertaTokenizerFast.from_pretrained(
-    #     TOKENIZER_PATH,
-    #     # max_len=config.max_length
-    # )
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
+    print(f"Loading tokenizer from {TOKENIZER_PATH}.")
+    tokenizer = RobertaTokenizerFast.from_pretrained(
+        TOKENIZER_PATH,
+        # max_len=config.max_length
+    )
+    # tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
 
     print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
@@ -61,17 +61,16 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
-    # model_config = RobertaConfig(
-    #     vocab_size=config.vocab_size,
-    #     max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
-    #     num_attention_heads=1,#12,
-    #     num_hidden_layers=1,#6,
-    #     type_vocab_size=1,
-    # )
+    model_config = RobertaConfig(
+        vocab_size=config.vocab_size,
+        max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
+        num_attention_heads=12,
+        num_hidden_layers=6,
+        type_vocab_size=1,
+    )
 
-    # model = RobertaForMaskedLM(config=model_config)
-    model = RobertaForMaskedLM.from_pretrained('roberta-base')
-
+    model = RobertaForMaskedLM(config=model_config)
+    # model = RobertaForMaskedLM.from_pretrained('roberta-base')
     # model.resize_token_embeddings(len(tokenizer))
 
     training_args.remove_unused_columns = False
