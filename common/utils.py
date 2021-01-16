@@ -19,7 +19,7 @@ def now():
     now_str.replace(':', '-')
     return now_str
 
-# -*- coding: utf-8 -*-
+
 # From https://gist.github.com/vladignatyev/06860ec2040cb497f0f3
 # The MIT License (MIT)
 # Copyright (c) 2016 Vladimir Ignatev
@@ -40,12 +40,11 @@ def now():
 # FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
 # OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 # OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 def progress(count, total, status=''):
     bar_len = 60
     filled_len = int(round(bar_len * (count+1) / float(total)))
 
     percents = round(100.0 * (count + 1) / float(total))
-    bar = '█' * filled_len + '-' * (bar_len - filled_len)
+    bar = '█' * filled_len + '░' * (bar_len - filled_len)
 
     print('\r[%s] %s%s ...%s' % (bar, percents, '%', status), end="\r", flush=True)
