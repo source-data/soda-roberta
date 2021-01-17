@@ -7,9 +7,16 @@ from random import shuffle
 from argparse import ArgumentParser
 from transformers import RobertaTokenizerFast, BatchEncoding
 import spacy
-from common.utils import progress
-from common import TOKENIZER_PATH, LM_DATASET
-from common.config import config
+import celery
+from ..common.utils import progress
+from ..common import TOKENIZER_PATH, LM_DATASET
+from ..common.config import config
+from .celery import app
+# from .tasks import aligned_tokenization
+
+
+tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+nlp = spacy.load('en_core_web_sm')
 
 
 class Preparator:
@@ -24,13 +31,16 @@ class Preparator:
             The path of the destination directory where the files with the encoded labeled examples should be saved.
         tokenizer (ByteLevelBPETokenizer):
             The pre-trained tokenizer to use for processing the inner text.
+        ext (str):
+            The extension (WITHOUT THE DOT) of the files to be coded.
     """
     def __init__(
         self,
         source_dir_path: Path,
         dest_dir_path: Path,
         tokenizer: RobertaTokenizerFast,
-        max_length: int = config.max_length
+        max_length: int = config.max_length,
+        ext: str = 'txt',
     ):
         self.source_dir_path = source_dir_path
         self.dest_dir_path = dest_dir_path
@@ -38,6 +48,9 @@ class Preparator:
         self.tokenizer = tokenizer
         self.nlp = spacy.load('en_core_web_sm')
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
+        if not self.dest_dir_path.exists():
+            self.dest_dir_path.mkdir()
+        self.filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
 
     def _dest_dir_is_empty(self) -> bool:
         if self.dest_dir_path.exists():
@@ -46,70 +59,29 @@ class Preparator:
         else:
             return True
 
-    def run(self, ext: str = 'txt') -> List:
+    def run(self) -> List:
         """Runs the coding of the examples.
         Saves the resulting text files to the destination directory.
-
-        Args:
-            ext (str):
-               The extension (WITHOUT THE DOT) of the files to be coded.
         """
-        labeled_examples = []
-        filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
-        for i, filepath in enumerate(filepaths):
-            progress(i, len(filepaths), f"{filepath.name}                 ")
-            example = filepath.read_text()
-            if example:
-                pos_words = self.nlp(example)
-                tokenized: BatchEncoding = self.tokenizer(
-                    example,
-                    max_length=self.max_length,
-                    truncation=True,
-                    return_offsets_mapping=True,
-                    return_special_tokens_mask=True,
-                    add_special_tokens=True
-                )
-                pos_labels = self._align_labels(example, pos_words, tokenized)
-                labeled_examples.append({
-                    'tokenized': tokenized,
-                    'label_ids': pos_labels
-                })
-        self._save_json(labeled_examples)
-        return labeled_examples
-
-    def _align_labels(self, example, pos_words, tokenized: BatchEncoding) -> List[str]:
-        # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
-        pos_char = [''] * len(example)  # pos for part-of-speech
-        # make a character-level pos from pos_word
-        for w in pos_words:
-            start = w.idx
-            end = start + len(w)
-            pos_char[start:end] = [w.pos_] * len(w)
-        # convert the character-level POS tags into token-level POS labels
-        pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
-        for idx, (start, end) in enumerate(tokenized.offset_mapping):
-            if not(start == end):  # not a special or empty token
-                try:
-                    pos = pos_char[start]
-                except Exception:
-                    import pdb; pdb.set_trace()
-                pos_token[idx] = pos
-        return pos_token
-
-    def _save_json(self, examples: Dict):
-        if not self.dest_dir_path.exists():
-            self.dest_dir_path.mkdir()
-        # saving line by line to json-line file
-        filepath = self.dest_dir_path / "data.jsonl"
-        with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
-            shuffle(examples)
-            for example in examples:
-                j = {
-                    'input_ids': example['tokenized'].input_ids,
-                    'label_ids': example['label_ids'],
-                    'special_tokens_mask': example['tokenized'].special_tokens_mask
+        batch_size = config.celery_batch_size
+        N = len(self.filepaths)
+        for start in range(0, N, batch_size):
+            progress(start, N, start)
+            end = min((start + batch_size, N))
+            task_list = [
+                aligned_tokenization.s(str(filepath), str(self.dest_dir_path), self.max_length)
+                for filepath in self.filepaths[start:end]
+            ]
+            job = celery.group(task_list)
+            results = job.apply_async(
+                retry=True, retry_policy={
+                    'max_retries': 3,
+                    'interval_start': 0,
+                    'interval_step': 0.2,
+                    'interval_max': 0.2,
                 }
-                f.write(f"{json.dumps(j)}\n")
+            )
+            results.get()
 
     def verify(self):
         filepaths = self.dest_dir_path.glob("**/*.jsonl")
@@ -122,6 +94,57 @@ class Preparator:
                     assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
+
+
+@app.task
+def aligned_tokenization(filepath: str, dest_dir: str, max_length):
+    labeled_example = {}
+    example = Path(filepath).read_text()
+    if example:
+        pos_words = nlp(example)
+        tokenized: BatchEncoding = tokenizer(
+            example,
+            max_length=max_length,
+            truncation=True,
+            return_offsets_mapping=True,
+            return_special_tokens_mask=True,
+            add_special_tokens=True
+        )
+        pos_labels = _align_labels(example, pos_words, tokenized)
+        labeled_example = {
+            'input_ids': tokenized.input_ids,
+            'label_ids': pos_labels,
+            'special_tokens_mask': tokenized.special_tokens_mask
+        }
+        _save_json(labeled_example, dest_dir)
+    return
+
+
+def _align_labels(example, pos_words, tokenized: BatchEncoding) -> List[str]:
+    # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
+    pos_char = [''] * len(example)  # pos for part-of-speech
+    # make a character-level pos from pos_word
+    for w in pos_words:
+        start = w.idx
+        end = start + len(w)
+        pos_char[start:end] = [w.pos_] * len(w)
+    # convert the character-level POS tags into token-level POS labels
+    pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
+    for idx, (start, end) in enumerate(tokenized.offset_mapping):
+        if not(start == end):  # not a special or empty token
+            try:
+                pos = pos_char[start]
+            except Exception:
+                import pdb; pdb.set_trace()
+            pos_token[idx] = pos
+    return pos_token
+
+
+def _save_json(example: Dict, dest_dir: str):
+    # saving line by line to json-line file
+    filepath = Path(dest_dir) / "data.jsonl"
+    with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+        f.write(f"{json.dumps(example)}\n")
 
 
 def self_test():
@@ -167,7 +190,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir_path = args.source_dir
     # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
     if source_dir_path:
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)

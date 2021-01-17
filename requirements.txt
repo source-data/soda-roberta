@@ -7,3 +7,4 @@ tensorboard
 sklearn
 seqeval
 spacy
+celery

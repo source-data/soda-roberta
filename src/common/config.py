@@ -15,6 +15,7 @@ class Config:
         'max_eval': 10_000,
         'max_test': 10_000,
     }
+    celery_batch_size = 1000
 
 
 config = Config()

@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 import datasets
 from transformers import RobertaTokenizerFast, BatchEncoding
-from common import LM_DATASET, CACHE, TOKENIZER_PATH
+from ..common import LM_DATASET, CACHE, TOKENIZER_PATH
 import shutil
 
 _CITATION = """\

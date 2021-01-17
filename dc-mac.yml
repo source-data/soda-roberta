@@ -4,9 +4,8 @@ services:
   nlp: &nlp
     build:
       context: .
-      dockerfile: './Dockerfile'
+      dockerfile: './Dockerfile-mac'
     image: sdbert
-    runtime: nvidia
     volumes:
     - .:/app
     env_file:
@@ -15,14 +14,13 @@ services:
     tty: true
     stdin_open: true
     working_dir: /app
- 
+
   tensorboard:
     build:
       context: .
-      dockerfile: './Dockerfile'
+      dockerfile: './Dockerfile-mac'
     depends_on:
     - nlp
-    runtime: nvidia
     ports:
     - 6007:6007
     volumes:
