@@ -8,10 +8,10 @@ from argparse import ArgumentParser
 from transformers import RobertaTokenizerFast, BatchEncoding
 import spacy
 import celery
-from ..common.utils import progress
-from ..common import TOKENIZER_PATH, LM_DATASET
-from ..common.config import config
-from .celery import app
+from common.utils import progress
+from common import TOKENIZER_PATH, LM_DATASET
+from common.config import config
+from . import app
 # from .tasks import aligned_tokenization
 
 
@@ -74,12 +74,12 @@ class Preparator:
             ]
             job = celery.group(task_list)
             results = job.apply_async(
-                retry=True, retry_policy={
-                    'max_retries': 3,
-                    'interval_start': 0,
-                    'interval_step': 0.2,
-                    'interval_max': 0.2,
-                }
+                # retry=True, retry_policy={
+                #     'max_retries': 3,
+                #     'interval_start': 0,
+                #     'interval_step': 0.2,
+                #     'interval_max': 0.2,
+                # }
             )
             results.get()
 

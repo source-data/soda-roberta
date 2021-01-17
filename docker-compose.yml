@@ -35,7 +35,7 @@ services:
     - rabbitmq
     volumes:
     - .:/app
-    command: celery -A "src.lm.celery" worker --loglevel=info
+    command: celery -A "lm" worker --loglevel=info
 
   flower:
     <<: *nlp
@@ -43,7 +43,7 @@ services:
     - celery
     ports:
       - "5555:5555"
-    command: flower -A "src.lm.celery" --port=5555 --broker="rabbitmq"
+    command: flower -A "lm" --port=5555 --broker="rabbitmq"
 
   rabbitmq:
     image: rabbitmq:3-management

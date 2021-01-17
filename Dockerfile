@@ -12,6 +12,8 @@ RUN pip install datasets
 RUN pip uninstall -y nvidia-tensorboard
 RUN pip install tensorflow
 RUN pip install seqeval
+RUN pip install celery
+RUN pip install flower
 RUN pip install spacy
 # download language models for spacy
 RUN python -m spacy download en_core_web_sm

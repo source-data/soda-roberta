@@ -3,8 +3,8 @@ import shutil
 import argparse
 from math import floor
 from random import shuffle
-from common.utils import progress
-from common.config import config
+from .utils import progress
+from .config import config
 
 
 def distribute(path: Path, ext: str):
