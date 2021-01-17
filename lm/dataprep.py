@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import List, Dict
-from math import floor
 import json
 import shutil
 from random import shuffle
@@ -14,9 +13,11 @@ from common.config import config
 from . import app
 # from .tasks import aligned_tokenization
 
-
-tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
-nlp = spacy.load('en_core_web_sm')
+if config.from_pretrained:
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+else:
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+NLP = spacy.load('en_core_web_sm')
 
 
 class Preparator:
@@ -29,8 +30,6 @@ class Preparator:
             The path to the source xml files.
         dest_dir_path (Path):
             The path of the destination directory where the files with the encoded labeled examples should be saved.
-        tokenizer (ByteLevelBPETokenizer):
-            The pre-trained tokenizer to use for processing the inner text.
         ext (str):
             The extension (WITHOUT THE DOT) of the files to be coded.
     """
@@ -38,19 +37,17 @@ class Preparator:
         self,
         source_dir_path: Path,
         dest_dir_path: Path,
-        tokenizer: RobertaTokenizerFast,
         max_length: int = config.max_length,
         ext: str = 'txt',
     ):
         self.source_dir_path = source_dir_path
         self.dest_dir_path = dest_dir_path
         self.max_length = max_length
-        self.tokenizer = tokenizer
-        self.nlp = spacy.load('en_core_web_sm')
         assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
         if not self.dest_dir_path.exists():
             self.dest_dir_path.mkdir()
         self.filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
+        shuffle(self.filepaths)
 
     def _dest_dir_is_empty(self) -> bool:
         if self.dest_dir_path.exists():
@@ -101,8 +98,8 @@ def aligned_tokenization(filepath: str, dest_dir: str, max_length):
     labeled_example = {}
     example = Path(filepath).read_text()
     if example:
-        pos_words = nlp(example)
-        tokenized: BatchEncoding = tokenizer(
+        pos_words = NLP(example)
+        tokenized: BatchEncoding = TOKENIZER(
             example,
             max_length=max_length,
             truncation=True,
@@ -117,7 +114,6 @@ def aligned_tokenization(filepath: str, dest_dir: str, max_length):
             'special_tokens_mask': tokenized.special_tokens_mask
         }
         _save_json(labeled_example, dest_dir)
-    return
 
 
 def _align_labels(example, pos_words, tokenized: BatchEncoding) -> List[str]:
@@ -132,11 +128,7 @@ def _align_labels(example, pos_words, tokenized: BatchEncoding) -> List[str]:
     pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
     for idx, (start, end) in enumerate(tokenized.offset_mapping):
         if not(start == end):  # not a special or empty token
-            try:
-                pos = pos_char[start]
-            except Exception:
-                import pdb; pdb.set_trace()
-            pos_token[idx] = pos
+            pos_token[idx] = pos_char[start]
     return pos_token
 
 
@@ -159,24 +151,22 @@ def self_test():
     source_file_path.write_text(example)
     max_length = 20  # in token!
     try:
-        data_prep = Preparator(source_path, dest_dir_path, tokenizer, max_length=max_length)
-        examples = data_prep.run()
-        tokens = examples[0]['tokenized'].tokens()
-        input_ids = examples[0]['tokenized'].input_ids
-        pos_labels = examples[0]['label_ids']
-        print(pos_labels)
-        print('\nTokens')
-        for i in range(len(tokens)):
-            print(f"{tokens[i]}\t{tokenizer.decode(input_ids[i])}\t{pos_labels[i]}")
-        assert len(tokens) == len(pos_labels)
+        data_prep = Preparator(source_path, dest_dir_path, max_length=max_length)
+        data_prep.run()
         assert data_prep.verify()
         filepaths = list(dest_dir_path.glob("*.jsonl"))
         for filepath in filepaths:
             print(f"\nContent of saved file ({filepath}):")
             with filepath.open() as f:
                 for line in f:
-                    j = json.loads(line)
-                    print(json.dumps(j))
+                    example = json.loads(line)
+                    # print(json.dumps(example))
+                    input_ids = example['input_ids']
+                    pos_labels = example['label_ids']
+                    assert len(input_ids) == len(pos_labels)
+                    print('Example:')
+                    for i in range(len(input_ids)):
+                        print(f"{TOKENIZER.decode(input_ids[i])}\t{pos_labels[i]}")
     finally:
         shutil.rmtree('/tmp/test_dataprep/')
         print("cleaned up and removed /tmp/test_corpus")
@@ -189,7 +179,6 @@ if __name__ == "__main__":
     parser.add_argument("dest_dir", nargs="?", default=LM_DATASET, help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
-    # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
     if source_dir_path:
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)
@@ -197,7 +186,7 @@ if __name__ == "__main__":
             source_dir_path = Path(source_dir_path)
             for subset in ["train", "eval", "test"]:
                 print(f"Preparing: {subset}")
-                sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer)
+                sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset)
                 sdprep.run()
                 sdprep.verify()
             print("\nDone!")

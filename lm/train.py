@@ -28,14 +28,16 @@ from .metrics import compute_metrics
 from common.config import config
 from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, CACHE
 
+if config.from_pretrained:
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
+else:
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(
+        TOKENIZER_PATH,
+        max_len=config.max_length
+    )
+
 
 def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments):
-    print(f"Loading tokenizer from {TOKENIZER_PATH}.")
-    tokenizer = RobertaTokenizerFast.from_pretrained(
-        TOKENIZER_PATH,
-        # max_len=config.max_length
-    )
-    # tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base', max_len=config.max_length)
 
     print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
@@ -45,16 +47,16 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE,
-        tokenizer=tokenizer
+        tokenizer=TOKENIZER
     )
     if data_config_name != "MLM":
         data_collator = DataCollatorForPOSMaskedLanguageModeling(
-            tokenizer=tokenizer,
+            tokenizer=TOKENIZER,
             max_length=config.max_length
         )
     else:
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
+            tokenizer=TOKENIZER,
             mlm=True
         )
 
@@ -86,7 +88,7 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[ShowExample(tokenizer)]
+        callbacks=[ShowExample(TOKENIZER)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")

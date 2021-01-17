@@ -7,7 +7,7 @@ from common.config import config
 
 
 def main():
-    parser = ArgumentParser(description="Try the tokenizer.")
+    parser = ArgumentParser(description="Try custom trained tokenizer.")
     parser.add_argument("text", nargs="?", default="This is an example.", help="Text to tokenize.")
     args = parser.parse_args()
     text = args.text
