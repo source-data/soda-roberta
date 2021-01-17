@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 from transformers import pipeline, RobertaTokenizerFast, RobertaForTokenClassification
 from common import TOKCL_MODEL_PATH
-from common.config import config
 
 _EXAMPLE = """<s> F. Western blot of input and eluates of Upf1 domains purification in a Nmd4-HA strain. The band with the # might corresponds to a dimer of Upf1-CH,
  bands marked with a star correspond to residual signal with the anti-HA antibodies (Nmd4). Fragments in the eluate have a smaller size because the protein A pa
