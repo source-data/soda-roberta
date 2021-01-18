@@ -82,7 +82,7 @@ if __name__ == "__main__":
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
 
-    parser = HfArgumentParser((TrainingArguments), description="Traing script.")
+    parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", nargs="?", default=TOKCL_DATASET, help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
