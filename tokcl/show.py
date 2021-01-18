@@ -35,6 +35,10 @@ class ShowExample(TrainerCallback):
         tokenizer (RobertaTokenizer): the tokenizer used to generate the dataset.
     """
 
+    UNDERSCORE = "\033[4m"
+    CLOSE = "\033[0m"
+    COLOR = "\033[38;5;{color_idx}m"
+
     def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tokenizer = tokenizer
@@ -57,7 +61,7 @@ class ShowExample(TrainerCallback):
         for input_id, label_idx in zip(input_ids, labels_idx):
             decoded = self.tokenizer.decode(input_id)
             if label_idx > 0:
-                colored += f"\033[38;5;{label_idx}m{decoded}\033[0m"
+                colored += f"{self.UNDERSCORE}{self.COLOR.format(color_idx=label_idx)}{decoded}{self.CLOSE}"
             else:
                 colored += decoded
         print(f"\n\n{colored}\n\n")
