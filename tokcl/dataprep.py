@@ -325,7 +325,6 @@ if __name__ == "__main__":
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
     if source_dir_path:
         code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION, sd.GENEPROD, sd.CELL_TYPE_LINE]
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
         dest_dir_path = args.dest_dir
         dest_dir_path = Path(dest_dir_path)
         source_dir_path = Path(source_dir_path)
