@@ -68,10 +68,6 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
-    def __init__(self, *args, tokenizer=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tokenizer = tokenizer
-
     def _info(self):
         if self.config.name == "MLM":
             features = datasets.Features(
@@ -186,15 +182,13 @@ def self_test():
         p_train.write_text(json.dumps(d))
         p_eval.write_text(json.dumps(d))
         p_test.write_text(json.dumps(d))
-        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
         train_dataset, eval_dataset, test_dataset = load_dataset(
             './lm/loader.py',
             'DET',
             data_dir=data_dir,
             split=["train", "validation", "test"],
             download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-            cache_dir=CACHE,
-            tokenizer=tokenizer,
+            cache_dir=CACHE
         )
         print(len(train_dataset))
         print(len(eval_dataset))

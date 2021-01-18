@@ -28,16 +28,14 @@ from .metrics import compute_metrics
 from common.config import config
 from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, CACHE
 
-if config.from_pretrained:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
-else:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(
-        TOKENIZER_PATH,
-        max_len=config.max_length
-    )
 
-
-def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments):
+def train(
+    no_cache: bool,
+    dataset_path: str,
+    data_config_name: str,
+    training_args: TrainingArguments,
+    tokenizer: RobertaTokenizerFast
+):
 
     print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
@@ -46,37 +44,36 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
         data_dir=dataset_path,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
-        cache_dir=CACHE,
-        tokenizer=TOKENIZER
+        cache_dir=CACHE
     )
+
     if data_config_name != "MLM":
         data_collator = DataCollatorForPOSMaskedLanguageModeling(
-            tokenizer=TOKENIZER,
+            tokenizer=tokenizer,
             max_length=config.max_length
         )
     else:
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=TOKENIZER,
+            tokenizer=tokenizer,
             mlm=True
         )
 
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
-    model_config = RobertaConfig(
-        vocab_size=config.vocab_size,
-        max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
-        num_attention_heads=12,
-        num_hidden_layers=6,
-        type_vocab_size=1,
-    )
+    if config.from_pretrained:
+        model = RobertaForMaskedLM.from_pretrained(config.from_pretrained)
+    else:
+        model_config = RobertaConfig(
+            vocab_size=config.vocab_size,
+            max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
+            num_attention_heads=12,
+            num_hidden_layers=6,
+            type_vocab_size=1,
+        )
+        model = RobertaForMaskedLM(config=model_config)
 
-    model = RobertaForMaskedLM(config=model_config)
-    # model = RobertaForMaskedLM.from_pretrained('roberta-base')
-    # model.resize_token_embeddings(len(tokenizer))
-
-    training_args.remove_unused_columns = False
-    training_args.evaluation_strategy = EvaluationStrategy.STEPS
+    training_args.remove_unused_columns = False  # we need pos_mask and special_tokens_mask in collator
 
     print("\nTraining arguments:")
     print(training_args)
@@ -88,7 +85,7 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[ShowExample(TOKENIZER)]
+        callbacks=[ShowExample(tokenizer)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")
@@ -107,16 +104,25 @@ if __name__ == "__main__":
         output_dir: str = field(default=LM_MODEL_PATH)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
+        evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", nargs="?", default=LM_DATASET, help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL"], help="Name of the dataset configuration to use.")
-    parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
+    parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
     dataset_path = args.dataset_path
     data_config_name = args.data_config_name
-    if Path(training_args.output_dir).exists():
-        train(no_cache, dataset_path, data_config_name, training_args)
+    output_dir_path = Path(training_args.output_dir)
+    if not output_dir_path.exists():
+        output_dir_path.mkdir()
+        print(f"Created {output_dir_path}.")
+    if config.from_pretrained:
+        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
     else:
-        print(f"{training_args.output_dir} does not exist! Cannot proceed.")
+        tokenizer = RobertaTokenizerFast.from_pretrained(
+            TOKENIZER_PATH,
+            max_len=config.max_length
+        )
+    train(no_cache, dataset_path, data_config_name, training_args, tokenizer)

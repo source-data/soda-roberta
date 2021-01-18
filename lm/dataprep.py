@@ -63,8 +63,8 @@ class Preparator:
         batch_size = config.celery_batch_size
         N = len(self.filepaths)
         for start in range(0, N, batch_size):
-            progress(start, N, start)
-            end = min((start + batch_size, N))
+            end = min(start + batch_size, N)
+            progress(end-1, N, f"{start}:{end} of {N}")
             task_list = [
                 aligned_tokenization.s(str(filepath), str(self.dest_dir_path), self.max_length)
                 for filepath in self.filepaths[start:end]

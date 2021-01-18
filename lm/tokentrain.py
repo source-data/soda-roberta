@@ -1,7 +1,7 @@
 from pathlib import Path
 from argparse import ArgumentParser
 from tokenizers import ByteLevelBPETokenizer
-from tokenizers.pre_tokenizers import Whitespace, ByteLevel
+from tokenizers.pre_tokenizers import ByteLevel
 from common.config import config
 from common import (
     LM_DATASET, TOKENIZER_PATH

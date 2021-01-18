@@ -1,21 +1,27 @@
-from transformers import pipeline
+import json
+from pathlib import Path
+from transformers import pipeline, RobertaTokenizerFast
 from argparse import ArgumentParser
-from common import MODEL_PATH
+from common import LM_MODEL_PATH, TOKENIZER_PATH
+from common.config import config
 
 
 def main():
     parser = ArgumentParser(description="Try to use model for mask filling.")
     parser.add_argument("text", nargs="?", default="Let us try this model to see if it <mask>.", help="The text to be sumitted. Use '<mask>' as masking token.")
+    parser.add_argument("--model_path", default=LM_MODEL_PATH, help="The path to the mode files.")
     args = parser.parse_args()
     text = args.text
-    #model_paths = Path(MODEL_PATH).glob("lm-*")
-    #model_paths = [p.name for p in model_paths]
-    #most_recent = sorted(model_paths, reverse=True)[0]
+    model_path = args.model_path
+    if config.from_pretrained:
+        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+    else:
+        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
 
     fill_mask = pipeline(
         "fill-mask",
-        model=f"{MODEL_PATH}",
-        tokenizer=f"{MODEL_PATH}"
+        model=model_path,
+        tokenizer=tokenizer
     )
     result = fill_mask(text)
     print(f"{result}")
