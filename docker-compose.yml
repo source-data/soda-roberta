@@ -1,7 +1,7 @@
 version: '2.3'
 
 services:
-  nlp:
+  nlp: &nlp
     build:
       context: .
       dockerfile: './Dockerfile'
@@ -30,29 +30,19 @@ services:
     command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
-    build:
-      context: .
-      dockerfile: './Dockerfile'
+    << : *nlp
     depends_on:
     - nlp
     - rabbitmq
-    volumes:
-    - .:/app
-    working_dir: /app
     command: celery -A "lm" worker --loglevel=info
 
   flower:
-    build:
-      context: .
-      dockerfile: './Dockerfile'
+    << : *nlp
     depends_on:
     - nlp
     - celery
     ports:
       - "5555:5555"
-    volumes:
-    - .:/app
-    working_dir: /app
     command: flower -A "lm" --port=5555 --broker="rabbitmq"
 
   rabbitmq:
