@@ -90,10 +90,11 @@ if __name__ == "__main__":
     no_cache = args.no_cache
     data_config_name = args.data_config_name
     dataset_path = args.dataset_path
-    output_dir_path = Path(training_args.output_dir)
+    output_dir_path = Path(training_args.output_dir) / data_config_name
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
+    training_args.output_dir = str(output_dir_path)  # includes the sub dir corresonding to the task data_config_name
     if config.from_pretrained:
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
     else:
