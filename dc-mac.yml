@@ -3,11 +3,14 @@ version: '2.3'
 services:
   nlp: &nlp
     build:
-      context: .
-      dockerfile: './Dockerfile-mac'
+      context: ./src
+      dockerfile: '../Dockerfile-mac'
     image: sdbert
     volumes:
-    - .:/app
+    - ./src:/app
+    - ./data:/app/data
+    - ./lm_models:/app/lm_models
+    - ./tokcl_models:/app/tokcl_models
     env_file:
     - ./.env
     ipc: host
@@ -17,8 +20,8 @@ services:
 
   tensorboard:
     build:
-      context: .
-      dockerfile: './Dockerfile-mac'
+      context: ./src
+      dockerfile: '../Dockerfile-mac'
     depends_on:
     - nlp
     ports:
@@ -28,11 +31,14 @@ services:
     command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
-    <<: *nlp
+    build:
+      context: ./src
+      dockerfile: '../Dockerfile-mac'
     depends_on:
     - rabbitmq
     volumes:
-    - .:/app
+    - ./src:/app
+    working_dir: /app
     command: celery -A "lm" worker --loglevel=info
 
   flower:
