@@ -169,7 +169,7 @@ def main():
     parser.add_argument('destination', nargs="?", default=LM_DATASET, help='Destination folder for extracted text files.')
     parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
-    parser.add_argument('-X', '--keep-xml', action="store_true", help='Flag to keep the xml markup.')
+    parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')
 
     args = parser.parse_args()
     extract_sentences = args.sentences
