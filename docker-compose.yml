@@ -1,7 +1,7 @@
 version: '2.3'
 
 services:
-  nlp: &nlp
+  nlp:
     build:
       context: .
       dockerfile: './Dockerfile'
@@ -30,7 +30,7 @@ services:
     command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
-     build:
+    build:
       context: .
       dockerfile: './Dockerfile'
     depends_on:
