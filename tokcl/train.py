@@ -60,7 +60,7 @@ def train(no_cache: bool, dataset_path: str, data_config_name: str, training_arg
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[ShowExample(tokenizer, label_list)]
+        callbacks=[ShowExample(tokenizer)]
     )
 
     print(f"CUDA available: {torch.cuda.is_available()}")
