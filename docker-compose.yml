@@ -38,6 +38,7 @@ services:
     - rabbitmq
     volumes:
     - .:/app
+    working_dir: /app
     command: celery -A "lm" worker --loglevel=info
 
   flower:
@@ -49,6 +50,9 @@ services:
     - celery
     ports:
       - "5555:5555"
+    volumes:
+    - .:/app
+    working_dir: /app
     command: flower -A "lm" --port=5555 --broker="rabbitmq"
 
   rabbitmq:
