@@ -27,7 +27,7 @@ class Entity:
 
     def to_dict(self, tokenizer: RobertaTokenizerFast):
         self.text = tokenizer.decode(self.input_ids)
-        d = {'text': self.text}
+        d = {'text': self.text.strip()}  # removes the leading space from the RobertaTokenizer
         for k, v in self.attrib.items():
             d[k] = v
         return d

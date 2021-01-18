@@ -85,7 +85,7 @@ class ShowExample(TrainerCallback):
                 decoded_label = self.tokenizer.decode(label)
                 correct = (pred == label)
                 color = "blue" if correct else "red"
-                insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label}]"
+                insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
                 colored += f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
             elif attention_mask[i] == 1:
                 colored += decoded_input
