@@ -29,7 +29,7 @@ class Preparator:
             The path to the source xml files.
         dest_dir_path (Path):
             The path of the destination directory where the files with the encoded labeled examples should be saved.
-        tokenizer (ByteLevelBPETokenizer):
+        tokenizer (RobertaTokenizerFast):
             The pre-trained tokenizer to use for processing the inner text.
         code_maps (List[CodeMap)]:
             A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
@@ -215,7 +215,7 @@ class Preparator:
         return True
 
 
-def self_test():
+def self_test(tokenizer: RobertaTokenizerFast):
     # example = '<sd-panel> of an adult <sd-tag type="gene">Prox1</sd-tag>-<sd-tag type="gene">Cre</sd-tag><sd-tag type="gene">ER</sd-tag>T2;<sd-tag type="gene">Ilk</sd-tag>+/+ <sd-tag type="organism">mouse</sd-tag> (referred to as "Adult Control")</sd-panel>'
     example = "<xml>Here <sd-panel>it is<sd-tag role='reporter'> </sd-tag>: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </sd-panel>."
     example += ' 1 2 3 4 5 6 7 8 9 0' + '</xml>'  # to test truncation
@@ -284,7 +284,6 @@ def self_test():
         ]
     }
     try:
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
         data_prep = Preparator(source_path, dest_dir_path, tokenizer, [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.PANELIZATION], max_length=max_length)
         labeled_examples = data_prep.run()
         print("\nXML examples:")
@@ -320,6 +319,10 @@ if __name__ == "__main__":
     parser.add_argument("dest_dir", nargs="?", default=TOKCL_DATASET, help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
+    if config.from_pretrained:
+        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+    else:
+        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
     if source_dir_path:
         code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION, sd.GENEPROD, sd.CELL_TYPE_LINE]
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large')
@@ -333,4 +336,4 @@ if __name__ == "__main__":
             sdprep.verify()
         print("\nDone!")
     else:
-        self_test()
+        self_test(tokenizer)

@@ -7,27 +7,24 @@ import torch
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast,
     TrainingArguments, DataCollatorForTokenClassification,
-    Trainer, HfArgumentParser,
+    Trainer, HfArgumentParser, EvaluationStrategy
 )
 from datasets import load_dataset, GenerateMode
 # from datasets.utils.download_manager import GenerateMode
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
-from common import TOKENIZER_PATH, TOKCL_DATASET, TOKCL_MODEL_PATH, CACHE
+from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_DATASET, TOKCL_MODEL_PATH, CACHE
 
 
-def train(no_cache: bool, data_config_name: str, training_args: TrainingArguments):
-    # print(f"Loading tokenizer from {TOKENIZER_PATH}.")
-    # tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
+def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments, tokenizer: RobertaTokenizerFast):
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
-    print(f"\nLoading and tokenizing datasets found in {TOKCL_DATASET}.")
+    print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         './tokcl/loader.py',
         data_config_name,
-        data_dir=TOKCL_DATASET,
+        data_dir=dataset_path,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE,
@@ -48,7 +45,10 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
     compute_metrics = MetricsComputer(label_list=label_list)
 
-    model = RobertaForTokenClassification.from_pretrained('roberta-large', num_labels=num_labels)
+    if config.from_pretrained:
+        model = RobertaForTokenClassification.from_pretrained(config.from_pretrained, num_labels=num_labels)
+    else:
+        model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels)
 
     print("\nTraining arguments:")
     print(training_args)
@@ -75,10 +75,27 @@ def train(no_cache: bool, data_config_name: str, training_args: TrainingArgument
 
 if __name__ == "__main__":
 
+    @dataclass
+    class MyTrainingArguments(TrainingArguments):
+        output_dir: str = field(default=TOKCL_MODEL_PATH)
+        overwrite_output_dir: bool = field(default=True)
+        logging_steps: int = field(default=50)
+        evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
+
     parser = HfArgumentParser((TrainingArguments), description="Traing script.")
+    parser.add_argument("dataset_path", nargs="?", default=TOKCL_DATASET, help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"], help="Name of the dataset configuration to use.")
-    parser.add_argument("--no-cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
+    parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
     data_config_name = args.data_config_name
-    train(no_cache, data_config_name, training_args)
+    dataset_path = args.dataset_path
+    output_dir_path = Path(training_args.output_dir)
+    if not output_dir_path.exists():
+        output_dir_path.mkdir()
+        print(f"Created {output_dir_path}.")
+    if config.from_pretrained:
+        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
+    else:
+        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
+    train(no_cache, dataset_path, data_config_name, training_args, tokenizer)

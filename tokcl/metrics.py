@@ -4,7 +4,7 @@ from seqeval.metrics import (
 )
 from transformers import EvalPrediction
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import List, Dict
 # https://huggingface.co/metrics/seqeval
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 # https://github.com/chakki-works/seqeval

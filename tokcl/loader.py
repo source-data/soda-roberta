@@ -21,7 +21,7 @@ from pathlib import Path
 from .xmlcode import SourceDataCodes as sd
 import datasets
 from transformers import RobertaTokenizerFast
-from common import CACHE
+from common import CACHE, TOKENIZER_PATH
 from common.config import config
 import shutil
 
@@ -90,7 +90,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
     def __init__(self, *args, tokenizer=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tokenizer = tokenizer
+        self.tokenizer = tokenizer  # needed to access the mask_token_id
 
     def _info(self):
         # TODO: This method specifies the datasets.DatasetInfo object which contains informations and typings for the dataset
@@ -169,7 +169,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
         return datasets.DatasetInfo(
             description=_DESCRIPTION,
-            features=features,  # Here we define them above because they are different between the two configurations
+            features=features,  # Here we define them above because they are different between configurations
             supervised_keys=("input_ids", "labels"),
             homepage=_HOMEPAGE,
             license=_LICENSE,
@@ -190,7 +190,6 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
-                # These kwargs will be passed to _generate_examples
                 gen_kwargs={
                     "filepath": str(data_dir / "test/data.jsonl"),
                     "split": "test"
@@ -198,7 +197,6 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                # These kwargs will be passed to _generate_examples
                 gen_kwargs={
                     "filepath": str(data_dir / "eval/data.jsonl"),
                     "split": "eval",
@@ -268,7 +266,10 @@ def self_test():
         p_test = p / "test"
         p_test.mkdir()
         p_test = p_test / "data.jsonl"
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
+        if config.from_pretrained:
+            tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained max_len=config.max_length)
+        else:
+            tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
         batch_encoding = tokenizer("One two three four five six seven eight nine ten")
         d = {
             "input_ids": batch_encoding.input_ids,
