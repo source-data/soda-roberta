@@ -51,10 +51,7 @@ def train(
 
     compute_metrics = MetricsComputer(label_list=label_list)
 
-    if config.from_pretrained:
-        model = RobertaForTokenClassification.from_pretrained(config.from_pretrained, num_labels=num_labels)
-    else:
-        model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels)
+    model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels)
 
     print("\nTraining arguments:")
     print(training_args)
