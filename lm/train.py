@@ -105,6 +105,8 @@ if __name__ == "__main__":
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
+        per_device_train_batch_size: int = field(default=16)
+        per_device_eval_batch_size: int = field(default=16)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", nargs="?", default=LM_DATASET, help="The dataset to use for training.")
