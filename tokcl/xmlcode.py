@@ -30,8 +30,14 @@ class CodeMap:
         self.all_labels: List[str] = [c['label'] for c in self.constraints.values()]
         self.iob2_labels: List[str] = ['O']  # generated labels of IOB2 schema tagging, including prefix combinations
         for label in self.all_labels:
-            for prefix in ['I', 'B']:
-                self.iob2_labels.append(f"{prefix}-{label}")
+            if self.mode == 'whole_entity':
+                for prefix in ['I', 'B']:
+                    self.iob2_labels.append(f"{prefix}-{label}")
+            elif self.mode == 'boundary_start':
+                # only B_egning of entities, no I_nside tag
+                self.iob2_labels.append(f"B-{label}")
+            else:
+                raise ValueError(f"CodeMap mode {self.mode} unkown.")
 
     def from_label(self, label: str) -> Dict:
         """Returns (Dict): the constraint corresponding to the given label WITHOUT prefix (for example 'GENEPROD' OR 'CONTROLLED_VAR').
