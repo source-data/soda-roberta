@@ -35,7 +35,6 @@ services:
       dockerfile: './Dockerfile'
     depends_on:
     - nlp
-    depends_on:
     - rabbitmq
     volumes:
     - .:/app
@@ -47,7 +46,6 @@ services:
       dockerfile: './Dockerfile'
     depends_on:
     - nlp
-    depends_on:
     - celery
     ports:
       - "5555:5555"
