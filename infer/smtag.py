@@ -1,14 +1,14 @@
 from transformers import (
-    TokenClassificationPipeline, BatchEncoding,
+    BatchEncoding,
     RobertaForTokenClassification, RobertaTokenizerFast
 )
 from argparse import ArgumentParser
 import json
 import torch
-import numpy as np
 from typing import List, Dict
 from tokcl.xmlcode import CodeMap, SourceDataCodes as sd
-from common import NER_MODEL_PATH
+from common import TOKENIZER_PATH, TOKCL_MODEL_PATH
+from common.config import config
 
 
 class Entity:
@@ -191,7 +191,7 @@ class Tagger:
         return output
 
     def predict(self, input: List[BatchEncoding], model: RobertaForTokenClassification) -> List[Dict[str, List]]:
-        # what follows is taken from TokenClassificationPipeline but avoiding transforming labels_idx into str
+        # what follows is inspired from TokenClassificationPipeline but avoiding transforming labels_idx into str
         # returning a List[Dict[List]] instead of List[List[Dict]] to faciliate serial input-output predictions
         # TODO handle this as a batch rather than one by one
         output = []
@@ -226,19 +226,22 @@ class Tagger:
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Tags text.")
+    parser = ArgumentParser(description="SmartTagging of free text.")
     parser.add_argument("text", nargs="?", default="We studied mice with genetic ablation of the ERK1 gene in brain and muscle.", help="The text to tag.")
     args = parser.parse_args()
     text = args.text
-    panel_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/PANELIZATION")
-    ner_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/NER/")
-    role_model = RobertaForTokenClassification.from_pretrained(f"{NER_MODEL_PATH}/ROLES")
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+    panel_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/PANELIZATION")
+    ner_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/NER/")
+    role_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/ROLES")
+    if config.from_pretrained:
+        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+    else:
+        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
     tagger = Tagger(
         tokenizer,
-        panel_model,
-        ner_model,
-        role_model
+        panel_model,  # segments figure legends into panel legends
+        ner_model,  # taggs bilogical entities
+        role_model  # semantic roles of entities
     )
     tagged = tagger.pipeline(text)
     print(tagged)
