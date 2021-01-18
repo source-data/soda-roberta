@@ -17,7 +17,13 @@ from common.config import config
 from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_DATASET, TOKCL_MODEL_PATH, CACHE
 
 
-def train(no_cache: bool, dataset_path: str, data_config_name: str, training_args: TrainingArguments, tokenizer: RobertaTokenizerFast):
+def train(
+    no_cache: bool,
+    dataset_path: str,
+    data_config_name: str,
+    training_args: TrainingArguments,
+    tokenizer: RobertaTokenizerFast
+):
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
@@ -81,6 +87,8 @@ if __name__ == "__main__":
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
+        per_device_train_batch_size: int = field(default=16)
+        per_device_eval_batch_size: int = field(default=16)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", nargs="?", default=TOKCL_DATASET, help="The dataset to use for training.")
@@ -96,7 +104,9 @@ if __name__ == "__main__":
         print(f"Created {output_dir_path}.")
     training_args.output_dir = str(output_dir_path)  # includes the sub dir corresonding to the task data_config_name
     if config.from_pretrained:
+        print(f"Loading tokenizer {config.from_pretrained}")
         tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
     else:
+        print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
