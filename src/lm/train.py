@@ -12,6 +12,7 @@
 
 from typing import NamedTuple
 from pathlib import Path
+from datetime import datetime
 import torch
 from dataclasses import dataclass, field
 from transformers import (
@@ -105,7 +106,6 @@ if __name__ == "__main__":
     @dataclass
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=LM_MODEL_PATH)
-        logging_dir: str = field(default=RUNS_DIR)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
@@ -122,6 +122,7 @@ if __name__ == "__main__":
     dataset_path = args.dataset_path
     data_config_name = args.data_config_name
     output_dir_path = Path(training_args.output_dir)
+    training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':,'-'')}"
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")

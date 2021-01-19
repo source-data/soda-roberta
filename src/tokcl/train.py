@@ -1,6 +1,7 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 from typing import NamedTuple
 from argparse import ArgumentParser
+from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 import torch
@@ -82,7 +83,6 @@ if __name__ == "__main__":
     @dataclass
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=TOKCL_MODEL_PATH)
-        logging_dir: str = field(default=RUNS_DIR)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
@@ -99,6 +99,7 @@ if __name__ == "__main__":
     data_config_name = args.data_config_name
     dataset_path = args.dataset_path
     output_dir_path = Path(training_args.output_dir) / data_config_name
+    training_args.logging_dir = f"{RUNS_DIR}/tokcl-{data_config_name}-{datetime.now().isoformat().replace(':,'-'')}"
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
