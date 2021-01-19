@@ -11,7 +11,9 @@ RoBERTa transformer is a BERT derivative: https://huggingface.co/transformers/mo
 
 SODA-RoBERTa uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
 
-The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. Tagging biological entites that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature.
+The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. 
+
+Tagging biological entites that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature. 
 
 SmartTag uses a 3-step pipeline: 
 
@@ -19,11 +21,13 @@ SmartTag uses a 3-step pipeline:
 2. Named Entity Recognition of bioentities and experimental methods.
 3. Semantic tagging of the experimental role of generoducts as measured variable or controlled variable.
 
-Accordingly, 3 models are trained with the respective tasks: PANELIZATION, NER, ROLES. We provide below the instructions on how to train these 3 models either using a specialized language model trained on biological text from PubMedCentral or using pre-trained Roberta transformers.
+Accordingly, a specialized language model for scientific biological language is fine tuned into 3 models for the respective tasks: PANELIZATION, NER, ROLES. 
 
-The training data is in the form of XML data. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
+We provide below the instructions to train the language model by fine tuning a pretrained Roberta transormer on text from PubMedCentral and by training the 3 specific models using the SourceData datset.
 
-# Quick access to the pretrained SoDa-RoBERTa models and SmartTag pipeline.
+The training data is in the form of XML. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
+
+# Quick access to the pretrained SoDa-RoBERTa models and the SmartTag pipeline.
 
 Under construction.
 
