@@ -99,6 +99,7 @@ def train(
 
 if __name__ == "__main__":
 
+    # changing default values
     @dataclass
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=LM_MODEL_PATH)
@@ -107,6 +108,7 @@ if __name__ == "__main__":
         evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
+        save_total_limit: int = field(default=5)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", help="The dataset to use for training.")
