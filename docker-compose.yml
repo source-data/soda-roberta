@@ -5,16 +5,21 @@ services:
     build:
       context: ./src
       dockerfile: '../Dockerfile-mac'
-      args:
-        - user_id=${USER_ID}
-        - group_id=${GROUP_ID}
+      # args: # abandoning this for now, transfomers needs to be abel to mkdir /.cache
+      #   - user_id=${USER_ID}
+      #   - group_id=${GROUP_ID}
     image: sdbert
     runtime: nvidia
-    volumes:
-    - .:/app
+    volumes: &volumes
+    - ./src:/app
+    - ./data:/data
+    - ./tokenizer:/tokenizer
+    - ./lm_models:/lm_models
+    - ./tokcl_models:/tokcl_models
+    - ./cache:/cache
     env_file:
     - ./.env
-    working_dir: /app/src
+    working_dir: /app
     entrypoint: ["/bin/bash"]
 
   tensorboard:
@@ -33,18 +38,18 @@ services:
     image: sdbert
     depends_on:
     - nlp
-    volumes:
-    - .:/app
-    working_dir: /app/src
+    env_file:
+    - ./.env
+    volumes: *volumes
+    working_dir: /app
     command: celery --app=lm worker --loglevel=info
 
   flower:
     image: sdbert
     depends_on:
     - celery
-    volumes:
-    - .:/app
-    working_dir: /app/src
+    volumes: *volumes
+    working_dir: /app
     ports:
       - "5555:5555"
     command: flower --app=lm --port=5555 --broker=rabbitmq
