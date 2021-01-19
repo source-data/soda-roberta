@@ -52,7 +52,7 @@ def train(
 
     compute_metrics = MetricsComputer(label_list=label_list)
 
-    model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels)
+    model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels, max_position_embeddings=config.max_length + 2)
 
     print("\nTraining arguments:")
     print(training_args)
