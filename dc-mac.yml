@@ -15,7 +15,8 @@ services:
     - ./tokenizer:/tokenizer
     - ./lm_models:/lm_models
     - ./tokcl_models:/tokcl_models
-    - ./cache:/cache
+    - ./.cache:/.cache
+    - ./runs:/runs
     env_file:
     - ./.env
     working_dir: /app

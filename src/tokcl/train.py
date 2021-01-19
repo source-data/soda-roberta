@@ -14,7 +14,7 @@ from datasets import load_dataset, GenerateMode
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
-from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_MODEL_PATH, CACHE
+from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_MODEL_PATH, CACHE, RUNS_DIR
 
 
 def train(
@@ -82,6 +82,7 @@ if __name__ == "__main__":
     @dataclass
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=TOKCL_MODEL_PATH)
+        logging_dir: str = field(default=RUNS_DIR)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
