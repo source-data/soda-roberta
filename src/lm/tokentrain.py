@@ -3,14 +3,12 @@ from argparse import ArgumentParser
 from tokenizers import ByteLevelBPETokenizer
 from tokenizers.pre_tokenizers import ByteLevel
 from common.config import config
-from common import (
-    LM_DATASET, TOKENIZER_PATH
-)
+from common import TOKENIZER_PATH
 
 
 def main():
     parser = ArgumentParser(description="Training tokenizer on text files.")
-    parser.add_argument("text_dir", nargs="?", default=LM_DATASET, help="Path to the directory containgin the text files (any .txt file).")
+    parser.add_argument("text_dir", nargs="?", help="Path to the directory containgin the text files (any .txt file).")
     parser.add_argument("-t", "--tokenizer_path", default=TOKENIZER_PATH, help="Path to the saved trained tokenizer.")
     args = parser.parse_args()
     text_dir = args.text_dir

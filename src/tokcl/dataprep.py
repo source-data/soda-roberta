@@ -1,20 +1,18 @@
 from pathlib import Path
 from typing import List, Tuple, Dict
-from xml.etree.ElementTree import parse, Element, ElementTree, fromstring, tostring
-from math import floor
+from xml.etree.ElementTree import parse, Element, ElementTree
 import json
 import shutil
 from random import shuffle
 from argparse import ArgumentParser
 from tokenizers import Encoding
 from transformers import RobertaTokenizerFast, BatchEncoding
-import regex as re
 from .encoder import XMLEncoder
 from .xmlcode import (
     CodeMap, SourceDataCodes as sd
 )
 from common.utils import innertext, progress
-from common import TOKENIZER_PATH, TOKCL_DATASET
+from common import TOKENIZER_PATH
 from common.config import config
 
 
@@ -316,7 +314,7 @@ def self_test(tokenizer: RobertaTokenizerFast):
 if __name__ == "__main__":
     parser = ArgumentParser(description="Prepares the conversion of xml documents into datasets ready for NER learning tasks.")
     parser.add_argument("source_dir", nargs="?", help="Directory where the xml files are located.")
-    parser.add_argument("dest_dir", nargs="?", default=TOKCL_DATASET, help="The destination directory where the labeled dataset will be saved.")
+    parser.add_argument("dest_dir", nargs="?", help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if config.from_pretrained:

@@ -3,7 +3,6 @@ import collections
 import torch
 from transformers import Trainer
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset
 from transformers.trainer import PredictionOutput
 from transformers.utils import logging
 from transformers.trainer_utils import EvalPrediction

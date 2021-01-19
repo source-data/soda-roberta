@@ -1,4 +1,4 @@
-transformers
+transformers==4.1.1
 datasets
 torch
 python-dotenv
@@ -8,3 +8,4 @@ sklearn
 seqeval
 spacy
 celery
+lxml

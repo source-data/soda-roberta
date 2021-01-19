@@ -23,8 +23,7 @@ from __future__ import absolute_import, division, print_function
 import json
 from pathlib import Path
 import datasets
-from transformers import RobertaTokenizerFast, BatchEncoding
-from common import LM_DATASET, CACHE, TOKENIZER_PATH
+from common import CACHE
 import shutil
 
 _CITATION = """\

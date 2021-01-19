@@ -8,15 +8,15 @@ from transformers import RobertaTokenizerFast, BatchEncoding
 import spacy
 import celery
 from common.utils import progress
-from common import TOKENIZER_PATH, LM_DATASET
+from common import TOKENIZER_PATH
 from common.config import config
 from . import app
 # from .tasks import aligned_tokenization
 
 if config.from_pretrained:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
 else:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 NLP = spacy.load('en_core_web_sm')
 
 
@@ -176,7 +176,7 @@ def self_test():
 if __name__ == "__main__":
     parser = ArgumentParser(description="Tokenize text and prepares the datasets ready for NER learning tasks.")
     parser.add_argument("source_dir", nargs="?", help="Directory where the source files are located.")
-    parser.add_argument("dest_dir", nargs="?", default=LM_DATASET, help="The destination directory where the labeled dataset will be saved.")
+    parser.add_argument("dest_dir", nargs="?", help="The destination directory where the labeled dataset will be saved.")
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if source_dir_path:

@@ -26,7 +26,7 @@ from .show import ShowExample
 from .metrics import compute_metrics
 
 from common.config import config
-from common import TOKENIZER_PATH, LM_DATASET, LM_MODEL_PATH, CACHE
+from common import TOKENIZER_PATH, LM_MODEL_PATH, CACHE, RUNS_DIR
 
 
 def train(
@@ -37,7 +37,9 @@ def train(
     tokenizer: RobertaTokenizerFast
 ):
 
-    print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
+    print(f"tokenizer vocab size: {tokenizer.vocab_size}")
+
+    print(f"\nLoading datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         './lm/loader.py',
         data_config_name,
@@ -99,17 +101,20 @@ def train(
 
 if __name__ == "__main__":
 
+    # changing default values
     @dataclass
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=LM_MODEL_PATH)
+        logging_dir: str = field(default=RUNS_DIR)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
+        save_total_limit: int = field(default=5)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
-    parser.add_argument("dataset_path", nargs="?", default=LM_DATASET, help="The dataset to use for training.")
+    parser.add_argument("dataset_path", help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
@@ -121,7 +126,10 @@ if __name__ == "__main__":
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
     if config.from_pretrained:
-        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
+        tokenizer = RobertaTokenizerFast.from_pretrained(
+            config.from_pretrained,
+            max_len=config.max_length
+        )
     else:
         tokenizer = RobertaTokenizerFast.from_pretrained(
             TOKENIZER_PATH,
