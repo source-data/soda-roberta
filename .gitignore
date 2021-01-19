@@ -6,8 +6,8 @@ tokcl_models/
 tokenizer/
 cache/
 runs/
-./~cache
-./~data
+~*
+
 
 
 # Byte-compiled / optimized / DLL files
