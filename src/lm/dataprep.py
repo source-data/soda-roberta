@@ -14,9 +14,9 @@ from . import app
 # from .tasks import aligned_tokenization
 
 if config.from_pretrained:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
 else:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
 NLP = spacy.load('en_core_web_sm')
 
 

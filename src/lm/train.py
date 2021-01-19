@@ -37,7 +37,9 @@ def train(
     tokenizer: RobertaTokenizerFast
 ):
 
-    print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
+    print(f"tokenizer vocab size: {tokenizer.vocab_size}")
+
+    print(f"\nLoading datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         './lm/loader.py',
         data_config_name,
@@ -123,7 +125,10 @@ if __name__ == "__main__":
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
     if config.from_pretrained:
-        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
+        tokenizer = RobertaTokenizerFast.from_pretrained(
+            config.from_pretrained,
+            max_len=config.max_length
+        )
     else:
         tokenizer = RobertaTokenizerFast.from_pretrained(
             TOKENIZER_PATH,

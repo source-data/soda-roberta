@@ -9,7 +9,7 @@ RUN pip install torch==1.7.1
 RUN pip install python-dotenv==0.15.0
 RUN pip install nltk==3.5
 RUN pip install scikit-learn==0.24.0
-RUN pip install transformers==4.2.1
+RUN pip install transformers==4.1.1
 RUN pip install datasets==1.2.1
 # uninstalling TensorBoard 1.15.0+nv is making problem with 'cannot convert 0 to DType'
 # RUN pip uninstall -y tensorflow
