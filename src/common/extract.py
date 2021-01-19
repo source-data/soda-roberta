@@ -1,7 +1,7 @@
 from typing import List
 from pathlib import Path
 import argparse
-from xml.etree.ElementTree import parse, Element, tostring
+from lxml.etree import XPath, fromstring, tostring, parse, Element
 from nltk import PunktSentenceTokenizer
 from .utils import cleanup, innertext, progress
 from .config import config
@@ -23,8 +23,9 @@ class ExtractorXML:
         self.source_dir = source_dir
         self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         print(f"found {len(self.filepaths)} files.")
+        self.xpath = None
 
-    def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
+    def run(self, dest_dir: Path, selector: XPath, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
         """Extracts the examples from XML files and saves them in the destination directory.
         The XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
@@ -34,7 +35,7 @@ class ExtractorXML:
         Args:
             dest_dir (Path):
                 The path to the desitnation directory.
-            selector (str):
+            selector (XPath):
                 The XPath to select the xml element from which the inner text will be used as example.
             punkt (bool):
                 Whether to split the innert text into sentences, which will be saved as individual examples.
@@ -52,11 +53,12 @@ class ExtractorXML:
             dest_dir.mkdir()
             print(f"Created {dest_dir}")
         ext = "xml" if keep_xml else 'txt'
+        self.xpath = selector
         examples = []
         num_saved_examples = 0
         for i, filepath in enumerate(self.filepaths):
             progress(i, len(self.filepaths), f"{filepath}                         ")
-            new_examples = self._examples_from_file(filepath, selector, punkt, keep_xml, remove_tail)
+            new_examples = self._examples_from_file(filepath, punkt, keep_xml, remove_tail)
             examples += new_examples
             # save to disk as we go
             for j, example in enumerate(new_examples):
@@ -65,17 +67,17 @@ class ExtractorXML:
         print()
         return num_saved_examples
 
-    def _examples_from_file(self, filepath: Path, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool) -> List[str]:
+    def _examples_from_file(self, filepath: Path, punkt: bool, keep_xml: bool, remove_tail: bool) -> List[str]:
         examples = []
-        elements = self._parse_xml_file(filepath, xpath, remove_tail)
+        elements = self._parse_xml_file(filepath, remove_tail)
         examples = self._extract_text_from_elements(elements, punkt, keep_xml)
         examples = self._cleanup(examples)
         return examples
 
-    def _parse_xml_file(self, filepath: Path, xpath: str, remove_tail: bool) -> List[str]:
+    def _parse_xml_file(self, filepath: Path, remove_tail: bool) -> List[str]:
         with filepath.open() as f:
             xml = parse(f)
-            elements = xml.findall(xpath)
+            elements = self.xpath(xml)
             if remove_tail:
                 for e in elements:
                     if e.tail is not None:
@@ -136,7 +138,7 @@ def self_test():
     try:
         config.min_char_length = 5
         xtract = ExtractorXML(Path('/tmp'))
-        xtract.run(Path('/tmp/test'), selector='.//b', punkt=True)
+        xtract.run(Path('/tmp/test'), selector=XPath('.//b'), punkt=True)
         created_filenames = [f.name for f in Path('/tmp/test').iterdir()]
         print("created files:", created_filenames)
         expected_filenames = ['test_file_0_0.txt', 'test_file_0_1.txt', 'test_file_1_0.txt']
@@ -173,7 +175,7 @@ def main():
 
     args = parser.parse_args()
     extract_sentences = args.sentences
-    xpath = args.xpath
+    xpath = XPath(args.xpath)
     keep_xml = args.keep_xml
     if not args.corpus:
         self_test()
@@ -195,6 +197,7 @@ def main():
                     print(f"Saved {N} examples.")
             else:
                 print(f"{corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
+
 
 if __name__ == '__main__':
     main()

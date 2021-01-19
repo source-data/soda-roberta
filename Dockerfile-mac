@@ -16,5 +16,6 @@ RUN pip install seqeval==1.2.2
 RUN pip install celery==5.0.5
 RUN pip install flower==0.9.7
 RUN pip install spacy==2.3.5
+RUN pip install lxml==4.6.2
 # download language models for spacy
 RUN python -m spacy download en_core_web_sm
