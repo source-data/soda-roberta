@@ -51,7 +51,7 @@ def train(
 
     compute_metrics = MetricsComputer(label_list=label_list)
 
-    model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels)
+    model = RobertaForTokenClassification.from_pretrained(LM_MODEL_PATH, num_labels=num_labels, max_position_embeddings=config.max_length + 2)
 
     print("\nTraining arguments:")
     print(training_args)
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     training_args.output_dir = str(output_dir_path)  # includes the sub dir corresonding to the task data_config_name
     if config.from_pretrained:
         print(f"Loading tokenizer {config.from_pretrained}")
-        tokenizer = RobertaTokenizerFast.from_pretrained('roberta-large', max_len=config.max_length)
+        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
     else:
         print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)

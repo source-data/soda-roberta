@@ -30,12 +30,17 @@ services:
     command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
-    << : *nlp
+    build:
+      context: .
+      dockerfile: './Dockerfile'
     depends_on:
     - nlp
     - rabbitmq
-    command: ["celery", "--app", "lm", "worker", "--loglevel", "info"]
-
+    volumes:
+    - .:/app
+    working_dir: /app
+    command: celery --app=lm worker --loglevel=info
+  
   flower:
     << : *nlp
     depends_on:

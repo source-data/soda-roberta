@@ -2,7 +2,8 @@
 ./runs
 ./cache
 ./lm_dataset
-./lm_models
+lm_models**
+tokenizer**
 ./tokcl_dataset
 ./tokcl_models
 .git
