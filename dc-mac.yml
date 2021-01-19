@@ -8,9 +8,11 @@ services:
     image: sdbert
     volumes:
     - ./src:/app
-    - ./data:/app/data
-    - ./lm_models:/app/lm_models
-    - ./tokcl_models:/app/tokcl_models
+    - ./data:/data
+    - ./tokenizer:/tokenizer
+    - ./lm_models:/lm_models
+    - ./tokcl_models:/tokcl_models
+    - ./cache:/cache
     env_file:
     - ./.env
     ipc: host
@@ -28,7 +30,8 @@ services:
     - 6007:6007
     volumes:
     - ./runs:/runs
-    command: tensorboard --logdir /runs --port 6007 --bind_all
+    working_dir: /app
+    command: tensorboard --logdir /runs --port 6007 # --bind_all
 
   celery:
     build:
@@ -38,16 +41,26 @@ services:
     - rabbitmq
     volumes:
     - ./src:/app
+    - ./data:/data
+    - ./tokenizer:/tokenizer
+    - ./lm_models:/lm_models
+    - ./tokcl_models:/tokcl_models
+    - ./cache:/cache
+    env_file:
+    - ./.env
     working_dir: /app
-    command: celery -A "lm" worker --loglevel=info
+    command: celery --app=lm worker --loglevel=info
 
   flower:
-    <<: *nlp
+    build:
+      context: ./src
+      dockerfile: '../Dockerfile-mac'
     depends_on:
     - celery
     ports:
       - "5555:5555"
-    command: flower -A "lm" --port=5555 --broker="rabbitmq"
+    working_dir: /app/src
+    command: flower --app=lm --port=5555 --broker=rabbitmq
 
   rabbitmq:
     image: rabbitmq:3-management
