@@ -121,7 +121,7 @@ python -m common.extract /data/oapmc_articles /data/text/oapmc_abstracts/train -
 
 ## Tokenize and prepare dataset
 
-By default, the configuration file common.config specifies the pretrained 'roberta-base' model for fine tuning. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer with
+By default, the configuration file `common.config` specifies the pretrained 'roberta-base' model for fine tuning. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer with
 
 ````
 python -m lm.tokentrain /data/text/oapmc_abstracts  # ONLY WHEN TRAINING CUSTOMIZED MODEL!
@@ -130,7 +130,7 @@ python -m lm.tokentrain /data/text/oapmc_abstracts  # ONLY WHEN TRAINING CUSTOMI
 Tokenized the data:
 
 ````
-python -m lm.dataprep /data/text/oapmc_abstracts data/json/oapmc_abstracts
+python -m lm.dataprep /data/text/oapmc_abstracts /data/json/oapmc_abstracts
 ````
 
 ## Train language model
