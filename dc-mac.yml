@@ -15,9 +15,6 @@ services:
     - ./cache:/cache
     env_file:
     - ./.env
-    ipc: host
-    tty: true
-    stdin_open: true
     working_dir: /app
 
   tensorboard:
@@ -34,32 +31,15 @@ services:
     command: tensorboard --logdir /runs --port 6007 # --bind_all
 
   celery:
-    build:
-      context: ./src
-      dockerfile: '../Dockerfile-mac'
-    depends_on:
-    - rabbitmq
-    volumes:
-    - ./src:/app
-    - ./data:/data
-    - ./tokenizer:/tokenizer
-    - ./lm_models:/lm_models
-    - ./tokcl_models:/tokcl_models
-    - ./cache:/cache
-    env_file:
-    - ./.env
-    working_dir: /app
+    <<: *nlp
     command: celery --app=lm worker --loglevel=info
 
   flower:
-    build:
-      context: ./src
-      dockerfile: '../Dockerfile-mac'
+    <<: *nlp
     depends_on:
     - celery
     ports:
       - "5555:5555"
-    working_dir: /app/src
     command: flower --app=lm --port=5555 --broker=rabbitmq
 
   rabbitmq:
