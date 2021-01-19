@@ -99,7 +99,7 @@ if __name__ == "__main__":
     data_config_name = args.data_config_name
     dataset_path = args.dataset_path
     output_dir_path = Path(training_args.output_dir) / data_config_name
-    training_args.logging_dir = f"{RUNS_DIR}/tokcl-{data_config_name}-{datetime.now().isoformat().replace(':,'-'')}"
+    training_args.logging_dir = f"{RUNS_DIR}/tokcl-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")

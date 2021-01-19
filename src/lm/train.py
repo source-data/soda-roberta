@@ -122,7 +122,7 @@ if __name__ == "__main__":
     dataset_path = args.dataset_path
     data_config_name = args.data_config_name
     output_dir_path = Path(training_args.output_dir)
-    training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':,'-'')}"
+    training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
