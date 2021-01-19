@@ -1,6 +1,5 @@
 from transformers import TrainerCallback, RobertaTokenizerFast
 from random import randrange
-from typing import List
 import torch
 
 # uses spcial color characters for the console output
@@ -9,20 +8,6 @@ import torch
 # printf "\e[30;1mTesting color\e[0m"
 # for i in range(25,50): print(f"\033[{i};1mTesting color {i}\033[0m")
 # for i in range(256): print(f"\033[38;5;{i}mBlahblah color={i}\033[0mAnd normal")
-
-# "\033[48;1m", #grey
-# "\033[34;1m", #blue first since often assayed
-# "\033[31;1m", #red
-# "\033[33;1m", #yellow
-# "\033[32;1m", #green
-# "\033[35;1m", #pink
-# "\033[36;1m", #turquoise
-# "\033[41;37;1m", #red back
-# "\033[42;37;1m", #green back
-# "\033[43;37;1m", #yellow back
-# "\033[44;37;1m", #blue back
-# "\033[45;37;1m" #turquoise back
-# "\033[0m", # close
 
 
 class ShowExample(TrainerCallback):

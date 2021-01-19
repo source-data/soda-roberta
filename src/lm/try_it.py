@@ -1,5 +1,3 @@
-import json
-from pathlib import Path
 from transformers import pipeline, RobertaTokenizerFast
 from argparse import ArgumentParser
 from common import LM_MODEL_PATH, TOKENIZER_PATH

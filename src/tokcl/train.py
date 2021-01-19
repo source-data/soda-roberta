@@ -14,7 +14,7 @@ from datasets import load_dataset, GenerateMode
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
-from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_DATASET, TOKCL_MODEL_PATH, CACHE
+from common import LM_MODEL_PATH, TOKENIZER_PATH, TOKCL_MODEL_PATH, CACHE
 
 
 def train(
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         per_device_eval_batch_size: int = field(default=16)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
-    parser.add_argument("dataset_path", nargs="?", default=TOKCL_DATASET, help="The dataset to use for training.")
+    parser.add_argument("dataset_path", help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()

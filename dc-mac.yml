@@ -1,26 +1,23 @@
 version: '2.3'
 
 services:
-  nlp: &nlp
+  nlp:
     build:
       context: ./src
       dockerfile: '../Dockerfile-mac'
+      args:
+        - user_id=${USER_ID}
+        - group_id=${GROUP_ID}
     image: sdbert
     volumes:
-    - ./src:/app
-    - ./data:/data
-    - ./tokenizer:/tokenizer
-    - ./lm_models:/lm_models
-    - ./tokcl_models:/tokcl_models
-    - ./cache:/cache
+    - .:/app
     env_file:
     - ./.env
-    working_dir: /app
+    working_dir: /app/src
+    entrypoint: ["/bin/bash"]
 
   tensorboard:
-    build:
-      context: ./src
-      dockerfile: '../Dockerfile-mac'
+    image: sdbert
     depends_on:
     - nlp
     ports:
@@ -31,13 +28,21 @@ services:
     command: tensorboard --logdir /runs --port 6007 # --bind_all
 
   celery:
-    <<: *nlp
+    image: sdbert
+    depends_on:
+    - nlp
+    volumes:
+    - .:/app
+    working_dir: /app/src
     command: celery --app=lm worker --loglevel=info
 
   flower:
-    <<: *nlp
+    image: sdbert
     depends_on:
     - celery
+    volumes:
+    - .:/app
+    working_dir: /app/src
     ports:
       - "5555:5555"
     command: flower --app=lm --port=5555 --broker=rabbitmq
