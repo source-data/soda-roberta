@@ -33,7 +33,7 @@ services:
     volumes:
     - ./runs:/runs
     working_dir: /app
-    command: tensorboard --logdir /runs --port 6007 # --bind_all
+    command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
     image: sdbert
