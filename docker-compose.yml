@@ -4,7 +4,7 @@ services:
   nlp:
     build:
       context: ./src
-      dockerfile: '../Dockerfile-mac'
+      dockerfile: '../Dockerfile'
       # args: # abandoning this for now, transfomers needs to be abel to mkdir /.cache
       #   - user_id=${USER_ID}
       #   - group_id=${GROUP_ID}
