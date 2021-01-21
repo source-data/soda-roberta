@@ -197,7 +197,7 @@ def main():
                 for source_path, destination_path in zip(source_paths, destination_paths):
                     if not destination_path.exists():
                         destination_path.mkdir()
-                        print(f"Created {dest_dir}")
+                        print(f"Created {destination_path}")
                     N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
                     print(f"Saved {N} examples.")
             else:
