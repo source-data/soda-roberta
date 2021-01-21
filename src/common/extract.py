@@ -48,9 +48,6 @@ class ExtractorXML:
                 The number of examples saved to disk.
         """
 
-        if not dest_dir.exists():
-            dest_dir.mkdir()
-            print(f"Created {dest_dir}")
         ext = "xml" if keep_xml else 'txt'
         self.xpath = selector
         num_saved_examples = 0
@@ -179,23 +176,28 @@ def main():
         self_test()
     else:
         corpus_path = Path(args.corpus)
-        if not destination:
+        if destination:
+            destination_dir = Path(destination)
+        else:
             basename = corpus_path.name
             if keep_xml:
-                destination = Path("/data/xml") / basename
+                destination_dir = Path("/data/xml") / basename
             else:
-                destination = Path("/data/text") / basename
+                destination_dir = Path("/data/text") / basename
         subsets = ["train", "eval", "test"]
         source_paths = [corpus_path / subset for subset in subsets]
-        destination_paths = [destination / subset for subset in subsets]
+        destination_paths = [destination_dir / subset for subset in subsets]
         if any([True if p.exists() else False for p in destination_paths]):
-            print(f"{destination} is not empty and has already {' or '.join(subsets)} sub-directories. Cannot proceed.")
+            print(f"{destination_dir} is not empty and has already {' or '.join(subsets)} sub-directories. Cannot proceed.")
         else:
-            if all([True if p.exists() else False for p in source_paths]):
-                if not destination.exists():
-                    destination.mkdir()
-                    print(f"{destination} created!")
+            if all([True if source.exists() else False for source in source_paths]):
+                if not destination_dir.exists():
+                    destination_dir.mkdir()
+                    print(f"{destination_dir} created!")
                 for source_path, destination_path in zip(source_paths, destination_paths):
+                    if not destination_path.exists():
+                        destination_path.mkdir()
+                        print(f"Created {dest_dir}")
                     N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
                     print(f"Saved {N} examples.")
             else:
