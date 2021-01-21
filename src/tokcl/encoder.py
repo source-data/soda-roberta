@@ -32,13 +32,14 @@ class XMLEncoder:
                 A dictionary with:
                    - 'label_ids' (List): the list of label ids
                    - 'offsets' (Tuple[int, int]): the offsets indicating the start and end postition of each labeled element
-                   - 'xml' (str): the xml as string for reference and degbuging
+                   - 'xml' (str): the xml as string for reference and debuging
         """
         self.code_map = code_map
         encoded, offsets, _ = self._encode(self.element)
         labels_and_offsets = {'label_ids': encoded, 'offsets': offsets, 'xml': tostring(self.element)}
         for start, end in offsets:
-            assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"
+            if end - start > 0:
+                assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"
         return labels_and_offsets
 
     def _encode(self, element: Element, pos: int = 0) -> List[int]:
