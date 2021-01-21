@@ -38,7 +38,7 @@ class XMLEncoder:
         encoded, offsets, _ = self._encode(self.element)
         labels_and_offsets = {'label_ids': encoded, 'offsets': offsets, 'xml': tostring(self.element)}
         for start, end in offsets:
-            if end - start > 0:
+            if end - start > 0:  # check only if not zero length
                 assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"
         return labels_and_offsets
 
