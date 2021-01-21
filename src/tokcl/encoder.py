@@ -39,7 +39,7 @@ class XMLEncoder:
         labels_and_offsets = {'label_ids': encoded, 'offsets': offsets, 'xml': tostring(self.element)}
         for start, end in offsets:
             if end - start > 0:  # check only if not zero length
-                assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\n{start}, {end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"
+                assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\nstart={start}, end={end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"
         return labels_and_offsets
 
     def _encode(self, element: Element, pos: int = 0) -> List[int]:
@@ -52,10 +52,14 @@ class XMLEncoder:
         L_inner_text = len(inner_text)
         # print(f"{'•' * pos}{inner_text}<{element.tag}, {pos}, {pos + L_inner_text}, tail={L_tail}>")
         if code:
-            # as soon as an element corresponds to one of the code, the code is proagated on the whole length of the element and its tail
-            encoded = [code] * L_inner_text
-            offsets = [(pos, pos + L_inner_text)]
-            pos += L_inner_text
+            if L_inner_text > 0:  # ignore empty elements, cannot label them
+                # as soon as an element corresponds to one of the code, the code is proagated on the whole length of the element and its tail
+                encoded = [code] * L_inner_text
+                offsets = [(pos, pos + L_inner_text)]
+                pos += L_inner_text
+            else:
+                encoded = []
+                offsets = []
         else:
             encoded = [None] * L_text
             offsets = []
@@ -85,7 +89,7 @@ class XMLEncoder:
 
 
 def demo():
-    example = "<xml>Here <sd-panel><p>it is<sd-tag role='reporter'> </sd-tag>: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </p></sd-panel>."
+    example = "<xml>Here <sd-panel><p>it <sd-tag type='gene'></sd-tag>is<sd-tag role='reporter'> </sd-tag>: <i>nested <sd-tag role='reporter'>in</sd-tag> <sd-tag category='entity' type='gene' role='intervention'>Creb-1</sd-tag> with some <sd-tag type='protein' role='assayed'>tail</sd-tag></i>. End </p></sd-panel>."
     example += ' 1 2 3 4 5' + '</xml>'
     xml = fromstring(example)
     inner_text = innertext(xml)
