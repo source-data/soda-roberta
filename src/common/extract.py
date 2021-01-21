@@ -174,11 +174,12 @@ def main():
     extract_sentences = args.sentences
     xpath = XPath(args.xpath)
     keep_xml = args.keep_xml
+    destination = args.destination
     if not args.corpus:
         self_test()
     else:
         corpus_path = Path(args.corpus)
-        if not args.destination:
+        if not destination:
             basename = corpus_path.name
             if keep_xml:
                 destination = Path("/data/xml") / basename
@@ -199,7 +200,6 @@ def main():
                     print(f"Saved {N} examples.")
             else:
                 print(f"The source {corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
-
 
 
 if __name__ == '__main__':
