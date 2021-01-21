@@ -1,11 +1,10 @@
 from typing import List
 from pathlib import Path
 import argparse
-from lxml.etree import XPath, fromstring, tostring, parse, Element
+from lxml.etree import XPath, tostring, parse, Element
 from nltk import PunktSentenceTokenizer
 from .utils import cleanup, innertext, progress
 from .config import config
-from . import LM_DATASET
 
 
 class ExtractorXML:
@@ -54,12 +53,10 @@ class ExtractorXML:
             print(f"Created {dest_dir}")
         ext = "xml" if keep_xml else 'txt'
         self.xpath = selector
-        examples = []
         num_saved_examples = 0
         for i, filepath in enumerate(self.filepaths):
             progress(i, len(self.filepaths), f"{filepath}                         ")
             new_examples = self._examples_from_file(filepath, punkt, keep_xml, remove_tail)
-            examples += new_examples
             # save to disk as we go
             for j, example in enumerate(new_examples):
                 filename = filepath.stem
@@ -127,10 +124,10 @@ def self_test():
     """Just call the module to sefl-test it.
     """
     content = [
-        '<xml><b>This was it. Maybe it is not</b></xml>',
+        '<xml><b>This was it. Maybe it is not.</b></xml>',
         '<xml><b>This <g>is</g> not.</b> It!</xml>'
     ]
-    expected_examples = ['This was it.', 'Maybe it is not', 'This is not.']
+    expected_examples = ['This was it.', 'Maybe it is not.', 'This is not.']
     for i, e in enumerate(content):
         p = Path('/tmp/test_file_'+str(i)+'.xml')
         p.write_text(e)
@@ -148,7 +145,7 @@ def self_test():
             assert created in expected_filenames, f"'{created}' not it '{expected_filenames}'"
         print("correctly created files!")
 
-        for i, filename in enumerate(created_filenames):
+        for i, filename in enumerate(expected_filenames):
             expected = expected_examples[i]
             p = Path('/tmp/test') / filename
             loaded = p.read_text()
@@ -168,7 +165,7 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('corpus', nargs="?", default=None, help='path to the corpus of documents to use.')
-    parser.add_argument('destination', nargs="?", default=LM_DATASET, help='Destination folder for extracted text files.')
+    parser.add_argument('destination', nargs="?", default=None, help='Destination folder for extracted text files.')
     parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
     parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')
@@ -181,7 +178,12 @@ def main():
         self_test()
     else:
         corpus_path = Path(args.corpus)
-        destination = Path(args.destination)
+        if not args.destination:
+            basename = corpus_path.name
+            if keep_xml:
+                destination = Path("/data/xml") / basename
+            else:
+                destination = Path("/data/text") / basename
         subsets = ["train", "eval", "test"]
         source_paths = [corpus_path / subset for subset in subsets]
         destination_paths = [destination / subset for subset in subsets]
@@ -196,7 +198,8 @@ def main():
                     N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
                     print(f"Saved {N} examples.")
             else:
-                print(f"{corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
+                print(f"The source {corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
+
 
 
 if __name__ == '__main__':
