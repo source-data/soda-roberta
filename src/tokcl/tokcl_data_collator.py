@@ -50,6 +50,7 @@ class DataCollatorForMaskedTokenClassification:
     tokenizer: PreTrainedTokenizerBase
     masking_probability: float = 0
     padding: Union[bool, str, PaddingStrategy] = True
+    pad_token_id: int = -100
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     select_labels: bool = False
@@ -89,10 +90,10 @@ class DataCollatorForMaskedTokenClassification:
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
             batch["tag_mask"] = [x + [0] * (sequence_length - len(x)) for x in tag_mask]
-            batch["labels"] = [x + [self.tokenizer.pad_token_id] * (sequence_length - len(x)) for x in labels]
+            batch["labels"] = [x + [self.pad_token_id] * (sequence_length - len(x)) for x in labels]
         else:
             batch["tag_mask"] = [[0] * (sequence_length - len(x)) + x for x in tag_mask]
-            batch["labels"] = [[self.tokenizer.pad_token_id] * (sequence_length - len(x)) + x for x in labels]
+            batch["labels"] = [[self.pad_token_id] * (sequence_length - len(x)) + x for x in labels]
         # convert dict of list of lists into ditc of tensors
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         # stochastically mask input ids according to tag_mask
