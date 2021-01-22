@@ -44,10 +44,11 @@ def train(
         data_collator = DataCollatorForMaskedTokenClassification(
             tokenizer=tokenizer,
             max_length=config.max_length,
-            masking_probability=training_args.masking_probability
+            masking_probability=training_args.masking_probability,
+            select_labels=training_args.select_labels
         )
     else:
-        # notmal token classification
+        # normal token classification
         data_collator = DataCollatorForTokenClassification(
             tokenizer=tokenizer,
             max_length=config.max_length
@@ -93,11 +94,12 @@ if __name__ == "__main__":
         output_dir: str = field(default=TOKCL_MODEL_PATH)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
-        evaluation_strategy: EvaluationStrategy = EvaluationStrategy.STEPS
+        evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
         save_total_limit: int = field(default=5)
         masking_probability: float = field(default=None)
+        select_labels: bool = field(default=None)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", help="The dataset to use for training.")
@@ -119,10 +121,16 @@ if __name__ == "__main__":
     else:
         print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-    if (data_config_name == "NER") and (training_args.masking_probability is None):
-        # just slight level of masking to slow down overfitting and reinforce contextual learning
-        training_args.masking_probability = 0.1
-    elif (data_config_name == "ROLES") and (training_args.masking_probability is None):
-        # pure contextual learning, all entities masked
-        training_args.masking_probability = 1.0
+    if (data_config_name == "NER"):
+        if (training_args.masking_probability is None):
+            # just slight level of masking to slow down overfitting and reinforce contextual learning
+            training_args.masking_probability = 0.15
+        if training_args.select_labels is None:
+            training_args.select_labels = False  # loss calculated over the entire sequence
+    elif (data_config_name == "ROLES"):
+        if (training_args.masking_probability is None):
+            # pure contextual learning, all entities masked
+            training_args.masking_probability = 1.0
+        if training_args.select_labels is None:
+            training_args.select_labels = True  # loss calculated only over the labeled tokens
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
