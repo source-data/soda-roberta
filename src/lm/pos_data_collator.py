@@ -14,7 +14,7 @@
 
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 from transformers.data.data_collator import PaddingStrategy
 import torch
 
@@ -27,21 +27,22 @@ of Tensors.
 
 
 @dataclass
-class DataCollatorForPOSMaskedLanguageModeling:
+class DataCollatorForTargetedMasking:
     """
-    Data collator used for masked part-of-speeach (POS) language modeling. 
-    Instead of masking any random token as in MLM, only token that belong to a defined POS class are masked.
+    Data collator used for random masking of targeted classes of token.
+    Useful for learning language models based on masking part-of-speech tokens. 
+    Instead of masking any random token as in MLM, only token that belong to a defined class are masked.
     Inputs, labels and masks are dynamically padded to the maximum length of a batch if they are not all of the same length.
 
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
         mlm_probability (:obj:`float`, `optional`, defaults to 1.0):
-            The probability with which a  mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+            The probability with which to mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
 
     .. note::
 
-        This data collator expects a dataset having items that are dictionaries 
+        This data collator expects a dataset having items that are dictionaries
         with the "special_tokens_mask" and "pos_mask" keys.
     """
 
@@ -55,16 +56,16 @@ class DataCollatorForPOSMaskedLanguageModeling:
         if self.tokenizer.mask_token_id is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
     def __call__(self, features) -> Dict[str, torch.Tensor]:
-        pos_mask = [feature['pos_mask'] for feature in features] if 'pos_mask' in features[0].keys() else None
-        special_tokens_mask = [feature['special_tokens_mask'] for feature in features] if 'special_tokens_mask' in features[0].keys() else None
-
-        if pos_mask is None:
+        """
+        In addition to input_ids, a feature 'tag_mask' needs to be provided to specify which token might be masked.
+        """
+        tag_mask = [feature['tag_mask'] for feature in features] if 'tag_mask' in features[0].keys() else None
+        if tag_mask is None:
             raise ValueError(
-                "Part-of-speech masks should be provided to indicate which input token to mask."
+                "A mask should be provided to indicate which input token class to mask."
             )
         batch = self.tokenizer.pad(
             features,
@@ -72,37 +73,33 @@ class DataCollatorForPOSMaskedLanguageModeling:
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of
         )
-        batch['pos_mask'] = pos_mask
-        batch['special_tokens_mask'] = special_tokens_mask
+        batch['tag_mask'] = tag_mask
         sequence_length = len(batch["input_ids"][0])
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["pos_mask"] = [
-                x + [0] * (sequence_length - len(x)) for x in batch["pos_mask"]
-            ]
-            batch["special_tokens_mask"] = [
-                x + [0] * (sequence_length - len(x)) for x in batch["special_tokens_mask"]
+            batch["tag_mask"] = [
+                x + [0] * (sequence_length - len(x)) for x in batch["tag_mask"]
             ]
         else:
-            batch["pos_mask"] = [
-                [0] * (sequence_length - len(x)) + x for x in batch["pos_mask"]
-            ]
-            batch["special_tokens_masks"] = [
-                [0] * (sequence_length - len(x)) + x for x in batch["special_tokens_mask"]
+            batch["tag_mask"] = [
+                [0] * (sequence_length - len(x)) + x for x in batch["tag_mask"]
             ]
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
-        batch["input_ids"], batch["labels"] = self.pos_mask_tokens(batch["input_ids"], batch["pos_mask"])
-        batch.pop("pos_mask")
-        batch.pop("special_tokens_mask")
+        batch["input_ids"], batch["labels"] = self.tag_mask_tokens(batch["input_ids"], batch["tag_mask"])
+        batch.pop("tag_mask")
         return batch
 
-    def pos_mask_tokens(self, inputs: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Masks the input as specified by the mask prepared by the loader"""
+    def tag_mask_tokens(self, inputs: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Masks the input as specified by the tag mask prepared by the loader"""
         targets = inputs.clone()
+        # create and initialize the probability matric for masking to zeros
         probability_matrix = torch.zeros_like(targets, dtype=torch.float64)
-        probability_matrix.masked_fill_(mask, value=self.mlm_probability)
+        # update in-place probability to the set mlm_probability value where mask is true
+        probability_matrix.masked_fill_(mask.bool(), value=self.mlm_probability)
+        # use the probability at each position to randomly mask or not
         masked_indices = torch.bernoulli(probability_matrix).bool()
+        # reolace input_ids by the mask token id at position that need to be masked
         inputs[masked_indices] = self.tokenizer.mask_token_id
+        # we train to only predict the masked position
         targets[~masked_indices] = -100  # We only compute loss on masked tokens
         return inputs, targets
-

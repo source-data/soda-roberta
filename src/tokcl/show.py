@@ -3,6 +3,7 @@ from random import randrange
 import torch
 
 # uses spcial color characters for the console output
+# https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html#colors
 # for code in {1..256}; do printf "\e[38;5;${code}m"$code"\e[0m";echo; done
 # for i = 1, 32 do COLORS[i] = "\27[38;5;"..(8*i-7).."m" end
 # printf "\e[30;1mTesting color\e[0m"
@@ -21,6 +22,7 @@ class ShowExample(TrainerCallback):
     """
 
     UNDERSCORE = "\033[4m"
+    BOLD = "\033[1m"
     CLOSE = "\033[0m"
     COLOR = "\033[38;5;{color_idx}m"
 
@@ -29,12 +31,19 @@ class ShowExample(TrainerCallback):
         self.tokenizer = tokenizer
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
-        N = len(eval_dataloader.dataset)
-        idx = randrange(N)
+        batch = next(iter(eval_dataloader))
+        rand_example = randrange(batch['input_ids'].size(0))
+        input_ids = batch['input_ids'][rand_example]
+        attention_mask = batch['attention_mask'][rand_example]
+        labels = batch['labels'][rand_example]
+        inputs = {
+            'input_ids': input_ids,
+            'labels': labels,
+            'attention_mask': attention_mask
+        }
         with torch.no_grad():
-            inputs = eval_dataloader.dataset[idx]
             for k, v in inputs.items():
-                inputs[k] = torch.tensor(v).unsqueeze(0)
+                inputs[k] = v.clone().unsqueeze(0)  # single example
                 if torch.cuda.is_available():
                     inputs[k] = inputs[k].cuda()
             pred = model(**inputs)
@@ -43,10 +52,16 @@ class ShowExample(TrainerCallback):
         labels_idx = [e.item() for e in labels_idx]
         input_ids = [e.item() for e in input_ids]
         colored = ""
-        for input_id, label_idx in zip(input_ids, labels_idx):
-            decoded = self.tokenizer.decode(input_id)
-            if label_idx > 0:
-                colored += f"{self.UNDERSCORE}{self.COLOR.format(color_idx=label_idx)}{decoded}{self.CLOSE}"
-            else:
-                colored += decoded
+        for i in range(len(input_ids)):
+            input_id = input_ids[i]
+            label_idx = labels_idx[i]
+            true_label = labels[i].item()
+            if input_id != self.tokenizer.pad_token_id:  # don't display padding
+                decoded = self.tokenizer.decode(input_id)
+                # indicate the true label with underline
+                underscore = self.UNDERSCORE if true_label > 0 else ''
+                if label_idx > 0:
+                    colored += f"{self.BOLD}{underscore}{self.COLOR.format(color_idx=label_idx)}{decoded}{self.CLOSE}"
+                else:
+                    colored += f"{underscore}{decoded}{self.CLOSE}"
         print(f"\n\n{colored}\n\n")

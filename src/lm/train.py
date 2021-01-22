@@ -22,7 +22,7 @@ from transformers import (
 )
 from datasets import load_dataset, GenerateMode
 from .trainer import MyTrainer
-from .data_collator import DataCollatorForPOSMaskedLanguageModeling
+from .pos_data_collator import DataCollatorForTargetedMasking
 from .show import ShowExample
 from .metrics import compute_metrics
 
@@ -51,7 +51,7 @@ def train(
     )
 
     if data_config_name != "MLM":
-        data_collator = DataCollatorForPOSMaskedLanguageModeling(
+        data_collator = DataCollatorForTargetedMasking(
             tokenizer=tokenizer,
             max_length=config.max_length
         )

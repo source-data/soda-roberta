@@ -1,6 +1,5 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 from typing import NamedTuple
-from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -11,7 +10,7 @@ from transformers import (
     Trainer, HfArgumentParser, EvaluationStrategy
 )
 from datasets import load_dataset, GenerateMode
-# from datasets.utils.download_manager import GenerateMode
+from .tokcl_data_collator import DataCollatorForMaskedTokenClassification
 from .metrics import MetricsComputer
 from .show import ShowExample
 from common.config import config
@@ -34,16 +33,25 @@ def train(
         data_dir=dataset_path,
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
-        cache_dir=CACHE,
-        tokenizer=tokenizer
+        cache_dir=CACHE
     )
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
-    data_collator = DataCollatorForTokenClassification(
-        tokenizer=tokenizer,
-        max_length=config.max_length
-    )
+    if data_config_name in ["NER", "ROLES"]:
+        # use our fancy data collator that randomly masks some of the inputs to enforce context learning
+        training_args.remove_unused_columns = False  # we need tag_mask
+        data_collator = DataCollatorForMaskedTokenClassification(
+            tokenizer=tokenizer,
+            max_length=config.max_length,
+            masking_probability=training_args.masking_probability
+        )
+    else:
+        # notmal token classification
+        data_collator = DataCollatorForTokenClassification(
+            tokenizer=tokenizer,
+            max_length=config.max_length
+        )
 
     num_labels = train_dataset.info.features['labels'].feature.num_classes
     label_list = train_dataset.info.features['labels'].feature.names
@@ -89,10 +97,11 @@ if __name__ == "__main__":
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
         save_total_limit: int = field(default=5)
+        masking_probability: float = field(default=None)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", help="The dataset to use for training.")
-    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION", "CELL_TYPE_LINE", "GENEPROD"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="NER", choices=["NER", "ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
@@ -110,4 +119,10 @@ if __name__ == "__main__":
     else:
         print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
+    if (data_config_name == "NER") and (training_args.masking_probability is None):
+        # just slight level of masking to slow down overfitting and reinforce contextual learning
+        training_args.masking_probability = 0.1
+    elif (data_config_name == "ROLES") and (training_args.masking_probability is None):
+        # pure contextual learning, all entities masked
+        training_args.masking_probability = 1.0
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
