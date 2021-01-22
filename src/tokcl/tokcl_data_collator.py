@@ -52,7 +52,7 @@ class DataCollatorForMaskedTokenClassification:
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
-    select_labels: False
+    select_labels: bool = False
 
     def __post_init__(self):
         if self.tokenizer.mask_token_id is None:
