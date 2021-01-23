@@ -45,6 +45,7 @@ def train(
             tokenizer=tokenizer,
             max_length=config.max_length,
             masking_probability=training_args.masking_probability,
+            replacement_probability=training_args.replacement_probability,
             select_labels=training_args.select_labels
         )
     else:
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     if (data_config_name == "NER"):
         if training_args.replacement_probability is None:
-            # introduce noise to scramble entitie so that reinforce role of context over text of entity
+            # introduce noise to scramble entities to reinforce role of context over entity identity
             training_args.replacement_probability = 0.2
         if training_args.masking_probability is None:
             training_args.masking_probability = .0
