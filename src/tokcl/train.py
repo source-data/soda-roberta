@@ -123,15 +123,19 @@ if __name__ == "__main__":
         print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     if (data_config_name == "NER"):
-        if (training_args.replacement_probability is None):
+        if training_args.replacement_probability is None:
             # introduce noise to scramble entitie so that reinforce role of context over text of entity
             training_args.replacement_probability = 0.2
+        if training_args.masking_probability is None:
+            training_args.masking_probability = .0
         if training_args.select_labels is None:
             training_args.select_labels = False  # loss calculated over the entire sequence
-    elif (data_config_name == "ROLES"):
-        if (training_args.masking_probability is None):
+    elif data_config_name == "ROLES":
+        if training_args.masking_probability is None:
             # pure contextual learning, all entities are masked
             training_args.masking_probability = 1.0
+        if training_args.replacement_probability is None:
+            training_args.replacement_probability = .0
         if training_args.select_labels is None:
             training_args.select_labels = True  # loss calculated only over the labeled tokens
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
