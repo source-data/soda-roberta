@@ -101,7 +101,7 @@ if __name__ == "__main__":
         save_total_limit: int = field(default=5)
         masking_probability: float = field(default=None)
         replacement_probability: float = field(default=None)
-        select_labels: bool = field(default=None)
+        select_labels: bool = field(default=False)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("dataset_path", help="The dataset to use for training.")
@@ -129,14 +129,10 @@ if __name__ == "__main__":
             training_args.replacement_probability = 0.2
         if training_args.masking_probability is None:
             training_args.masking_probability = .0
-        if training_args.select_labels is None:
-            training_args.select_labels = False  # loss calculated over the entire sequence
     elif data_config_name == "ROLES":
         if training_args.masking_probability is None:
             # pure contextual learning, all entities are masked
             training_args.masking_probability = 1.0
         if training_args.replacement_probability is None:
             training_args.replacement_probability = .0
-        if training_args.select_labels is None:
-            training_args.select_labels = True  # loss calculated only over the labeled tokens
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
