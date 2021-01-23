@@ -49,6 +49,7 @@ class DataCollatorForMaskedTokenClassification:
 
     tokenizer: PreTrainedTokenizerBase
     masking_probability: float = 0
+    replacement_probability: float = 0
     padding: Union[bool, str, PaddingStrategy] = True
     pad_token_id: int = -100
     max_length: Optional[int] = None
@@ -97,7 +98,7 @@ class DataCollatorForMaskedTokenClassification:
         # convert dict of list of lists into ditc of tensors
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         # stochastically mask input ids according to tag_mask
-        batch["input_ids"], batch["labels"] = self.tag_mask_tokens(batch["input_ids"], batch["labels"], batch["tag_mask"].bool())
+        batch["input_ids"], batch["labels"] = self.tag_mask_tokens(batch["input_ids"], batch["labels"], batch["tag_mask"])
         # remove tak_mask from match as it would be rejected by model.forward()
         batch.pop("tag_mask")
         return batch
@@ -107,14 +108,20 @@ class DataCollatorForMaskedTokenClassification:
         inputs = inputs.clone()  # not sure if necessary; might be safer to avoid changing input features when provided as tensor
         if self.select_labels:
             targets = targets.clone()
-        # create and initialize the probability matrix for masking to zeros
-        probability_matrix = torch.zeros_like(inputs, dtype=torch.float64)
-        # update in-place to the masking_probability where mask is true
-        probability_matrix.masked_fill_(mask, value=self.masking_probability)
-        # use the probability at each position to randomly mask or not
-        masked_indices = torch.bernoulli(probability_matrix).bool()
+        # create the probability matrix for masking
+        masking_probability_matrix = torch.full_like(inputs, self.masking_probability)
+        # use the probability matrix to draw whether to replace or not and intersect with the mask
+        masked_indices = torch.bernoulli(masking_probability_matrix).bool() & mask.bool()
         # replace input_ids by the mask token id at position that need to be masked
         inputs[masked_indices] = self.tokenizer.mask_token_id
+        # second probability matrix is to determin whether to randomize remaining marked tokens
+        replacement_probability_matrix = torch.full_like(inputs, self.replacement_probability)
+        # indices of token to replace found by drawing from prob matric and intersecting with mask but exclusin alreayd masked positions
+        replaced_indices = torch.bernoulli(replacement_probability_matrix).bool() & mask.bool() & ~masked_indices
+        # draw random int from vocab size of tokenizer and fill tenzoer of shape like intput
+        random_input_ids = torch.randint_like(len(self.tokenizer), inputs, dtype=torch.long)
+        # at the replacmenet indices, change to random token
+        inputs[replaced_indices] = random_input_ids[replaced_indices]
         if self.select_labels:
             # only labels at the makred position (irrespective of whether they are masked) will be used for calculating the loss
             targets[~mask] = -100

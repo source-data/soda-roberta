@@ -99,6 +99,7 @@ if __name__ == "__main__":
         per_device_eval_batch_size: int = field(default=16)
         save_total_limit: int = field(default=5)
         masking_probability: float = field(default=None)
+        replacement_probability: float = field(default=None)
         select_labels: bool = field(default=None)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
@@ -122,14 +123,14 @@ if __name__ == "__main__":
         print(f"Loading tokenizer from {TOKENIZER_PATH}")
         tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
     if (data_config_name == "NER"):
-        if (training_args.masking_probability is None):
-            # just slight level of masking to slow down overfitting and reinforce contextual learning
-            training_args.masking_probability = 0.15
+        if (training_args.replacement_probability is None):
+            # introduce noise to scramble entitie so that reinforce role of context over text of entity
+            training_args.replacement_probability = 0.2
         if training_args.select_labels is None:
             training_args.select_labels = False  # loss calculated over the entire sequence
     elif (data_config_name == "ROLES"):
         if (training_args.masking_probability is None):
-            # pure contextual learning, all entities masked
+            # pure contextual learning, all entities are masked
             training_args.masking_probability = 1.0
         if training_args.select_labels is None:
             training_args.select_labels = True  # loss calculated only over the labeled tokens
