@@ -52,7 +52,7 @@ class ExtractorXML:
         self.xpath = selector
         num_saved_examples = 0
         for i, filepath in enumerate(self.filepaths):
-            progress(i, len(self.filepaths), f"{filepath}                         ")
+            progress(i, len(self.filepaths), f"{filepath}         ")
             new_examples = self._examples_from_file(filepath, punkt, keep_xml, remove_tail)
             # save to disk as we go
             for j, example in enumerate(new_examples):

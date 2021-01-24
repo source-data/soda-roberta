@@ -25,7 +25,7 @@ Accordingly, a specialized language model for scientific biological language is 
 
 We provide below the instructions to train the language model by fine tuning a pretrained Roberta transormer on text from PubMedCentral and by training the 3 specific models using the SourceData datset.
 
-The training data is in the form of XML. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
+The training data is in the form of XML files. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
 
 # Quick access to the pretrained SoDa-RoBERTa models and the SmartTag pipeline.
 
@@ -33,34 +33,29 @@ Under construction.
 
 # General Setup
 
-Build and start the Docker container:
+Build and start the Docker container with docker-compose:
 
 ```
 docker-compose build
-docker-compose up -d
+docker-compose run --rm nlp
 ```
 
 This will start the following services:
 
 - `nlp` service to run the training commands (with bash as entrypoint)
 - a `tensorboard` service on port 6007 (visita at http://localhost:6007) to visualize trainig
-- celery/rabbitmq to paralellize data preparation; progress can be followed at on https://localhost:5555 with flower running on port 5555.
+- celery/rabbitmq/flower to paralellize data preparation; progress can be followed at on https://localhost:5555 with flower running on port 5555.
 
-Optionally start a tmux session (more convenient when training lasts a while) and the `nlp` service:
+The entrypoint in nlp is bash.
 
-```
-tmux
-docker-compose run --rm nlp 
-```
-
-The default layout is as follows:
+Within the container, the assumed default layout is as follows:
 ```
 /app
 /data
     ├── /xml         # XML files used as source of examples or for token classification
     │── /text        # text files used for languag modeling
     └── /json        # pre-tokenized and labeled datasets
-/lm_models           # language model models
+/lm_models           # language models
 /tockl_models        # token classification models
 /cache               # the cache used by the data loader
 ```
@@ -114,18 +109,19 @@ python -m common.split /data/xml/oapmc_articles
 Extract text from the abstracts
 
 ```
-python -m common.extract /data/oapmc_articles /data/text/oapmc_abstracts/train -P .//abstract
+python -m common.extract /data/oapmc_articles  -P .//abstract
+# creates by default /data/text/oapmc_abstracts/ with train valid and test sub dir
 ```
 
-Note: it is possibel to combined several XPath with boolean connections to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be large):
+Note: it is possibel to combined several XPath with the `|` operator to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be very large):
 
 ```
-python -m common.extract /data/oapmc_articles /data/text/oapmc_abstracts/train -P ".//abstract and .//fig"
+python -m common.extract /data/oapmc_articles /data/text/oapmc_abstracts_and_figs -P ".//abstract | .//fig"
 ```
 
 ## Tokenize and prepare dataset
 
-By default, the configuration file `common.config` specifies the pretrained 'roberta-base' model for fine tuning. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer with
+By default, the configuration file `common.config` specifies the pretrained 'roberta-base' model as statring point for fine tuning the language model. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer:
 
 ````
 python -m lm.tokentrain /data/text/oapmc_abstracts  # ONLY WHEN TRAINING CUSTOMIZED MODEL!
@@ -137,16 +133,20 @@ Tokenized the data:
 python -m lm.dataprep /data/text/oapmc_abstracts /data/json/oapmc_abstracts
 ````
 
+This can take a while for large datasets. To follow the progress, visit http://localhost:5555 (via the celery flower service)
+
 ## Train language model
 
 ```
-python -m lm.train /data/json/oapmc_abstracts  # by default, model saved in /lm_models 
+python -m lm.train /data/json/oapmc_abstracts
 ```
+
+Note:   default, the model is saved in /lm_models so that it can be used for subsequent fine tuning for token classification
 
 ## Try it:
 
 ```
-python -m lm.try_it "The tumor suppressor <mask> is well studied."
+python -m lm.try_it "A kinase phosphorylates its <mask> to activate it."
 ```
 
 # Fine tuning of pre-trained language model
@@ -159,33 +159,37 @@ Download the SourceData raw dataset (xml files):
 
 ```
 wget <url>
-mv ... /data/xml
+unzip download.zip
+mv download /data/xml/sourcedata
 ```
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 
 ```
-python -m common.split /data/xml/191012/ -X xml
+python -m common.split /data/xml/sourcedata/ -X xml
 ```
 
 Extract the examples for NER using an XPAth that identifies individual panel legends within figure legends:
 
 ```
-mkdir sourcedata
-python -m common.extract /data/xml/191012 /data/xml/sd_panels -P .//sd-panel --keep_xml
+mkdir /data/xml/sd_panels
+python -m common.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
 ```
 
 Same thing but using a XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
 ```
 mkdir panelization
-python -m common.extract /data/xml/191012 /data/xml/sd_figs -P .//fig --keep_xml
+python -m common.extract /data/xml/sourcedata /data/xml/sd_figs -P .//fig --keep_xml
 ```
 
-Prepare the dataset for NER and ROLE labels:
+Prepare the datasets for NER and ROLE labels:
 
 ```
+mkdir /data/json/sd_panels
 python -m tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
+mkdir /data/json/sd_figs
+python -m tokcl.dataprep /data/xml/sd_figs /data/json/sd_figs
 ```
 
 ## Train the models
@@ -202,13 +206,6 @@ Train the ROLES task to learn entity roles:
 python -m tokcl.train data/xml/sourcedata ROLES
 ```
 
-Prepare the dataset for the PANELIZATION task:
-
-```
-rm -fr ner_dataset  # dataprep does not overwrite to avoid disasters
-python -m tokcl.dataprep /data/xml/sd_figs /data/json/sd_figs
-```
-
 Train the PANELIZATION task to learn panel segmentation:
 
 ```
@@ -217,7 +214,7 @@ python -m tokcl.train data/json/sd_figs PANELIZATION
 
 ## Use the pipeline
 
-Try smtag tagging:
+Tada! The trained models are now in /tokcl_models and you can try SmartTag:
 
 ```
 python -m infer.smtag "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
