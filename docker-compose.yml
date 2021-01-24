@@ -9,15 +9,18 @@ services:
       #   - user_id=${USER_ID}
       #   - group_id=${GROUP_ID}
     image: sdbert
+    depends_on:
+    - tensorboard
+    - celery
     runtime: nvidia
     volumes: &volumes
     - ./src:/app
     - ./data:/data
-    - ./tokenizer:/tokenizer
-    - ./lm_models:/lm_models
-    - ./tokcl_models:/tokcl_models
-    - ./.cache:/.cache
-    - ./runs:/runs
+    - ./tokenizer:${TOKENIZER_PATH}
+    - ./lm_models:${LM_MODEL_PATH}
+    - ./tokcl_models:${TOKCL_MODEL_PATH}
+    - ./cache:${CACHE}
+    - ./runs:${RUNS_DIR}
     env_file:
     - ./.env
     working_dir: /app
@@ -26,8 +29,6 @@ services:
   tensorboard:
     image: sdbert
     runtime: nvidia
-    depends_on:
-    - nlp
     ports:
     - 6007:6007
     volumes:
@@ -38,7 +39,7 @@ services:
   celery:
     image: sdbert
     depends_on:
-    - nlp
+    - rabbitmq
     env_file:
     - ./.env
     volumes: *volumes
