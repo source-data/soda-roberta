@@ -12,6 +12,7 @@ services:
     depends_on:
     - tensorboard
     - celery
+    - flower
     volumes: &volumes
     - ./src:/app
     - ./data:/data

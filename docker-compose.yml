@@ -12,6 +12,7 @@ services:
     depends_on:
     - tensorboard
     - celery
+    - flower
     runtime: nvidia
     volumes: &volumes
     - ./src:/app
