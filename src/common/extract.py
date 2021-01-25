@@ -1,11 +1,10 @@
-from typing import List
 from pathlib import Path
 import argparse
+from random import random
 import celery
-from lxml.etree import XPath, tostring, parse, Element
-from nltk import PunktSentenceTokenizer
+from lxml.etree import XPath
 from .tasks import examples_from_file_task, save_task
-from .utils import cleanup, innertext, progress
+from .utils import progress
 from .config import config
 
 
@@ -25,7 +24,7 @@ class ExtractorXML:
         self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         print(f"found {len(self.filepaths)} files.")
 
-    def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
+    def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True, inclusion_probability: float = 1.0) -> int:
         """Extracts the examples from XML files and saves them in the destination directory.
         The XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
@@ -43,6 +42,8 @@ class ExtractorXML:
                 Whether to xeep the xml markup instead of extracting innertext. Can be useful for token classification.
             remove_tail (bool):
                 Whether to remove the tail of the xml selected xml element. 
+            inclusion_probability (float):
+                Probability with which each example is included in the dataset. Allows to only take random subsample of very large dataset.
 
         Returns:
             (int):
@@ -59,8 +60,10 @@ class ExtractorXML:
             # save to disk as we go
             saving_tasks = []
             for j, example in enumerate(new_examples):
-                filename = filepath.stem
-                saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
+                proba = random()
+                if proba <= inclusion_probability:
+                    filename = filepath.stem
+                    saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
             job = celery.group(saving_tasks)
             results = job.apply_async()
             results.get()
@@ -118,12 +121,14 @@ def main():
     parser.add_argument('-S', '--sentences', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', help='XPath to element to be extracted from XML file.')
     parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')
+    parser.add_argument('--proba', default=1.0, type=float, help='Probability with which an example will be included.')
 
     args = parser.parse_args()
     extract_sentences = args.sentences
     xpath = args.xpath
     keep_xml = args.keep_xml
     destination = args.destination
+    inclusion_probability = args.proba
     if not args.corpus:
         self_test()
     else:
@@ -150,7 +155,13 @@ def main():
                     if not destination_path.exists():
                         destination_path.mkdir()
                         print(f"Created {destination_path}")
-                    N = ExtractorXML(source_path).run(destination_path, xpath, punkt=extract_sentences, keep_xml=keep_xml)
+                    N = ExtractorXML(source_path).run(
+                        destination_path,
+                        xpath,
+                        punkt=extract_sentences,
+                        keep_xml=keep_xml,
+                        inclusion_probability=inclusion_probability
+                    )
                     print(f"Saved {N} examples.")
             else:
                 print(f"The source {corpus_path} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
