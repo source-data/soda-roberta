@@ -1,23 +1,14 @@
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 import json
 import shutil
 from random import shuffle
 from argparse import ArgumentParser
-from transformers import RobertaTokenizerFast, BatchEncoding
-import spacy
 import celery
 from common.utils import progress
-from common import TOKENIZER_PATH
 from common.config import config
-from . import app
-# from .tasks import aligned_tokenization
-
-if config.from_pretrained:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
-else:
-    TOKENIZER = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-NLP = spacy.load('en_core_web_sm')
+# from common.celery import app
+from common.tasks import aligned_tokenization_task
 
 
 class Preparator:
@@ -66,7 +57,7 @@ class Preparator:
             end = min(start + batch_size, N)
             progress(end-1, N, f"{start}:{end} of {N}")
             task_list = [
-                aligned_tokenization.s(str(filepath), str(self.dest_dir_path), self.max_length)
+                aligned_tokenization_task.s(str(filepath), str(self.dest_dir_path), self.max_length)
                 for filepath in self.filepaths[start:end]
             ]
             job = celery.group(task_list)
@@ -91,52 +82,6 @@ class Preparator:
                     assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
-
-
-@app.task
-def aligned_tokenization(filepath: str, dest_dir: str, max_length):
-    labeled_example = {}
-    example = Path(filepath).read_text()
-    if example:
-        pos_words = NLP(example)
-        tokenized: BatchEncoding = TOKENIZER(
-            example,
-            max_length=max_length,
-            truncation=True,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            add_special_tokens=True
-        )
-        pos_labels = _align_labels(example, pos_words, tokenized)
-        labeled_example = {
-            'input_ids': tokenized.input_ids,
-            'label_ids': pos_labels,
-            'special_tokens_mask': tokenized.special_tokens_mask
-        }
-        _save_json(labeled_example, dest_dir)
-
-
-def _align_labels(example, pos_words, tokenized: BatchEncoding) -> List[str]:
-    # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
-    pos_char = [''] * len(example)  # pos for part-of-speech
-    # make a character-level pos from pos_word
-    for w in pos_words:
-        start = w.idx
-        end = start + len(w)
-        pos_char[start:end] = [w.pos_] * len(w)
-    # convert the character-level POS tags into token-level POS labels
-    pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
-    for idx, (start, end) in enumerate(tokenized.offset_mapping):
-        if not(start == end):  # not a special or empty token
-            pos_token[idx] = pos_char[start]
-    return pos_token
-
-
-def _save_json(example: Dict, dest_dir: str):
-    # saving line by line to json-line file
-    filepath = Path(dest_dir) / "data.jsonl"
-    with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
-        f.write(f"{json.dumps(example)}\n")
 
 
 def self_test():
@@ -166,7 +111,7 @@ def self_test():
                     assert len(input_ids) == len(pos_labels)
                     print('Example:')
                     for i in range(len(input_ids)):
-                        print(f"{TOKENIZER.decode(input_ids[i])}\t{pos_labels[i]}")
+                        print(f"{config.tokenizer.decode(input_ids[i])}\t{pos_labels[i]}")
     finally:
         shutil.rmtree('/tmp/test_dataprep/')
         print("cleaned up and removed /tmp/test_corpus")

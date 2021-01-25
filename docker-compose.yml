@@ -45,7 +45,7 @@ services:
     - ./.env
     volumes: *volumes
     working_dir: /app
-    command: celery --app=lm worker --loglevel=info
+    command: celery --app=common worker --loglevel=info
 
   flower:
     image: sdbert
@@ -55,7 +55,7 @@ services:
     working_dir: /app
     ports:
       - "5555:5555"
-    command: flower --app=lm --port=5555 --broker=rabbitmq
+    command: flower --app=common --port=5555 --broker=rabbitmq
 
   rabbitmq:
     image: rabbitmq:3-management

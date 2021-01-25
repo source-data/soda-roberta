@@ -1,9 +1,12 @@
 from celery import Celery
 
 app = Celery(
-    'lm.dataprep',
+    'common',
     backend='rpc',
     broker='pyamqp://guest@rabbitmq:5672',
-    # broker='pyamqp://guest@localhost:5672'
-    include=['lm.dataprep']
+    include=['common.tasks']
 )
+
+
+if __name__ == '__main__':
+    app.start()

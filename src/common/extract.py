@@ -1,8 +1,10 @@
 from typing import List
 from pathlib import Path
 import argparse
+import celery
 from lxml.etree import XPath, tostring, parse, Element
 from nltk import PunktSentenceTokenizer
+from .tasks import examples_from_file_task, save_task
 from .utils import cleanup, innertext, progress
 from .config import config
 
@@ -22,9 +24,8 @@ class ExtractorXML:
         self.source_dir = source_dir
         self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         print(f"found {len(self.filepaths)} files.")
-        self.xpath = None
 
-    def run(self, dest_dir: Path, selector: XPath, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
+    def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True) -> int:
         """Extracts the examples from XML files and saves them in the destination directory.
         The XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
@@ -34,7 +35,7 @@ class ExtractorXML:
         Args:
             dest_dir (Path):
                 The path to the desitnation directory.
-            selector (XPath):
+            selector (str):
                 The XPath to select the xml element from which the inner text will be used as example.
             punkt (bool):
                 Whether to split the innert text into sentences, which will be saved as individual examples.
@@ -49,72 +50,23 @@ class ExtractorXML:
         """
 
         ext = "xml" if keep_xml else 'txt'
-        self.xpath = selector
         num_saved_examples = 0
         for i, filepath in enumerate(self.filepaths):
             progress(i, len(self.filepaths), f"{filepath}         ")
-            new_examples = self._examples_from_file(filepath, punkt, keep_xml, remove_tail)
+
+            task = examples_from_file_task.delay(str(filepath), selector, punkt, keep_xml, remove_tail)
+            new_examples = task.get()
             # save to disk as we go
+            saving_tasks = []
             for j, example in enumerate(new_examples):
                 filename = filepath.stem
-                num_saved_examples += self._save(example, dest_dir, filename, str(j), ext)
+                saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
+            job = celery.group(saving_tasks)
+            results = job.apply_async()
+            results.get()
+            num_saved_examples = len(results)
         print()
         return num_saved_examples
-
-    def _examples_from_file(self, filepath: Path, punkt: bool, keep_xml: bool, remove_tail: bool) -> List[str]:
-        examples = []
-        elements = self._parse_xml_file(filepath, remove_tail)
-        examples = self._extract_text_from_elements(elements, punkt, keep_xml)
-        examples = self._cleanup(examples)
-        return examples
-
-    def _parse_xml_file(self, filepath: Path, remove_tail: bool) -> List[str]:
-        with filepath.open() as f:
-            xml = parse(f)
-            elements = self.xpath(xml)
-            if remove_tail:
-                for e in elements:
-                    if e.tail is not None:
-                        e.tail = None
-        return elements
-
-    def _extract_text_from_elements(self, elements: Element, punkt: bool, keep_xml: bool) -> List[str]:
-        examples = []
-        if keep_xml:
-            for e in elements:
-                xml_str = tostring(e).decode('utf-8')  # tostring returns bytes
-                length = len(innertext(e))
-                if length > config.min_char_length:
-                    examples.append(xml_str)
-        else:
-            for e in elements:
-                text = innertext(e)
-                if punkt:
-                    sentences = PunktSentenceTokenizer().tokenize(text=text)
-                    filtered_sentences = [s for s in sentences if self._filter(s)]
-                    examples += filtered_sentences
-                else:
-                    if self._filter(text):
-                        examples.append(text)
-        return examples
-
-    def _cleanup(self, examples: List[str]) -> List[str]:
-        examples = [cleanup(e) for e in examples]
-        return examples
-
-    def _filter(self, example: str) -> str:
-        example = example if len(example) > config.min_char_length else ''
-        return example
-
-    def _save(self, text: str, dest_dir: Path, basename: str, suffix: str, ext: str):
-        ex_filename = f"{basename}_{suffix}.{ext}"
-        saving_path = dest_dir / ex_filename
-        if saving_path.exists():
-            print(f"{saving_path} already exists. Not overwritten.                                                     ", end="\r", flush=True)
-            return 0
-        else:
-            saving_path.write_text(text)
-            return 1
 
 
 def self_test():
@@ -169,7 +121,7 @@ def main():
 
     args = parser.parse_args()
     extract_sentences = args.sentences
-    xpath = XPath(args.xpath)
+    xpath = args.xpath
     keep_xml = args.keep_xml
     destination = args.destination
     if not args.corpus:
