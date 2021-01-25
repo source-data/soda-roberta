@@ -236,10 +236,7 @@ if __name__ == "__main__":
     panel_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/PANELIZATION")
     ner_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/NER/")
     role_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/ROLES")
-    if config.from_pretrained:
-        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
-    else:
-        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
+    tokenizer = config.tokenizer
     tagger = Tagger(
         tokenizer,
         panel_model,  # segments figure legends into panel legends

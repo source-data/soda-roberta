@@ -1,6 +1,9 @@
 '''
 Application-wide preferences.
 '''
+from transformers import RobertaTokenizerFast
+import spacy
+from . import TOKENIZER_PATH
 
 
 class Config:
@@ -16,6 +19,13 @@ class Config:
     }
     celery_batch_size = 1000
     from_pretrained = 'roberta-base'  # leave empty if training a language model from scratch
+    tokenizer = None
+    nlp = spacy.load('en_core_web_sm')
 
 
 config = Config()
+
+if config.from_pretrained:
+    config.tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
+else:
+    config.tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)

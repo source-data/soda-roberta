@@ -1,6 +1,6 @@
-from transformers import pipeline, RobertaTokenizerFast
+from transformers import pipeline
 from argparse import ArgumentParser
-from common import LM_MODEL_PATH, TOKENIZER_PATH
+from common import LM_MODEL_PATH
 from common.config import config
 
 
@@ -11,15 +11,10 @@ def main():
     args = parser.parse_args()
     text = args.text
     model_path = args.model_path
-    if config.from_pretrained:
-        tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained)
-    else:
-        tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH)
-
     fill_mask = pipeline(
         "fill-mask",
         model=model_path,
-        tokenizer=tokenizer
+        tokenizer=config.tokenizer
     )
     result = fill_mask(text)
     print(f"{result}")

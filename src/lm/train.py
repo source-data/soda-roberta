@@ -27,7 +27,7 @@ from .show import ShowExample
 from .metrics import compute_metrics
 
 from common.config import config
-from common import TOKENIZER_PATH, LM_MODEL_PATH, CACHE, RUNS_DIR
+from common import LM_MODEL_PATH, CACHE, RUNS_DIR
 
 
 def train(
@@ -126,14 +126,5 @@ if __name__ == "__main__":
     if not output_dir_path.exists():
         output_dir_path.mkdir()
         print(f"Created {output_dir_path}.")
-    if config.from_pretrained:
-        tokenizer = RobertaTokenizerFast.from_pretrained(
-            config.from_pretrained,
-            max_len=config.max_length
-        )
-    else:
-        tokenizer = RobertaTokenizerFast.from_pretrained(
-            TOKENIZER_PATH,
-            max_len=config.max_length
-        )
+    tokenizer = config.tokenizer  # tokenizer has to be the same application-wide
     train(no_cache, dataset_path, data_config_name, training_args, tokenizer)
