@@ -52,22 +52,32 @@ class ExtractorXML:
 
         ext = "xml" if keep_xml else 'txt'
         num_saved_examples = 0
-        for i, filepath in enumerate(self.filepaths):
-            progress(i, len(self.filepaths), f"{filepath}         ")
-
-            task = examples_from_file_task.delay(str(filepath), selector, punkt, keep_xml, remove_tail)
-            new_examples = task.get()
-            # save to disk as we go
-            saving_tasks = []
-            for j, example in enumerate(new_examples):
-                proba = random()
-                if proba <= inclusion_probability:
-                    filename = filepath.stem
-                    saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
-            job = celery.group(saving_tasks)
+        batch_size = config.celery_batch_size
+        N = len(self.filepaths)
+        for start in range(0, N, batch_size):
+            end = min(start + batch_size, N)
+            progress(end-1, len(self.filepaths)-1, f"{start}:{end} of {N}")
+            task_list = [
+                examples_from_file_task.s(str(filepath), selector, punkt, keep_xml, remove_tail)
+                for filepath in self.filepaths[start:end]
+            ]
+            job = celery.group(task_list)
             results = job.apply_async()
-            results.get()
-            num_saved_examples = len(results)
+            results = results.get()
+            # save to disk as we go
+            for res in results:
+                new_examples = res['examples']
+                filepath = res['filepath']
+                filename = Path(filepath).stem
+                saving_tasks = []
+                for j, example in enumerate(new_examples):
+                    proba = random()
+                    if proba <= inclusion_probability:
+                        saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
+                job = celery.group(saving_tasks)
+                saving_results = job.apply_async()
+                saving_results.get()
+                num_saved_examples = len(saving_results)
         print()
         return num_saved_examples
 

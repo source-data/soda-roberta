@@ -14,12 +14,12 @@ def align_labels_task(*args, **kwargs):
 
 
 @app.task
-def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool) -> List[str]:
+def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool) -> Dict:
     examples = []
     elements = _parse_xml_file(filepath, xpath, remove_tail)
     examples = _extract_text_from_elements(elements, punkt, keep_xml)
     examples = _cleanup(examples)
-    return examples
+    return {'examples': examples, 'filepath': str(filepath)}
 
 
 def _parse_xml_file(filepath: str, xpath: str, remove_tail: bool) -> List[str]:
