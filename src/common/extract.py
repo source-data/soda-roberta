@@ -65,19 +65,19 @@ class ExtractorXML:
             results = job.apply_async()
             results = results.get()
             # save to disk as we go
+            saving_tasks = []
             for res in results:
                 new_examples = res['examples']
                 filepath = res['filepath']
                 filename = Path(filepath).stem
-                saving_tasks = []
                 for j, example in enumerate(new_examples):
                     proba = random()
                     if proba <= inclusion_probability:
                         saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
-                job = celery.group(saving_tasks)
-                saving_results = job.apply_async()
-                saving_results.get()
-                num_saved_examples = len(saving_results)
+            job = celery.group(saving_tasks)
+            saving_results = job.apply_async()
+            saving_results.get()
+            num_saved_examples += len(saving_results)
         print()
         return num_saved_examples
 
