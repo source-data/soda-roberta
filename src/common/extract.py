@@ -76,8 +76,8 @@ class ExtractorXML:
                         saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
             job = celery.group(saving_tasks)
             saving_results = job.apply_async()
-            # saving_results.get()
-            # num_saved_examples += len(saving_results)
+            saving_results.get()
+            num_saved_examples += len(saving_results)
         print()
         return num_saved_examples
 
