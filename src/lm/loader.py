@@ -133,7 +133,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],
-                        "pos_mask": pos_mask,
+                        "tag_mask": pos_mask,
                         "special_tokens_mask": data['special_tokens_mask']
                     }
                 elif self.config.name == "VERB":
@@ -143,7 +143,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],
-                        "pos_mask": pos_mask,
+                        "tag_mask": pos_mask,
                         "special_tokens_mask": data['special_tokens_mask']
                     }
                 elif self.config.name == "SMALL":
@@ -153,7 +153,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],
-                        "pos_mask": pos_mask,
+                        "tag_mask": pos_mask,
                         "special_tokens_mask": data['special_tokens_mask']
                     }
 
