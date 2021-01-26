@@ -107,7 +107,7 @@ if __name__ == "__main__":
     class MyTrainingArguments(TrainingArguments):
         output_dir: str = field(default=LM_MODEL_PATH)
         overwrite_output_dir: bool = field(default=True)
-        logging_steps: int = field(default=500)
+        logging_steps: int = field(default=2000)
         evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
