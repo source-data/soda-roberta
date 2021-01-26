@@ -71,14 +71,14 @@ class BioLang(datasets.GeneratorBasedBuilder):
         if self.config.name == "MLM":
             features = datasets.Features(
                 {
-                    "input_ids": datasets.Sequence(feature=datasets.Value("int32"))
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
                 }
             )
         elif self.config.name in ["DET", "VERB", "SMALL"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
-                "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
 
         return datasets.DatasetInfo(
