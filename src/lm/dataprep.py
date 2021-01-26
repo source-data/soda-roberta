@@ -17,69 +17,50 @@ class Preparator:
     The datset is then split into train, eval, and test set and saved into json line files.
 
     Args:
-        source_dir_path (Path):
-            The path to the source xml files.
+        source_file_path (Path):
+            The path to the source file with one example per line.
         dest_dir_path (Path):
             The path of the destination directory where the files with the encoded labeled examples should be saved.
-        ext (str):
-            The extension (WITHOUT THE DOT) of the files to be coded.
     """
     def __init__(
         self,
-        source_dir_path: Path,
-        dest_dir_path: Path,
-        max_length: int = config.max_length,
-        ext: str = 'txt',
+        source_file_path: Path,
+        dest_file_path: Path,
+        max_length: int = config.max_length
     ):
-        self.source_dir_path = source_dir_path
-        self.dest_dir_path = dest_dir_path
+        self.source_file_path = source_file_path
+        self.dest_file_path = dest_file_path
         self.max_length = max_length
-        assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
-        if not self.dest_dir_path.exists():
-            self.dest_dir_path.mkdir()
-        self.filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
-        shuffle(self.filepaths)
-
-    def _dest_dir_is_empty(self) -> bool:
-        if self.dest_dir_path.exists():
-            # https://stackoverflow.com/a/57968977
-            return not any([True for _ in self.dest_dir_path.iterdir()])
-        else:
-            return True
+        assert not self.dest_file_path.exists(), f"{self.dest_file_path} already exists! Will not overwrite pre-existing dataset."
 
     def run(self) -> List:
         """Runs the coding of the examples.
         Saves the resulting text files to the destination directory.
         """
         batch_size = config.celery_batch_size
-        N = len(self.filepaths)
-        for start in range(0, N, batch_size):
-            end = min(start + batch_size, N)
-            progress(end-1, N, f"{start}:{end} of {N}")
-            task_list = [
-                aligned_tokenization_task.s(str(filepath), str(self.dest_dir_path), self.max_length)
-                for filepath in self.filepaths[start:end]
-            ]
+        with self.source_file_path.open() as f:
+            task_list = []
+            for n, line in enumerate(f):
+                line = line.strip()
+                if line:
+                    task_list.append(aligned_tokenization_task.s(line, str(self.dest_file_path), self.max_length))
+                if n % batch_size == 0:
+                    print(f"{['.   ',' .  ', '  . ', '   .'][(n // batch_size) % 4]} {n}", end="\r", flush=True)
+                    job = celery.group(task_list)
+                    results = job.apply_async()
+                    results.get()
+                    task_list = []
             job = celery.group(task_list)
-            results = job.apply_async(
-                # retry=True, retry_policy={
-                #     'max_retries': 3,
-                #     'interval_start': 0,
-                #     'interval_step': 0.2,
-                #     'interval_max': 0.2,
-                # }
-            )
+            results = job.apply_async()
             results.get()
 
     def verify(self):
-        filepaths = self.dest_dir_path.glob("**/*.jsonl")
-        for p in filepaths:
-            with p.open() as f:
-                for n, line in enumerate(f):
-                    j = json.loads(line)
-                    assert len(j['input_ids']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
-                    assert len(j['label_ids']) == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
-                    assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
+        with self.dest_file_path.open() as f:
+            for n, line in enumerate(f):
+                j = json.loads(line)
+                assert len(j['input_ids']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
+                assert len(j['label_ids']) == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
+                assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 
@@ -131,7 +112,7 @@ if __name__ == "__main__":
             source_dir_path = Path(source_dir_path)
             for subset in ["train", "eval", "test"]:
                 print(f"Preparing: {subset}")
-                sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset)
+                sdprep = Preparator(source_dir_path / f"{subset}.txt", dest_dir_path / f"{subset}.jsonl")
                 sdprep.run()
                 sdprep.verify()
             print("\nDone!")

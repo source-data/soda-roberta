@@ -156,21 +156,21 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 name=datasets.Split.TRAIN,
                 # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": str(data_dir / "train/data.jsonl"),
+                    "filepath": str(data_dir / "train.jsonl"),
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": str(data_dir / "test/data.jsonl"),
+                    "filepath": str(data_dir / "test.jsonl"),
                     "split": "test"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    "filepath": str(data_dir / "eval/data.jsonl"),
+                    "filepath": str(data_dir / "eval.jsonl"),
                     "split": "eval",
                 },
             ),
@@ -219,15 +219,9 @@ def self_test():
     p = Path(data_dir)
     p.mkdir()
     try:
-        p_train = p / "train"
-        p_train.mkdir()
-        p_train = p_train / "data.jsonl"
-        p_eval = p / "eval"
-        p_eval.mkdir()
-        p_eval = p_eval / "data.jsonl"
-        p_test = p / "test"
-        p_test.mkdir()
-        p_test = p_test / "data.jsonl"
+        p_train = p / "train.jsonl"
+        p_eval = p / "eval.jsonl"
+        p_test = p / "test.jsonl"
         if config.from_pretrained:
             tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
         else:

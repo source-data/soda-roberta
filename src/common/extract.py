@@ -24,7 +24,7 @@ class ExtractorXML:
         self.filepaths = [f for f in self.source_dir.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         print(f"found {len(self.filepaths)} files.")
 
-    def run(self, dest_dir: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True, inclusion_probability: float = 1.0) -> int:
+    def run(self, dest_file_path: Path, selector: str, punkt: bool = False, keep_xml: bool = False, remove_tail: bool = True, inclusion_probability: float = 1.0) -> int:
         """Extracts the examples from XML files and saves them in the destination directory.
         The XPath specifies which element to extract from each xml file.
         By default, the inner text from the selected element will be saved as an example.
@@ -32,8 +32,8 @@ class ExtractorXML:
         If sentence tokenization is True, the text is first split into sentences which are individually saved.
 
         Args:
-            dest_dir (Path):
-                The path to the desitnation directory.
+            dest_file_path (Path):
+                The path to the desitnation file (one line per example).
             selector (str):
                 The XPath to select the xml element from which the inner text will be used as example.
             punkt (bool):
@@ -50,13 +50,12 @@ class ExtractorXML:
                 The number of examples saved to disk.
         """
 
-        ext = "xml" if keep_xml else 'txt'
         num_saved_examples = 0
         batch_size = config.celery_batch_size
         N = len(self.filepaths)
         for start in range(0, N, batch_size):
             end = min(start + batch_size, N)
-            progress(end-1, len(self.filepaths)-1, f"{start}:{end} of {N}")
+            progress(end - 1, len(self.filepaths)-1, f"{start}:{end} of {N}")
             task_list = [
                 examples_from_file_task.s(str(filepath), selector, punkt, keep_xml, remove_tail)
                 for filepath in self.filepaths[start:end]
@@ -66,14 +65,11 @@ class ExtractorXML:
             results = results.get()
             # save to disk as we go
             saving_tasks = []
-            for res in results:
-                new_examples = res['examples']
-                filepath = res['filepath']
-                filename = Path(filepath).stem
+            for new_examples in results:
                 for j, example in enumerate(new_examples):
                     proba = random()
                     if proba <= inclusion_probability:
-                        saving_tasks.append(save_task.s(example, str(dest_dir), filename, str(j), ext))
+                        saving_tasks.append(save_task.s(example, str(dest_file_path)))
             job = celery.group(saving_tasks)
             saving_results = job.apply_async()
             saving_results.get()
@@ -147,24 +143,15 @@ def main():
             destination_dir = Path(destination)
         else:
             basename = corpus_path.name
-            if keep_xml:
-                destination_dir = Path("/data/xml") / basename
-            else:
-                destination_dir = Path("/data/text") / basename
+            destination_dir = Path("/data/text") / basename
         subsets = ["train", "eval", "test"]
         source_paths = [corpus_path / subset for subset in subsets]
-        destination_paths = [destination_dir / subset for subset in subsets]
+        destination_paths = [destination_dir / f"{subset}.txt" for subset in subsets]
         if any([True if p.exists() else False for p in destination_paths]):
-            print(f"{destination_dir} is not empty and has already {' or '.join(subsets)} sub-directories. Cannot proceed.")
+            print(f"{destination_paths} already exist. Cannot proceed.")
         else:
             if all([True if source.exists() else False for source in source_paths]):
-                if not destination_dir.exists():
-                    destination_dir.mkdir()
-                    print(f"{destination_dir} created!")
                 for source_path, destination_path in zip(source_paths, destination_paths):
-                    if not destination_path.exists():
-                        destination_path.mkdir()
-                        print(f"Created {destination_path}")
                     N = ExtractorXML(source_path).run(
                         destination_path,
                         xpath,

@@ -9,17 +9,24 @@ from .utils import innertext, cleanup
 
 
 @app.task
-def align_labels_task(*args, **kwargs):
-    return _align_labels(*args, **kwargs)
-
-
-@app.task
 def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool) -> Dict:
+    """Generates text or xml examples from xml documents. 
+    Examples to be extracted are found using an XPath expression.
+    THe resulting text can be segmented in sentences if desired. 
+    Either the inner text is extracted or the xml of the extracted element is kept.
+
+    Args:
+        filepath (str): the path to the source file.
+        xpath (str): the XPath expression to identify the example(s) in the xml file.
+        punkt (bool): whether to split the text into individual sentences.
+        keep_xml (bool): whether to keep the xml of the element, otherwise the inner text is extracted.
+        remove_tail (bool): set this to False if the text after the element should be included.
+    """
     examples = []
     elements = _parse_xml_file(filepath, xpath, remove_tail)
     examples = _extract_text_from_elements(elements, punkt, keep_xml)
     examples = _cleanup(examples)
-    return {'examples': examples, 'filepath': str(filepath)}
+    return examples
 
 
 def _parse_xml_file(filepath: str, xpath: str, remove_tail: bool) -> List[str]:
@@ -66,38 +73,38 @@ def _filter(example: str) -> str:
 
 
 @app.task
-def save_task(text: str, dest_dir: Path, basename: str, suffix: str, ext: str):
-    ex_filename = f"{basename}_{suffix}.{ext}"
-    saving_path = Path(dest_dir) / ex_filename
-    if saving_path.exists():
-        print(f"{saving_path} already exists. Not overwritten.                                                     ", end="\r", flush=True)
-        return 0
-    else:
-        saving_path.write_text(text)
-        return 1
+def save_task(text: str, filepath: str,):
+    """Writes each text on 1 line at the end of the file.
+    Strips text from newlines so that it can be written on a single line.
+
+    Args:
+        text (str): the text, will be stripped of newline
+        filepath (Path): the path to the file
+    """
+    with Path(filepath).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+        f.write(f"{text.strip()}\n")
+    return 1
 
 
 @app.task
-def aligned_tokenization_task(filepath: str, dest_dir: str, max_length):
+def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     labeled_example = {}
-    example = Path(filepath).read_text()
-    if example:
-        pos_words = config.nlp(example)
-        tokenized = config.tokenizer(
-            example,
-            max_length=max_length,
-            truncation=True,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            add_special_tokens=True
-        )
-        pos_labels = _align_labels(example, pos_words, tokenized)
-        labeled_example = {
-            'input_ids': tokenized.input_ids,
-            'label_ids': pos_labels,
-            'special_tokens_mask': tokenized.special_tokens_mask
-        }
-        _save_json(labeled_example, dest_dir)
+    pos_words = config.nlp(example)
+    tokenized = config.tokenizer(
+        example,
+        max_length=max_length,
+        truncation=True,
+        return_offsets_mapping=True,
+        return_special_tokens_mask=True,
+        add_special_tokens=True
+    )
+    pos_labels = _align_labels(example, pos_words, tokenized)
+    labeled_example = {
+        'input_ids': tokenized.input_ids,
+        'label_ids': pos_labels,
+        'special_tokens_mask': tokenized.special_tokens_mask
+    }
+    _save_json(labeled_example, dest_file_path)
 
 
 def _align_labels(example, pos_words, tokenized) -> List[str]:
@@ -116,8 +123,7 @@ def _align_labels(example, pos_words, tokenized) -> List[str]:
     return pos_token
 
 
-def _save_json(example: Dict, dest_dir: str):
+def _save_json(example: Dict, dest_file_path: str):
     # saving line by line to json-line file
-    filepath = Path(dest_dir) / "data.jsonl"
-    with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+    with Path(dest_file_path).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
         f.write(f"{json.dumps(example)}\n")

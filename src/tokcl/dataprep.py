@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List, Tuple, Dict
-from xml.etree.ElementTree import parse, Element, ElementTree
+from xml.etree.ElementTree import Element, fromstring
 import json
 import shutil
 from random import shuffle
@@ -22,10 +22,10 @@ class Preparator:
     The datset is then split into train, eval, and test set and saved into json line files.
 
     Args:
-        source_dir_path (Path):
-            The path to the source xml files.
-        dest_dir_path (Path):
-            The path of the destination directory where the files with the encoded labeled examples should be saved.
+        source_file_path (Path):
+            The path to the source file.
+        dest_file_path (Path):
+            The path of the destination file where the files with the encoded labeled examples should be saved.
         tokenizer (RobertaTokenizerFast):
             The pre-trained tokenizer to use for processing the inner text.
         code_maps (List[CodeMap)]:
@@ -37,46 +37,32 @@ class Preparator:
     """
     def __init__(
         self,
-        source_dir_path: Path,
-        dest_dir_path: Path,
+        source_file_path: Path,
+        dest_file_path: Path,
         tokenizer: RobertaTokenizerFast,
         code_maps: List[CodeMap],
         max_length: int = config.max_length
     ):
-        self.source_dir_path = source_dir_path
-        self.dest_dir_path = dest_dir_path
+        self.source_file_path = source_file_path
+        self.dest_file_path = dest_file_path
         self.code_maps = code_maps
         self.max_length = max_length
         self.tokenizer = tokenizer
-        assert self._dest_dir_is_empty(), f"{self.dest_dir_path} is not empty! Will not overwrite pre-existing dataset."
+        assert not self.dest_file_path.exists(), f"{self.dest_file_path} already exists! Will not overwrite pre-existing dataset."
 
-    def _dest_dir_is_empty(self) -> bool:
-        if self.dest_dir_path.exists():
-            # https://stackoverflow.com/a/57968977
-            return not any([True for _ in self.dest_dir_path.iterdir()])
-        else:
-            return True
-
-    def run(self, ext: str = 'xml'):
+    def run(self):
         """Runs the coding and labeling of xml examples.
         Saves the resulting text files to the destination directory.
-
-        Args:
-            ext (str):
-               The extension (WITHOUT THE DOT) of the files to be coded.
         """
         labeled_examples = []
-        filepaths = list(self.source_dir_path.glob(f"**/*.{ext}"))
-        for i, filepath in enumerate(filepaths):
-            progress(i, len(filepaths), f"{filepath.name}                 ")
-            with filepath.open() as f:
-                xml_example: ElementTree = parse(f)
-            xml_example: Element = xml_example.getroot()
-            tokenized, token_level_labels = self._encode_example(xml_example)
-            labeled_examples.append({
-                'tokenized': tokenized,
-                'label_ids': token_level_labels
-            })
+        with self.source_file_path.open() as f:
+            for i, line in enumerate(f):
+                xml_example: Element = fromstring(line)
+                tokenized, token_level_labels = self._encode_example(xml_example)
+                labeled_examples.append({
+                    'tokenized': tokenized,
+                    'label_ids': token_level_labels
+                })
         self._save_json(labeled_examples)
         return labeled_examples
 
@@ -183,11 +169,8 @@ class Preparator:
         return iob2_label
 
     def _save_json(self, examples: List):
-        if not self.dest_dir_path.exists():
-            self.dest_dir_path.mkdir()
         # saving line by line to json-line file
-        filepath = self.dest_dir_path / "data.jsonl"
-        with filepath.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+        with self.dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
                 j = {
@@ -198,16 +181,14 @@ class Preparator:
                 f.write(f"{json.dumps(j)}\n")
 
     def verify(self):
-        filepaths = self.dest_dir_path.glob("**/*.jsonl")
-        for p in filepaths:
-            with p.open() as f:
-                for n, line in enumerate(f):
-                    j = json.loads(line)
-                    L = len(j['tokens'])
-                    assert L <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
-                    assert len(j['input_ids']) == L, f"mismatch in number of tokens and input_ids: error line {n} in {p}"
-                    for k, label_ids in j['label_ids'].items():
-                        assert len(label_ids) == L, f"mismatch in number of tokens and {k} label_ids: error line {n} in {p}"
+        with self.dest_file_path.open() as f:
+            for n, line in enumerate(f):
+                j = json.loads(line)
+                L = len(j['tokens'])
+                assert L <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
+                assert len(j['input_ids']) == L, f"mismatch in number of tokens and input_ids: error line {n} in {p}"
+                for k, label_ids in j['label_ids'].items():
+                    assert len(label_ids) == L, f"mismatch in number of tokens and {k} label_ids: error line {n} in {p}"
         print("\nLength verification: OK!")
         return True
 
@@ -324,7 +305,7 @@ if __name__ == "__main__":
         source_dir_path = Path(source_dir_path)
         for subset in ["train", "eval", "test"]:
             print(f"Preparing: {subset}")
-            sdprep = Preparator(source_dir_path / subset, dest_dir_path / subset, tokenizer, code_maps)
+            sdprep = Preparator(source_dir_path / f"{subset}.txt", dest_dir_path / f"{subset}.jsonl", tokenizer, code_maps)
             sdprep.run()
             sdprep.verify()
         print("\nDone!")
