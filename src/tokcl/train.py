@@ -99,7 +99,7 @@ if __name__ == "__main__":
         learning_rate: float = field(default=1e-4)
         per_device_train_batch_size: int = field(default=32)
         per_device_eval_batch_size: int = field(default=32)
-        num_train_epochs: int = field(default=10)
+        num_train_epochs: float = field(default=10.0)
         save_total_limit: int = field(default=5)
         masking_probability: float = field(default=None)
         replacement_probability: float = field(default=None)
