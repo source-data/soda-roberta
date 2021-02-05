@@ -116,8 +116,9 @@ python -m common.extract /data/oapmc_articles  -P .//abstract
 Note: it is possibel to combined several XPath with the `|` operator to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be very large):
 
 ```
-python -m common.extract /data/oapmc_articles /data/text/oapmc_abstracts_and_figs -P ".//abstract | .//fig"
+python -m common.extract /data/xml/oapmc_articles/ /data/text/oapmc_abstracts_figs/ --proba=0.5 --xpath ".//abstract | .//fig"
 ```
+Note: the option --proba allows to determine the probability with wich each example is actually includedd; this is useful when the dataset is huge and only a random subset needs to be selected.
 
 ## Tokenize and prepare dataset
 
@@ -179,7 +180,7 @@ python -m common.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel
 Same thing but using a XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
 ```
-mkdir panelization
+mkdir /data/xml/sd_figs
 python -m common.extract /data/xml/sourcedata /data/xml/sd_figs -P .//fig --keep_xml
 ```
 
@@ -214,11 +215,8 @@ python -m tokcl.train data/json/sd_figs PANELIZATION
 
 ## Use the pipeline
 
-Tada! The trained models are now in /tokcl_models and you can try SmartTag:
+Tada! The trained models are now in /tokcl_models and you can try SmartTag-ging:
 
 ```
-python -m infer.smtag "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
+python -m predict.smtag "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
 ```
-
-
-
