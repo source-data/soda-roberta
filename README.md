@@ -33,7 +33,20 @@ Under construction.
 
 # General Setup
 
-Install `docker` (https://docs.docker.com/engine/install/) and `docker-compose` (https://docs.docker.com/compose/install/).
+Setup virtual environment:
+
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+```
+
+Install `docker` (https://docs.docker.com/engine/install/). 
+Install`docker-compose==1.28.5` (https://docs.docker.com/compose/install/).
+
+```
+pip install docker-compose==1.28.5
+```
 
 Install `git-lfs` (https://git-lfs.github.com/).
 
@@ -197,10 +210,10 @@ mkdir /data/json/sd_figs
 python -m tokcl.dataprep /data/xml/sd_figs /data/json/sd_figs
 ```
 
-Optional: commit the datasets to the repo as lfs objects
+Commit the datasets to the repo as lfs objects
 
 ```
-git lfs track .*jsonl  # do not forget to run this!
+git lfs track *.jsonl  # do not forget to run this!
 git add .gitattributes
 git add data/json/sd_figs
 git add data/json/sd_panels
@@ -214,7 +227,7 @@ git push
 Train the NER task to learn entity types:
 
 ```
-python -m tokcl.train /data/json/sd_panels NER
+python -m tokcl.train NER
 ```
 
 Train the ROLES task to learn entity roles:
