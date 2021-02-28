@@ -33,6 +33,10 @@ Under construction.
 
 # General Setup
 
+Install `docker` (https://docs.docker.com/engine/install/) and `docker-compose` (https://docs.docker.com/compose/install/).
+
+Install `git-lfs` (https://git-lfs.github.com/).
+
 Build and start the Docker container with docker-compose:
 
 ```
@@ -192,6 +196,18 @@ python -m tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
 mkdir /data/json/sd_figs
 python -m tokcl.dataprep /data/xml/sd_figs /data/json/sd_figs
 ```
+
+Optional: commit the datasets to the repo as lfs objects
+
+```
+git lfs track .*jsonl  # do not forget to run this!
+git add .gitattributes
+git add data/json/sd_figs
+git add data/json/sd_panels
+git commit -m "sd datasets as lfs object"
+git push
+```
+
 
 ## Train the models
 
