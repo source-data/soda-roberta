@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Datasets Authors and the current dataset script contributor.
+# Copyright 2020 The HuggingFace Datasets Authors and Thomas Lemberger.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,25 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TODO: Add a description here."""
+"""SourceDataNLP dataset."""
 
 from __future__ import absolute_import, division, print_function
 
 import json
 from pathlib import Path
-from .xmlcode import SourceDataCodes as sd
-import datasets
-from transformers import RobertaTokenizerFast
-from common import CACHE, TOKENIZER_PATH
-from common.config import config
-import shutil
 
-_NER_LABEL_NAMES = sd.ENTITY_TYPES.iob2_labels
-_SEMANTIC_ROLES_LABEL_NAMES = sd.GENEPROD_ROLES.iob2_labels
-_BORING_LABEL_NAMES = sd.BORING.iob2_labels
-_PANEL_START_NAMES = sd.PANELIZATION.iob2_labels
-_GENEPROD = sd.GENEPROD.iob2_labels
-_CELL_TYPE_LINE = sd.CELL_TYPE_LINE.iob2_labels
+import datasets
+
+
+_NER_LABEL_NAMES = [
+    "O",
+    "I-SMALL_MOLECULE",
+    "B-SMALL_MOLECULE",
+    "I-GENEPROD",
+    "B-GENEPROD",
+    "I-SUBCELLULAR",
+    "B-SUBCELLULAR",
+    "I-CELL",
+    "B-CELL",
+    "I-TISSUE",
+    "B-TISSUE",
+    "I-ORGANISM",
+    "B-ORGANISM",
+    "I-EXP_ASSAY",
+    "B-EXP_ASSAY",
+]
+_SEMANTIC_ROLES_LABEL_NAMES = ["O", "I-CONTROLLED_VAR", "B-CONTROLLED_VAR", "I-MEASURED_VAR", "B-MEASURED_VAR"]
+_BORING_LABEL_NAMES = ["O", "I-BORING", "B-BORING"]
+_PANEL_START_NAMES = ["O", "B-PANEL_START"]
 
 _CITATION = """\
 @Unpublished{
@@ -42,61 +53,45 @@ _CITATION = """\
 """
 
 _DESCRIPTION = """\
-This dataset is based on the SourceData database and is intented to facilitate training of NLP tasks in the cell and molecualr biology domain. 
+This dataset is based on the SourceData database and is intented to facilitate training of NLP tasks in the cell and molecualr biology domain.
 """
 
 _HOMEPAGE = "http://sourcedata.io"
 
-# TODO: Add the licence for the dataset here if you can find it
 _LICENSE = ""
 
-# TODO: Add link to the official dataset URLs here
-# The HuggingFace dataset library don't host the datasets but only point to the original files
-# This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
-_URLs = {
-    'NER': "",
-    'ROLES': "",
-    'PANELIZATION': ""
+_URLS = {
+    "NER": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
+    "ROLES": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
+    "BORING": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
+    "PANELIZATION": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_figs/",
 }
 
-
-# TODO: Name of the dataset usually match the script name with CamelCase instead of snake_case
 class SourceDataNLP(datasets.GeneratorBasedBuilder):
     """SourceDataNLP provides datasets to train NLP tasks in cell and molecular biology."""
 
     VERSION = datasets.Version("0.0.1")
 
-    # This is an example of a dataset with multiple configurations.
-    # If you don't want/need to define several sub-sets in your dataset,
-    # just remove the BUILDER_CONFIG_CLASS and the BUILDER_CONFIGS attributes.
-
-    # If you need to make complex sub-parts in the datasets with configurable options
-    # You can create your own builder configuration class to store attribute, inheriting from datasets.BuilderConfig
-    # BUILDER_CONFIG_CLASS = MyBuilderConfig
-
-    # You will be able to load one or the other configurations in the following list with
-    # data = datasets.load_dataset('my_dataset', 'first_domain')
-    # data = datasets.load_dataset('my_dataset', 'second_domain')
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="NER", version="0.0.1", description="Dataset for entity recognition"),
         datasets.BuilderConfig(name="ROLES", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(name="BORING", version="0.0.1", description="Dataset for semantic roles."),
-        datasets.BuilderConfig(name="PANELIZATION", version="0.0.1", description="ataset for figure legend segmentation into panel-specific legends."),
+        datasets.BuilderConfig(
+            name="PANELIZATION",
+            version="0.0.1",
+            description="Dataset for figure legend segmentation into panel-specific legends.",
+        ),
     ]
 
-    DEFAULT_CONFIG_NAME = "NER"  # It's not mandatory to have a default configuration. Just use one if it make sense.
+    DEFAULT_CONFIG_NAME = "NER"
 
     def _info(self):
-        # TODO: This method specifies the datasets.DatasetInfo object which contains informations and typings for the dataset
         if self.config.name == "NER":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
-                        feature=datasets.ClassLabel(
-                            num_classes=len(_NER_LABEL_NAMES),
-                            names=_NER_LABEL_NAMES
-                        )
+                        feature=datasets.ClassLabel(num_classes=len(_NER_LABEL_NAMES), names=_NER_LABEL_NAMES)
                     ),
                     "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
                 }
@@ -107,8 +102,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
                         feature=datasets.ClassLabel(
-                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES),
-                            names=_SEMANTIC_ROLES_LABEL_NAMES
+                            num_classes=len(_SEMANTIC_ROLES_LABEL_NAMES), names=_SEMANTIC_ROLES_LABEL_NAMES
                         )
                     ),
                     "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -119,10 +113,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
-                        feature=datasets.ClassLabel(
-                            num_classes=len(_BORING_LABEL_NAMES),
-                            names=_BORING_LABEL_NAMES
-                        )
+                        feature=datasets.ClassLabel(num_classes=len(_BORING_LABEL_NAMES), names=_BORING_LABEL_NAMES)
                     ),
                 }
             )
@@ -131,53 +122,64 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
-                        feature=datasets.ClassLabel(
-                            num_classes=len(_PANEL_START_NAMES),
-                            names=_PANEL_START_NAMES
-                        )
+                        feature=datasets.ClassLabel(num_classes=len(_PANEL_START_NAMES), names=_PANEL_START_NAMES)
                     ),
                 }
             )
 
         return datasets.DatasetInfo(
             description=_DESCRIPTION,
-            features=features,  # Here we define them above because they are different between configurations
+            features=features,
             supervised_keys=("input_ids", "labels"),
             homepage=_HOMEPAGE,
             license=_LICENSE,
             citation=_CITATION,
         )
 
-    def _split_generators(self, dl_manager):
-        """Returns SplitGenerators."""
-        data_dir = Path(self.config.data_dir)
+    def _split_generators(self, dl_manager: datasets.DownloadManager):
+        """Returns SplitGenerators.
+        Uses local files if a data_dir is specified. Otherwise downloads the files from their official url."""
+        if self.config.data_dir:
+            data_dir = Path(self.config.data_dir)
+            files = {
+                "train": str(data_dir / "train.jsonl"),
+                "eval": str(data_dir / "eval.jsonl"),
+                "test": str( data_dir / "testt.jsonl")
+            }
+        else:
+            url = _URLS[self.config.name]
+            urls_to_download = {
+                "train": url + "train.jsonl",
+                "eval": url + "eval.jsonl",
+                "test": url + "test.jsonl",
+            }
+            files = dl_manager.download_and_extract(urls_to_download)
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": str(data_dir / "train.jsonl"),
+                    "filepath": files["train"],
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": str(data_dir / "test.jsonl"),
-                    "split": "test"
-                },
+                    "filepath": files["test"],
+                    "split": "test"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    "filepath": str(data_dir / "eval.jsonl"),
+                    "filepath": files["eval"],
                     "split": "eval",
                 },
             ),
         ]
 
     def _generate_examples(self, filepath, split):
-        """ Yields examples. This method will receive as arguments the `gen_kwargs` defined in the previous `_split_generators` method.
+        """Yields examples. This method will receive as arguments the `gen_kwargs` defined in the previous `_split_generators` method.
         It is in charge of opening the given file and yielding (key, example) tuples from the dataset
         The key is not important, it's more here for legacy reason (legacy from tfds)"""
 
@@ -187,77 +189,20 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 if self.config.name == "NER":
                     labels_type = data["label_ids"]["entity_types"]
                     tag_mask = [0 if tag == "O" else 1 for tag in labels_type]
-                    yield id_, {
-                        "input_ids": data["input_ids"],
-                        "labels": labels_type,
-                        "tag_mask": tag_mask
-                    }
+                    yield id_, {"input_ids": data["input_ids"], "labels": labels_type, "tag_mask": tag_mask}
                 elif self.config.name == "ROLES":
                     labels_type = data["label_ids"]["entity_types"]
                     geneprod = ["B-GENEPROD", "I-GENEPROD", "B-PROTEIN", "I-PROTEIN", "B-GENE", "I-GENE"]
-                    tag_mask = [ 1 if t in geneprod else 0 for t in labels_type]
+                    tag_mask = [1 if t in geneprod else 0 for t in labels_type]
                     yield id_, {
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["geneprod_roles"],
-                        "tag_mask": tag_mask
+                        "tag_mask": tag_mask,
                     }
                 elif self.config.name == "BORING":
-                    yield id_, {
-                        "input_ids": data["input_ids"],
-                        "labels": data["label_ids"]["boring"]
-                    }
+                    yield id_, {"input_ids": data["input_ids"], "labels": data["label_ids"]["boring"]}
                 elif self.config.name == "PANELIZATION":
                     yield id_, {
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["panel_start"],
                     }
-
-
-def self_test():
-    from datasets import load_dataset
-    data_dir = "/tmp/dataset"
-    p = Path(data_dir)
-    p.mkdir()
-    try:
-        p_train = p / "train.jsonl"
-        p_eval = p / "eval.jsonl"
-        p_test = p / "test.jsonl"
-        if config.from_pretrained:
-            tokenizer = RobertaTokenizerFast.from_pretrained(config.from_pretrained, max_len=config.max_length)
-        else:
-            tokenizer = RobertaTokenizerFast.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
-        batch_encoding = tokenizer("One two three four five six seven eight nine ten")
-        d = {
-            "input_ids": batch_encoding.input_ids,
-            "label_ids": {
-                "entity_types": ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
-                "geneprod":  ["O", "O", "O", "B-GENEPROD", "I-GENEPROD", "O", "O", "O", "O", "O", "O", "O"],
-                "cell_type_line":  ["O", "O", "O", "B-CELL", "I-CELL", "O", "O", "O", "O", "O", "O", "O"],
-                "geneprod_roles": ["O", "O", "O", "B-CONTROLLED_VAR", "I-CONTROLLED_VAR", "O", "O", "O", "O", "O", "O", "O"],
-                "boring": ["O", "O", "O", "B-BORING", "I-BORING", "O", "O", "O", "O", "O", "O", "O"],
-                "panel_start": ["O", "B-PANEL_START", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-            },
-        }
-        p_train.write_text(json.dumps(d))
-        p_eval.write_text(json.dumps(d))
-        p_test.write_text(json.dumps(d))
-        for configuration in ["NER", "ROLES", "BORING", "PANELIZATION"]:
-            train_dataset, eval_dataset, test_dataset = load_dataset(
-                './tokcl/loader.py',
-                configuration,
-                data_dir=data_dir,
-                split=["train", "validation", "test"],
-                download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-                cache_dir=CACHE,
-                tokenizer=tokenizer
-            )
-            print(len(train_dataset))
-            print(len(eval_dataset))
-            print(len(test_dataset))
-            print(f"Number of classes: {train_dataset.info.features['labels'].feature.num_classes}")
-    finally:
-        shutil.rmtree(data_dir)
-
-
-if __name__ == "__main__":
-    self_test()
