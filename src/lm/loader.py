@@ -48,7 +48,7 @@ _LICENSE = ""
 # The HuggingFace dataset library don't host the datasets but only point to the original files
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
 _URLs = {
-    'biolang': "...",
+    "biolang": "https://huggingface.co/datasets/EMBO/biolang/resolve/main/oapmc_abstracts_figs.zip",
 }
 
 
@@ -92,26 +92,31 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        data_dir = Path(self.config.data_dir)
+        if self.config.data_dir:
+            data_dir = self.config.data_dir
+        else:
+            url = _URLs["biolang"]
+            data_dir = dl_manager.download_and_extract(url)
+            data_dir += "/oapmc_abstracts_figs"
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    "filepath": str(data_dir / "train.jsonl"),
+                    "filepath": data_dir + "/train.jsonl"),
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": str(data_dir / "test.jsonl"),
+                    "filepath": data_dir + "/test.jsonl"),
                     "split": "test"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    "filepath": str(data_dir / "eval.jsonl"),
+                    "filepath": data_dir + "/eval.jsonl"),
                     "split": "eval",
                 },
             ),
