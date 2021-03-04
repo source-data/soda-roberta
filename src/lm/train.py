@@ -46,7 +46,7 @@ def train(
         data_config_name,
         data_dir=dataset_path,
         split=["train", "validation", "test"],
-        download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
+        # download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
     )
 
@@ -114,8 +114,8 @@ if __name__ == "__main__":
         save_total_limit: int = field(default=5)
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
-    parser.add_argument("dataset_path", help="The dataset to use for training.")
     parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL"], help="Name of the dataset configuration to use.")
+    parser.add_argument("--dataset_path", help="The dataset to use for training.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache

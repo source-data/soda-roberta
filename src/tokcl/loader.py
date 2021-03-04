@@ -56,15 +56,15 @@ _DESCRIPTION = """\
 This dataset is based on the SourceData database and is intented to facilitate training of NLP tasks in the cell and molecualr biology domain.
 """
 
-_HOMEPAGE = "http://sourcedata.io"
+_HOMEPAGE = "https://huggingface.co/datasets/EMBO/sd-nlp"
 
-_LICENSE = ""
+_LICENSE = "CC-BY 4.0"
 
 _URLS = {
-    "NER": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
-    "ROLES": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
-    "BORING": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_panels/",
-    "PANELIZATION": "https://github.com/source-data/soda-roberta/raw/master/data/json/sd_figs/",
+    "NER": "https://huggingface.co/datasets/EMBO/sd-nlp/resolve/main/sd_panels.zip",
+    "ROLES": "https://huggingface.co/datasets/EMBO/sd-nlp/resolve/main/sd_panels.zip",
+    "BORING": "https://huggingface.co/datasets/EMBO/sd-nlp/resolve/main/sd_panels.zip",
+    "PANELIZATION": "https://huggingface.co/datasets/EMBO/sd-nlp/resolve/main/sd_figs.zip",
 }
 
 class SourceDataNLP(datasets.GeneratorBasedBuilder):
@@ -140,39 +140,35 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
         """Returns SplitGenerators.
         Uses local files if a data_dir is specified. Otherwise downloads the files from their official url."""
         if self.config.data_dir:
-            data_dir = Path(self.config.data_dir)
-            files = {
-                "train": str(data_dir / "train.jsonl"),
-                "eval": str(data_dir / "eval.jsonl"),
-                "test": str( data_dir / "testt.jsonl")
-            }
+            data_dir = self.config.data_dir
         else:
             url = _URLS[self.config.name]
-            urls_to_download = {
-                "train": url + "train.jsonl",
-                "eval": url + "eval.jsonl",
-                "test": url + "test.jsonl",
-            }
-            files = dl_manager.download_and_extract(urls_to_download)
+            data_dir = dl_manager.download_and_extract(url)
+            if self.config.name in ["NER", "ROLES", "BORING"]:
+                data_dir += "/sd_panels"
+            elif self.config.name == "PANELIZATION":
+                data_dir += "/sd_figs"
+            else:
+                raise ValueError(f"unkonwn config name: {self.config.name}")
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": files["train"],
+                    "filepath": data_dir + "/train.jsonl",
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": files["test"],
+                    "filepath": data_dir + "/test.jsonl",
                     "split": "test"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    "filepath": files["eval"],
+                    "filepath": data_dir + "/eval.jsonl",
                     "split": "eval",
                 },
             ),
