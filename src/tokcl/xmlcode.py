@@ -230,3 +230,22 @@ class SourceDataCodes(Enum):
             },
         })
     )
+
+
+def main():
+    _NER_LABEL_NAMES = SourceDataCodes.ENTITY_TYPES.iob2_labels
+    print(f"_NER_LABEL_NAMES={_NER_LABEL_NAMES}")
+    _SEMANTIC_ROLES_LABEL_NAMES = SourceDataCodes.GENEPROD_ROLES.iob2_labels
+    print(f"_SEMANTIC_ROLES_LABEL_NAMES={_SEMANTIC_ROLES_LABEL_NAMES}")
+    _BORING_LABEL_NAMES = SourceDataCodes.BORING.iob2_labels
+    print(f"_BORING_LABEL_NAMES={_BORING_LABEL_NAMES}")
+    _PANEL_START_NAMES = SourceDataCodes.PANELIZATION.iob2_labels
+    print(f"_PANEL_START_NAMES={_PANEL_START_NAMES}")
+    _GENEPROD = SourceDataCodes.GENEPROD.iob2_labels
+    print(f"_GENEPROD={_GENEPROD}")
+    _CELL_TYPE_LINE = SourceDataCodes.CELL_TYPE_LINE.iob2_labels
+    print(f"_CELL_TYPE_LINE={_CELL_TYPE_LINE}")
+
+
+if __name__ == "__main__":
+    main()
