@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  smtag:
+    image: tlemberger/smarttag:latest  # docker pull tlemberger/smarttag:firsthub
+    volumes:
+      - cache:/root/.cache
+
+volumes:
+    cache:
+      driver: local
+
