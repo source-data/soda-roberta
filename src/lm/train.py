@@ -42,7 +42,7 @@ def train(
 
     print(f"\nLoading datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        './lm/loader.py',
+        'EMBO/biolang',
         data_config_name,
         data_dir=dataset_path,
         split=["train", "validation", "test"],

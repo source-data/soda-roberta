@@ -7,8 +7,6 @@ import json
 import torch
 from typing import List, Dict
 from tokcl.xmlcode import CodeMap, SourceDataCodes as sd
-from common import TOKENIZER_PATH, TOKCL_MODEL_PATH
-from common.config import config
 
 
 class Entity:
@@ -233,14 +231,14 @@ if __name__ == "__main__":
     parser.add_argument("text", nargs="?", default="We studied mice with genetic ablation of the ERK1 gene in brain and muscle.", help="The text to tag.")
     args = parser.parse_args()
     text = args.text
-    panel_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/PANELIZATION")
-    ner_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/NER/")
-    role_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/ROLES")
-    tokenizer = config.tokenizer
+    panel_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-panels")
+    ner_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-ner")
+    role_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-roles")
+    tokenizer = RobertaTokenizerFast.from_pretrained(f"roberta-base")
     tagger = Tagger(
         tokenizer,
         panel_model,  # segments figure legends into panel legends
-        ner_model,  # taggs bilogical entities
+        ner_model,  # tags biolgical entities
         role_model  # semantic roles of entities
     )
     tagged = tagger(text)

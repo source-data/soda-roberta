@@ -28,9 +28,11 @@ def train(
 
     print(f"\nLoading and tokenizing datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        './tokcl/loader.py',
+        'EMBO/sd-nlp',
+        # './tokcl/loader.py',
         data_config_name,
-        data_dir=dataset_path,
+        script_version="main",
+        # data_dir=dataset_path,
         split=["train", "validation", "test"],
         # download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
