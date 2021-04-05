@@ -14,6 +14,4 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*1
 COPY ./predict /app/predict
 COPY ./tokcl/xmlcode.py /app/tokcl/xmlcode.py
 
-ENTRYPOINT ["python", "-m", "predict.smtag"]
-
 
