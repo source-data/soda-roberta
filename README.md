@@ -42,13 +42,9 @@ Install`docker-compose==1.28.5` (https://docs.docker.com/compose/install/).
 
 # Quick access to the pretrained SmartTag pipeline
 
-SmartTag can used with this single command:
+SmartTag can used with this command:
 
-    docker run -v cache:/root/.cache --rm tlemberger/smarttag:latest "This is an interesting brain."
-
-Or with docker-compose:
-
-    docker-compose -f docker-compose.smarttag.yml run --rm smtag "This is an interesting brain."
+    docker-compose -f smtag.yml run --rm smtag "This is an interesting brain."
 
 This will pull automatically the docker image `tlemberger/smarttag:latest` from [dockerhub](https://hub.docker.com/).
 
