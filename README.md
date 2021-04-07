@@ -13,7 +13,7 @@ SODA-RoBERTa uses the huggingface (https://huggingface.co) and PyTorch (https://
 
 The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. 
 
-Tagging biological entites that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature. 
+Tagging biological entities that are the object of investigation in specific experiments reported in scientific figure and classifying their role as measured vs controlled variables allows to easily derive a knowledge graph representing scientific hypotheses reported in the literature. 
 
 SmartTag uses a 3-step pipeline: 
 
@@ -21,9 +21,11 @@ SmartTag uses a 3-step pipeline:
 2. Named Entity Recognition of bioentities and experimental methods.
 3. Semantic tagging of the experimental role of generoducts as measured variable or controlled variable.
 
-Accordingly, a specialized language model for scientific biological language is fine tuned into 3 models for the respective tasks: PANELIZATION, NER, ROLES. 
+Accordingly, a specialized language model for scientific biological language is fine tuned into 3 models for the respective tasks: PANELIZATION, NER, ROLES. These models are based on the find-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
 
-We provide below the instructions to train the language model by fine tuning a pretrained Roberta transormer on text from PubMedCentral and by training the 3 specific models using the SourceData datset.
+The datasetse and trained models are available as such at https://huggingface.co/EMBO.
+
+We provide below the instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 3 specific models using the SourceData datset.
 
 The training data is in the form of XML files. SODA-ROBERTA provides therefore tools to convert XML into tagged datasets that can be used for token classification tasks. At inference stage, the tagged text is serialized back into json or xml.
 
@@ -36,7 +38,7 @@ Setup a Python virtual environment:
     pip install --upgrade pip
 
 Install `docker` (https://docs.docker.com/engine/install/). 
-Install`docker-compose==1.28.5` (https://docs.docker.com/compose/install/).
+Install`docker-compose` (https://docs.docker.com/compose/install/).
 
     pip install docker-compose==1.28.5
 
