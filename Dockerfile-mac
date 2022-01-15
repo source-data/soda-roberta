@@ -7,7 +7,8 @@ RUN apt-get update \
 && pip install --upgrade pip setuptools
 RUN pip install torch==1.7.1  # 776.8 MB
 RUN pip install tensorflow==2.4.0  # 394.7 MB
-RUN pip install transformers==4.1.1
+# RUN pip install transformers==4.1.1
+RUN pip install transformers==4.15.0
 RUN pip install datasets==1.2.1
 RUN pip install nltk==3.5
 RUN pip install scikit-learn==0.24.0
@@ -19,5 +20,11 @@ RUN pip install lxml==4.6.2
 RUN pip install spacy==2.3.5
 # download language models for spacy
 RUN python -m spacy download en_core_web_sm
+
+# for running jupyter
+RUN pip install notebook
+# apparently needs separate installation for progress bar stuff in jupyter
+# https://ipywidgets.readthedocs.io/en/stable/user_install.html
+RUN pip install ipywidgets
 
 # USER $user_id:$dgroup_id

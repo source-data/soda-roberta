@@ -18,3 +18,12 @@ RUN pip install spacy==2.3.5
 RUN pip install lxml==4.6.2
 # download language models for spacy
 RUN python -m spacy download en_core_web_sm
+
+# for running jupyter
+RUN pip install notebook
+# apparently needs separate installation for progress bar stuff in jupyter
+# https://ipywidgets.readthedocs.io/en/stable/user_install.html
+RUN pip install ipywidgets
+
+ARG user_id
+ARG group_id

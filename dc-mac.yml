@@ -23,8 +23,10 @@ services:
     - ./runs:${RUNS_DIR}
     env_file:
     - ./.env
+    ports:
+      - 8888:8888  # this allows to run jupyter notebook --port=8888 --ip=0.0.0.0 --allow-root
     working_dir: /app
-    entrypoint: ["/bin/bash"]
+    command: ["jupyter", "notebook", "--port=8888", "--ip=0.0.0.0", "--allow-root"]
 
   tensorboard:
     image: sdbert
