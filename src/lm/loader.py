@@ -69,12 +69,10 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         if self.config.name == "MLM":
-            features = datasets.Features(
-                {
-                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
-                    "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
-                }
-            )
+            features = datasets.Features({
+                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
+            })
         elif self.config.name in ["DET", "VERB", "SMALL"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
@@ -102,21 +100,21 @@ class BioLang(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    "filepath": data_dir + "/train.jsonl"),
+                    "filepath": data_dir + "/train.jsonl",
                     "split": "train",
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": data_dir + "/test.jsonl"),
+                    "filepath": data_dir + "/test.jsonl",
                     "split": "test"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    "filepath": data_dir + "/eval.jsonl"),
+                    "filepath": data_dir + "/eval.jsonl",
                     "split": "eval",
                 },
             ),

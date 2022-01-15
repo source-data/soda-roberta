@@ -233,9 +233,9 @@ if __name__ == "__main__":
     parser.add_argument("text", nargs="?", default="We studied mice with genetic ablation of the ERK1 gene in brain and muscle.", help="The text to tag.")
     args = parser.parse_args()
     text = args.text
-    panel_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/PANELIZATION")
-    ner_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/NER/")
-    role_model = RobertaForTokenClassification.from_pretrained(f"{TOKCL_MODEL_PATH}/ROLES")
+    panel_model = RobertaForTokenClassification.from_pretrained("EMBO/sd-panels")
+    ner_model = RobertaForTokenClassification.from_pretrained("EMBO/sd-ner")
+    role_model = RobertaForTokenClassification.from_pretrained("EMBO/sd-roles")
     tokenizer = config.tokenizer
     tagger = Tagger(
         tokenizer,

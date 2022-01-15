@@ -17,10 +17,12 @@ import torch
 from dataclasses import dataclass, field
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
+    AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
     TrainingArguments, HfArgumentParser,
-    DataCollatorForLanguageModeling, EvaluationStrategy
+    DataCollatorForLanguageModeling
 )
 from datasets import load_dataset, GenerateMode
+from vae.model import Because
 from .trainer import MyTrainer
 from .pos_data_collator import DataCollatorForTargetedMasking
 from .show import ShowExample
@@ -35,14 +37,14 @@ def train(
     dataset_path: str,
     data_config_name: str,
     training_args: TrainingArguments,
-    tokenizer: RobertaTokenizerFast
+    tokenizer: AutoTokenizer
 ):
 
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        './lm/loader.py',
+        "./lm/loader.py",
         data_config_name,
         data_dir=dataset_path,
         split=["train", "validation", "test"],
@@ -65,16 +67,20 @@ def train(
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
     if config.from_pretrained:
-        model = RobertaForMaskedLM.from_pretrained(config.from_pretrained)
+        model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
     else:
-        model_config = RobertaConfig(
-            vocab_size=config.vocab_size,
-            max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
-            num_attention_heads=12,
-            num_hidden_layers=6,
-            type_vocab_size=1,
-        )
-        model = RobertaForMaskedLM(config=model_config)
+        if config.model_type == "Autoencoder":
+            model_config = RobertaConfig(
+                vocab_size=config.vocab_size,
+                max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
+                num_attention_heads=12,
+                num_hidden_layers=6,
+                type_vocab_size=1,
+            )
+            model = RobertaForMaskedLM(config=model_config)
+        elif config.model_type == "CausalRepresentation":
+            seq2seq = AutoModelForMaskedLM.from_pretrained("facebook/bart-base")
+            model = Because(pretrained=seq2seq, max_nodes=4, num_features=10)
 
     training_args.remove_unused_columns = False  # we need pos_mask and special_tokens_mask in collator
 
@@ -96,7 +102,7 @@ def train(
     trainer.save_model(training_args.output_dir)
 
     print(f"Testing on {len(test_dataset)}.")
-    pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
+    pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix="test")
     print(f"{pred.metrics}")
 
 
@@ -108,7 +114,7 @@ if __name__ == "__main__":
         output_dir: str = field(default=LM_MODEL_PATH)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=2000)
-        evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
+        evaluation_strategy: str = "steps"
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
         save_total_limit: int = field(default=5)
