@@ -23,7 +23,6 @@ from __future__ import absolute_import, division, print_function
 import json
 from pathlib import Path
 import datasets
-from common import CACHE
 import shutil
 
 _CITATION = """\
@@ -36,23 +35,18 @@ _CITATION = """\
 """
 
 _DESCRIPTION = """\
-This dataset is based on abstracts from the open access section of PubMed Central to train language models for the domain of biology. 
+This dataset is based on abstracts from the open access section of EuropePubMed Central to train language models in the domain of biology. 
 """
 
 _HOMEPAGE = "https://europepmc.org/downloads/openaccess"
 
-# TODO: Add the licence for the dataset here if you can find it
-_LICENSE = ""
+_LICENSE = "CC BY 4.0"
 
-# TODO: Add link to the official dataset URLs here
-# The HuggingFace dataset library don't host the datasets but only point to the original files
-# This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
 _URLs = {
     "biolang": "https://huggingface.co/datasets/EMBO/biolang/resolve/main/oapmc_abstracts_figs.zip",
 }
 
 
-# TODO: Name of the dataset usually match the script name with CamelCase instead of snake_case
 class BioLang(datasets.GeneratorBasedBuilder):
     """BioLang: a dataset to train language models in biology."""
 
@@ -157,40 +151,3 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         "input_ids": data['input_ids'],
                         "tag_mask": pos_mask,
                     }
-
-
-def self_test():
-    from datasets import load_dataset
-    data_dir = "/tmp/dataset"
-    p = Path(data_dir)
-    p.mkdir()
-    try:
-        p_train = p / "train.jsonl"
-        p_eval = p / "eval.jsonl"
-        p_test = p / "test.jsonl"
-        d = {
-            "input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 0],
-            "label_ids": ["X", "DET", "X", "X", "X", "X", "X", "X", "X", "X"],
-            "special_tokens_mask": [1, 0, 0, 0, 0, 0, 0, 0, 0, 1]
-        }
-        p_train.write_text(json.dumps(d))
-        p_eval.write_text(json.dumps(d))
-        p_test.write_text(json.dumps(d))
-        train_dataset, eval_dataset, test_dataset = load_dataset(
-            './lm/loader.py',
-            'DET',
-            data_dir=data_dir,
-            split=["train", "validation", "test"],
-            download_mode=datasets.utils.download_manager.GenerateMode.FORCE_REDOWNLOAD,
-            cache_dir=CACHE
-        )
-        print(len(train_dataset))
-        print(len(eval_dataset))
-        print(len(test_dataset))
-
-    finally:
-        shutil.rmtree(data_dir)
-
-
-if __name__ == "__main__":
-    self_test()

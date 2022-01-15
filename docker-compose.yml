@@ -4,8 +4,8 @@ services:
   nlp:
     build:
       context: ./src
-      dockerfile: '../Dockerfile'
-      # args: # abandoning this for now, transfomers needs to be abel to mkdir /.cache
+      dockerfile: ../Dockerfile
+      # args: # abandoning this for now, transfomers needs to be able to mkdir /.cache
       #   - user_id=${USER_ID}
       #   - group_id=${GROUP_ID}
     image: sdbert
@@ -22,6 +22,7 @@ services:
     - ./tokcl_models:${TOKCL_MODEL_PATH}
     - ./cache:${CACHE}
     - ./runs:${RUNS_DIR}
+    - ./dummy:${DUMMY_DIR}
     env_file:
     - ./.env
     ports:
