@@ -130,22 +130,22 @@ python -m common.extract /data/oapmc_articles  -P .//abstract
 # creates by default /data/text/oapmc_abstracts/ with train valid and test sub dir
 ```
 
-Note: it is possibel to combined several XPath with the `|` operator to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be very large):
+Note: it is possibel to combine several XPath with the `|` operator to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be very large):
 
 ```
 python -m common.extract /data/xml/oapmc_articles/ /data/text/oapmc_abstracts_figs/ --proba=0.5 --xpath ".//abstract | .//fig"
 ```
-Note: the option --proba allows to determine the probability with wich each example is actually includedd; this is useful when the dataset is huge and only a random subset needs to be selected.
+Note: the option --proba allows to determine the probability with wich each example is actually included; this is useful when the dataset is huge and only a random subset needs to be selected.
 
 ## Tokenize and prepare dataset
 
-By default, the configuration file `common.config` specifies the pretrained 'roberta-base' model as statring point for fine tuning the language model. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer:
+By default, the configuration file `common.config` specifies the pretrained 'roberta-base' model as starting point for fine tuning the language model. The appropriate tokenizer will also be used. To train a language model from scratch, set from_pretrained = '' in common.config and train the tokenizer:
 
 ````
 python -m lm.tokentrain /data/text/oapmc_abstracts  # ONLY WHEN TRAINING CUSTOMIZED MODEL!
 ````
 
-Tokenized the data:
+Tokenize the data:
 
 ````
 python -m lm.dataprep /data/text/oapmc_abstracts /data/json/oapmc_abstracts
@@ -155,8 +155,14 @@ This can take a while for large datasets. To follow the progress, visit http://l
 
 ## Train language model
 
+The first argument of `lm.train` is the type of task:
+- `MLM`: masked language modeling
+- `DET`: part-of-speeach masking of determniants
+- `VERB`: part-of-speeach masking of verbs
+- `SALL`: part-of-speeach masking of determinants, conjunctions, prepositions and pronouns
+
 ```
-python -m lm.train /data/json/oapmc_abstracts
+python -m lm.train MLM --dataset_path /data/json/oapmc_abstracts
 ```
 
 Note:   default, the model is saved in /lm_models so that it can be used for subsequent fine tuning for token classification
