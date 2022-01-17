@@ -1,12 +1,13 @@
 from itertools import product
 from random import sample, gauss
-from turtle import pd
+from dataclasses import dataclass
 import torch
 from torch import nn
 from transformers import (
-    BartConfig, BartTokenizerFast, BartModel, BartForConditionalGeneration,
+    BartConfig, BartTokenizerFast, BartForConditionalGeneration,
 )
 from transformers.models.bart.modeling_bart import shift_tokens_right
+from transformers.modeling_outputs import BaseModelOutput, MaskedLMOutput, BaseModelOutputWithPastAndCrossAttentions
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
@@ -18,11 +19,19 @@ def compute_kernel(x, y):
     y = y.unsqueeze(0)  # (1, y_size, dim)
     tiled_x = x.expand(x_size, y_size, dim)
     tiled_y = y.expand(x_size, y_size, dim)
-    kernel_input = (tiled_x - tiled_y).pow(2).mean(2) / float(dim)
+    try:
+        kernel_input = (tiled_x - tiled_y).pow(2).mean(2) / float(dim)
+    except RuntimeError:
+        print(f"tiled_x.device={tiled_x.device}")
+        print(f"tiled_y.device={tiled_y.device}")
+        raise Exception()
     return torch.exp(-kernel_input)  # (x_size, y_size)
 
 
 def mmd(x, y):
+    if torch.cuda.is_available():
+        x = x.cuda()
+        y = y.cuda()
     x_kernel = compute_kernel(x, x)
     y_kernel = compute_kernel(y, y)
     xy_kernel = compute_kernel(x, y)
@@ -79,20 +88,43 @@ class BecauseConfig(BartConfig):
         self.num_features = num_features
 
 
-class Because(BartForConditionalGeneration):
+@dataclass
+class BecauseOutput(MaskedLMOutput):
+    z_1: torch.Tensor = None
+    z_2: torch.Tensor = None
 
-    def __init__(self, pretrained: BartForConditionalGeneration, max_nodes=None, num_features=None, *args, **kwargs):
-        super(Because, self).__init__(config=pretrained.config, *args, **kwargs)
+
+class Because(nn.Module):
+
+    def __init__(
+        self,
+        pretrained: BartForConditionalGeneration,
+        max_nodes=None,
+        num_features=None,
+        num_entities=3,
+        num_interactions=3,
+        sampling_iterations=10
+    ):
+        super(Because, self).__init__()#config=pretrained.config, *args, **kwargs)
+        # from the pretrained model
         self.pretrained = pretrained
-        self.max_nodes = max_nodes
-        self.num_features = num_features
-        self.z1_dim = self.max_nodes ** 2
-        self.z2_dim = self.max_nodes * self.num_features
         self.encoder = self.pretrained.get_encoder()
-        self.decoder = self.pretrained.get_decoder()
+        self.decoder = self.pretrained.get_decoder()  # TODO: check it uses cross attention?
         self.d_encoder = self.encoder.config.d_model
         self.d_decoder = self.decoder.config.d_model
-        self.dropout = nn.Dropout(0.5)
+        self.pad_token_id = self.decoder.config.pad_token_id
+        self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
+        self.lm_head = self.pretrained.lm_head
+        # latent vars
+        self.max_nodes = max_nodes
+        self.num_features = num_features
+        self.num_entities = num_entities
+        self.num_interactions = num_interactions
+        self.sampling_iterations = sampling_iterations
+        self.z1_dim = self.max_nodes ** 2
+        self.z2_dim = self.max_nodes * self.num_features
+        # own layers
+        self.dropout = nn.Dropout(0.1)
         self.act_fn = nn.GELU()
         self.fc_enc_1 = nn.Linear(self.d_encoder, self.d_encoder)
         self.norm_enc = nn.LayerNorm(self.d_encoder)
@@ -103,14 +135,11 @@ class Because(BartForConditionalGeneration):
         self.conv1d = nn.Conv1d(2, 1, 1, 1)
         self.norm_dec = nn.LayerNorm(self.d_decoder)
         self.loss_fct = nn.CrossEntropyLoss()
-        self.num_entities = 3
-        self.num_interactions = 3
-        self.sampling_iterations = 100
 
-    def forward(self, input_ids=None, labels=None, **kwargs):
+    def forward(self, input_ids=None, labels=None, **kwargs) -> BecauseOutput:
         # encode
         encoder_outputs = self.encoder(input_ids=input_ids, **kwargs)
-        y = encoder_outputs[0]
+        y: BaseModelOutput = encoder_outputs[0]
         # encoder output to latent variable
         y = self.dropout(y)
         y = self.fc_enc_1(y)
@@ -136,48 +165,55 @@ class Because(BartForConditionalGeneration):
         # decode
         decoder_input_ids = shift_tokens_right(
             input_ids,
-            self.config.pad_token_id,
-            self.config.decoder_start_token_id
+            self.pad_token_id,
+            self.decoder_start_token_id
         )
-        decoder_outputs = self.decoder(
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=y,
             **kwargs
         )
-        lm_logits = self.pretrained.lm_head(decoder_outputs[0])  # maybe not necessary
+        lm_logits = self.lm_head(decoder_outputs[0])  # maybe not necessary
         # calculate loss
         if labels is not None:
             masked_lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
-            adj_sampling, node_label_sampling = interaction_samples(self.max_nodes, self.num_entities, self.num_interactions, self.num_features, self.sampling_iterations)
+            with torch.no_grad():
+                adj_sampling, node_label_sampling = interaction_samples(self.max_nodes, self.num_entities, self.num_interactions, self.num_features, self.sampling_iterations)
             adj_matrix_distro_loss = mmd(adj_sampling.view(self.sampling_iterations, self.max_nodes ** 2), z_1)
             node_label_distro_lost = mmd(node_label_sampling.view(self.sampling_iterations, self.max_nodes * self.num_features), z_2)
             loss = masked_lm_loss + adj_matrix_distro_loss + node_label_distro_lost
+        else:
+            loss = None
         # return both latent representations and output
-        return z_1, z_2, decoder_outputs, lm_logits, loss  # TODO: return a ModelOutput()
+        # The Trainer class is optimized for 🤗 Transformers models and can have surprising behaviors when you use it on other models. When using it on your own model, make sure:
 
-        # return Seq2SeqLMOutput(
-        #     loss=loss,
-        #     logits=lm_logits,
-        #     past_key_values=outputs.past_key_values,
-        #     decoder_hidden_states=outputs.decoder_hidden_states,
-        #     decoder_attentions=outputs.decoder_attentions,
-        #     cross_attentions=outputs.cross_attentions,
-        #     encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-        #     encoder_hidden_states=outputs.encoder_hidden_states,
-        #     encoder_attentions=outputs.encoder_attentions,
-        # )
+        # your model always return tuples or subclasses of ModelOutput.
+        # your model can compute the loss if a labels argument is provided and that loss is returned as the first element of the tuple (if your model returns tuples)
+        # your model can accept multiple label arguments (use the label_names in your TrainingArguments to indicate their name to the Trainer) but none of them should be named "label".
+        return BecauseOutput(
+            loss=loss,
+            logits=lm_logits,
+            z_1=z_1,
+            z_2=z_2,
+            # past_key_values=decoder_outputs.past_key_values,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
+            # cross_attentions=decoder_outputs.cross_attentions,
+            # encoder_last_hidden_state=encoder_outputs.last_hidden_state,  'BaseModelOutput' object has no attribute 'last_hidden_states'
+            # encoder_hidden_states=encoder_outputs.hidden_states,
+        )
 
 
 def self_test():
     seq2seq = BartForConditionalGeneration.from_pretrained("facebook/bart-base")
-    because = Because(pretrained=seq2seq, max_nodes=4, num_features=10)
+    because = Because(pretrained=seq2seq, max_nodes=4, num_features=10, sampling_iterations=10)
     tokenizer = BartTokenizerFast.from_pretrained("facebook/bart-base")
     test_string = "Huggingface office is based in "
-    inputs = tokenizer(test_string, return_tensors="pt")
+    inputs = tokenizer([test_string] * 32, return_tensors="pt")
     input_ids = inputs["input_ids"]
     labels = input_ids.masked_fill_(input_ids == seq2seq.config.pad_token_id, -100)
-    z_1, z_2, decoder_outputs, lm_logits, loss = because(input_ids=input_ids, labels=labels)
-    output_ids = torch.argmax(torch.softmax(lm_logits, -1), -1)
+    outputs = because(input_ids=input_ids, labels=labels)
+    output_ids = torch.argmax(torch.softmax(outputs.logits, -1), -1)
     result_string = tokenizer.decode(output_ids[0].tolist())
     print(result_string)
 

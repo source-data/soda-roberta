@@ -16,6 +16,7 @@ from datetime import datetime
 import torch
 from dataclasses import dataclass, field
 from transformers import (
+    IntervalStrategy,
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
     TrainingArguments, HfArgumentParser,
@@ -44,11 +45,11 @@ def train(
 
     print(f"\nLoading datasets found in {dataset_path}.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        'EMBO/biolang',
-        data_config_name,
-        data_dir=dataset_path,
+        'EMBO/biolang',  # a dataset repository on the HF hub with a dataset script (if the script has the same name as the directory) -> load the dataset builder from the dataset script in the dataset repository e.g. 'username/dataset_name', a dataset repository on the HF hub containing a dataset script ‘dataset_name.py
+        data_config_name,  # the name of the dataset configuration
+        data_dir=dataset_path,  # the data_dir of the dataset configuration.
         split=["train", "validation", "test"],
-        # download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
+        download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
     )
 
@@ -66,10 +67,11 @@ def train(
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
-    if config.from_pretrained:
-        model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
-    else:
-        if config.model_type == "Autoencoder":
+
+    if config.model_type == "Autoencoder":
+        if config.from_pretrained:
+            model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
+        else:
             model_config = RobertaConfig(
                 vocab_size=config.vocab_size,
                 max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
@@ -78,9 +80,12 @@ def train(
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
-        elif config.model_type == "CausalRepresentation":
-            seq2seq = AutoModelForMaskedLM.from_pretrained("facebook/bart-base")
+    elif config.model_type == "CausalRepresentation":
+        if config.from_pretrained:
+            seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
             model = Because(pretrained=seq2seq, max_nodes=4, num_features=10)
+        else:
+            raise ValueError("Training CausalRepresentation from scratch is not implemented.")
 
     training_args.remove_unused_columns = False  # we need pos_mask and special_tokens_mask in collator
 
@@ -114,7 +119,7 @@ if __name__ == "__main__":
         output_dir: str = field(default=LM_MODEL_PATH)
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=2000)
-        evaluation_strategy: str = "steps"
+        evaluation_strategy: str = IntervalStrategy.STEPS
         per_device_train_batch_size: int = field(default=16)
         per_device_eval_batch_size: int = field(default=16)
         save_total_limit: int = field(default=5)
