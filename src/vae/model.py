@@ -103,15 +103,17 @@ class Because(nn.Module):
         num_features=None,
         num_entities=3,
         num_interactions=3,
-        sampling_iterations=10
+        sampling_iterations=10,
+        seq_length=1024
     ):
         super(Because, self).__init__()#config=pretrained.config, *args, **kwargs)
         # from the pretrained model
         self.pretrained = pretrained
         self.encoder = self.pretrained.get_encoder()
-        self.decoder = self.pretrained.get_decoder()  # TODO: check it uses cross attention?
+        self.decoder = self.pretrained.get_decoder()
         self.d_encoder = self.encoder.config.d_model
         self.d_decoder = self.decoder.config.d_model
+        self.seq_length = seq_length
         self.pad_token_id = self.decoder.config.pad_token_id
         self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
         self.lm_head = self.pretrained.lm_head
@@ -128,10 +130,10 @@ class Because(nn.Module):
         self.act_fn = nn.GELU()
         self.fc_enc_1 = nn.Linear(self.d_encoder, self.d_encoder)
         self.norm_enc = nn.LayerNorm(self.d_encoder)
-        self.fc_z1 = nn.Linear(self.d_encoder, self.z1_dim)
-        self.fc_z2 = nn.Linear(self.d_encoder, self.z2_dim)
-        self.fc_dec_1 = nn.Linear(self.z1_dim, self.d_decoder)
-        self.fc_dec_2 = nn.Linear(self.z2_dim, self.d_decoder)
+        self.fc_z1 = nn.Linear(self.seq_length * self.d_encoder, self.z1_dim)
+        self.fc_z2 = nn.Linear(self.seq_length * self.d_encoder, self.z2_dim)
+        self.fc_dec_1 = nn.Linear(self.z1_dim, self.seq_length * self.d_decoder)
+        self.fc_dec_2 = nn.Linear(self.z2_dim, self.seq_length * self.d_decoder)
         self.conv1d = nn.Conv1d(2, 1, 1, 1)
         self.norm_dec = nn.LayerNorm(self.d_decoder)
         self.loss_fct = nn.CrossEntropyLoss()
@@ -140,27 +142,34 @@ class Because(nn.Module):
         # encode
         encoder_outputs = self.encoder(input_ids=input_ids, **kwargs)
         y: BaseModelOutput = encoder_outputs[0]
+        batch_size, length, hidden_size = y.size()  # batch_size B, length L, hidden_size H
+        assert length == self.seq_length
+        assert hidden_size == self.d_encoder
+
         # encoder output to latent variable
         y = self.dropout(y)
         y = self.fc_enc_1(y)
         y = self.act_fn(y)
-        z = self.norm_enc(y)
+        y = self.norm_enc(y)  # B x L x H
         # latent variable to adj matrix
-        z_1 = self.fc_z1(z).view(-1, self.max_nodes * self.max_nodes)
+        z_1 = y.view(batch_size, (self.seq_length * self.d_encoder))  # B x (L * H)
+        z_1 = self.fc_z1(z_1)  # B x Z_1
         # latent variable to entity embeddings
-        z_2 = self.fc_z2(z).view(-1, self.max_nodes * self.num_features)
+        z_2 = y.view(batch_size, (self.seq_length * self.d_encoder))  # B x (L * H)
+        z_2 = self.fc_z2(z_2)  # B x (L * H)
         # adj matrix and entity embeddings to decoder input
-        y_1 = self.fc_dec_1(z_1)
-        y_2 = self.fc_dec_2(z_2)
+        y_1 = self.fc_dec_1(z_1)  # B x (L * H)
+        y_2 = self.fc_dec_2(z_2)  # B x (L * H)
         # introduce third dimension to be able to concatenate vectors
-        y_1 = y_1.unsqueeze(1)
-        y_2 = y_2.unsqueeze(1)
-        y = torch.cat([y_1, y_2], 1)
+        y_1 = y_1.unsqueeze(1)  # B x 1 x (L * H)
+        y_2 = y_2.unsqueeze(1)  # B x 1 x (L * H)
+        y = torch.cat([y_1, y_2], 1)  # B x 2 x (L * H)
         y = self.dropout(y)
-        y = self.conv1d(y)
+        y = self.conv1d(y)  # B x 1 x (L * H)
         y = self.act_fn(y)
         # remove extra dimension again after having reduced the concatenated vectors
-        y = y.squeeze(1)
+        y = y.squeeze(1).contiguous()  # B x (L * H)
+        y = y.view(batch_size, self.seq_length, self.d_decoder)  # B x L x H
         y = self.norm_dec(y)
         # decode
         decoder_input_ids = shift_tokens_right(
@@ -181,7 +190,7 @@ class Because(nn.Module):
                 adj_sampling, node_label_sampling = interaction_samples(self.max_nodes, self.num_entities, self.num_interactions, self.num_features, self.sampling_iterations)
             adj_matrix_distro_loss = mmd(adj_sampling.view(self.sampling_iterations, self.max_nodes ** 2), z_1)
             node_label_distro_lost = mmd(node_label_sampling.view(self.sampling_iterations, self.max_nodes * self.num_features), z_2)
-            loss = masked_lm_loss + adj_matrix_distro_loss + node_label_distro_lost
+            loss = masked_lm_loss #+ adj_matrix_distro_loss + node_label_distro_lost
         else:
             loss = None
         # return both latent representations and output
@@ -193,8 +202,8 @@ class Because(nn.Module):
         return BecauseOutput(
             loss=loss,
             logits=lm_logits,
-            z_1=z_1,
-            z_2=z_2,
+            z_1=None,#z_1,
+            z_2=None,#z_2,
             # past_key_values=decoder_outputs.past_key_values,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
