@@ -98,6 +98,7 @@ if __name__ == "__main__":
         overwrite_output_dir: bool = field(default=True)
         logging_steps: int = field(default=50)
         evaluation_strategy: EvaluationStrategy = field(default=EvaluationStrategy.STEPS)
+        prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
         learning_rate: float = field(default=1e-4)
         per_device_train_batch_size: int = field(default=32)
         per_device_eval_batch_size: int = field(default=32)
