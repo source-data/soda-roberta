@@ -73,7 +73,7 @@ class MyTensorBoardCallback(TensorBoardCallback):
             logs = rewrite_logs(logs)
             for main_tag, scalar_dict in logs.items():
                 self.tb_writer.add_scalars(main_tag, scalar_dict, state.global_step)
-            # self.tb_writer.flush()
+            self.tb_writer.flush()
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.tb_writer:
