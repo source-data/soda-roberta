@@ -57,6 +57,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
         datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
         datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (determinants, conjunctions, prepositions, pronouns) masked language model."),
+        datasets.BuilderConfig(name="NOUN", version="0.0.1", description="Dataset for part-of-speech (nouns) masked language model."),
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -67,7 +68,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name in ["DET", "VERB", "SMALL"]:
+        elif self.config.name in ["DET", "VERB", "SMALL", "NOUN"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -124,6 +125,8 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         "input_ids": data["input_ids"],
                         "special_tokens_mask": data['special_tokens_mask']
                     }
+                # else Part of Speech tags based on 
+                # Universal POS tags https://universaldependencies.org/u/pos/
                 elif self.config.name == "DET":
                     pos_mask = [0] * len(data['input_ids'])
                     for idx, label in enumerate(data['label_ids']):
@@ -146,6 +149,15 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     pos_mask = [0] * len(data['input_ids'])
                     for idx, label in enumerate(data['label_ids']):
                         if label in ['DET', 'CCONJ', 'SCONJ', 'ADP', 'PRON']:
+                            pos_mask[idx] = 1
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "tag_mask": pos_mask,
+                    }
+                elif self.config.name == "NOUN":
+                    pos_mask = [0] * len(data['input_ids'])
+                    for idx, label in enumerate(data['label_ids']):
+                        if label in ['NOUN']:
                             pos_mask[idx] = 1
                     yield id_, {
                         "input_ids": data['input_ids'],

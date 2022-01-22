@@ -6,6 +6,7 @@ import numpy as np
 def compute_metrics(pred: EvalPrediction):
     """Compute recall at the masked position
     """
+    import pdb; pdb.set_trace()
     mask = pred.label_ids != -100
     # filter everything except the masked position and flatten tensors
     labels = pred.label_ids[mask].flatten()

@@ -10,6 +10,7 @@
 # a weight decay of 0.01, learning rate warmup for 24,000 steps 
 # and linear decay of the learning rate after.
 
+from multiprocessing.sharedctypes import Value
 from typing import NamedTuple
 from pathlib import Path
 from datetime import datetime
@@ -22,17 +23,19 @@ from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
     TrainingArguments, HfArgumentParser,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling,
 )
+from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
 from vae.model import Because
 from .data_collator import (
-    DataCollatorForTargetedMasking,
-    DataCollatorForLanguageModelingWithFixedLength
+    DataCollatorForTargetedMasking
 )
 
+from.trainer import MyTrainer
 from .show import ShowExample
 from .metrics import compute_metrics
+from .tb_callback import MyTensorBoardCallback
 
 from common.config import config
 from common import LM_MODEL_PATH, CACHE, RUNS_DIR
@@ -55,27 +58,38 @@ def train(
         name=data_config_name,  # the name of the dataset configuration
         data_dir=data_dir,  # the data_dir of the dataset configuration.
         split=["train", "validation", "test"],
-        download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
+        # download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
     )
 
     if data_config_name != "MLM":
-        data_collator = DataCollatorForTargetedMasking(
-            tokenizer=tokenizer,
-            max_length=config.max_length
-        )
+        if config.model_type == "Autoencoder":
+            data_collator = DataCollatorForTargetedMasking(
+                tokenizer=tokenizer,
+                mlm_probability=1.0
+            )
+        elif config.model_type == "GraphRepresentation":
+            data_collator = DataCollatorForTargetedMasking(
+                tokenizer=tokenizer,
+                mlm_probability=1.0,
+                pad_to_multiple_of=config.max_length
+            )
+        else:
+            raise ValueError(f"unknown config.model_type: {config.model_type}")
     else:
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
                 mlm=True
             )
-        elif config.model_type == "CausalRepresentation":
-            data_collator = DataCollatorForLanguageModelingWithFixedLength(
+        elif config.model_type == "GraphRepresentation":
+            data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
                 mlm=True,
-                pad_to_fixed_length=config.max_length
+                pad_to_multiple_of=config.max_length
             )
+        else:
+            raise ValueError(f"unknon config.model_type: {config.model_tyle}")
 
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
@@ -92,35 +106,49 @@ def train(
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
-    elif config.model_type == "CausalRepresentation":
+    elif config.model_type == "GraphRepresentation":
         if config.from_pretrained:
-            seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
+            seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
             model = Because(
                 pretrained=seq2seq,
-                max_nodes=4,
-                num_entities=4,
+                freeze_pretrained=True,
+                max_nodes=10,
+                num_entities=10,
                 num_interactions=10,
-                num_features=100,
+                num_node_features=10,
                 sampling_iterations=100,
                 seq_length=config.max_length
             )
         else:
-            raise ValueError("Training CausalRepresentation from scratch is not implemented.")
+            raise ValueError("Training GraphRepresentation from scratch is not implemented.")
 
     training_args.remove_unused_columns = False  # we need pos_mask and special_tokens_mask in collator
 
     print("\nTraining arguments:")
     print(training_args)
+    if config.model_type == "GraphRepresentation":
+        trainer = MyTrainer(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=compute_metrics,
+            callbacks=[ShowExample(tokenizer)],
+        )
+    else:
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=compute_metrics,
+            callbacks=[ShowExample(tokenizer)],
+        )
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
-        callbacks=[ShowExample(tokenizer)]
-    )
+    trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
+    trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 
     print(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
@@ -136,7 +164,6 @@ def train(
 
 
 if __name__ == "__main__":
-
     # changing default values
     @dataclass
     class MyTrainingArguments(TrainingArguments):
@@ -147,12 +174,14 @@ if __name__ == "__main__":
         prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
         per_device_train_batch_size: int = field(default=8)
         per_device_eval_batch_size: int = field(default=8)
+        learning_rate: float = field(default=5e-5)
         save_total_limit: int = field(default=5)
+        num_train_epochs: int = field(default=10)
         # eval_accumulation_steps: int = field(default=2)  # to avoid out of memory at evaluation step that otherwise accumulates ALL the eval stesp on GPU
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("path", nargs="?", default="EMBO/biolang", help="Path of the loader.")
-    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN"], help="Name of the dataset configuration to use.")
     parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
     training_args, args = parser.parse_args_into_dataclasses()

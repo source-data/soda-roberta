@@ -89,6 +89,9 @@ def save_task(text: str, filepath: str,):
 @app.task
 def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     labeled_example = {}
+    # invoke Spacy's part-of-speech tagger
+    # will assign universal POS tags https://universaldependencies.org/u/pos/
+    # https://spacy.io/usage/linguistic-features#pos-tagging
     pos_words = config.nlp(example)
     tokenized = config.tokenizer(
         example,

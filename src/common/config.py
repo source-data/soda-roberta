@@ -19,7 +19,7 @@ class Config:
     }
     celery_batch_size = 1000
     from_pretrained = "facebook/bart-base"  # "roberta-base"  #  leave empty if training a language model from scratch
-    model_type = "CausalRepresentation"  # "Autoencoder"  # "CausalRepresentation"
+    model_type = "GraphRepresentation"  # "Autoencoder"  #
     tokenizer = None
     nlp = spacy.load("en_core_web_sm")
 

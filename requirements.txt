@@ -1,0 +1,12 @@
+torch==1.7.1  # 776.8 MB
+tensorflow==2.4.0  # 394.7 MB
+transformers==4.15.0
+datasets==1.2.1
+nltk==3.5
+scikit-learn==0.24.0
+python-dotenv==0.15.0
+seqeval==1.2.2
+celery
+flower
+lxml==4.6.2
+spacy==2.3.5
