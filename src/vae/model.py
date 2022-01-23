@@ -87,10 +87,29 @@ def interaction_samples(N_max, N_entities, N_interactions, M_features, iteration
 
 
 class BecauseConfig(BartConfig):
-    def __init__(self, max_nodes=None, num_node_features=None, *args, **kwargs):
+    def __init__(
+        self,
+        freeze_pretrained: bool = True,
+        hidden_features: int = 100,
+        max_nodes: int = 10,
+        num_entities: int = 10,
+        num_interactions: int = 10,
+        num_node_features: int = 10,
+        sampling_iterations: int = 100,
+        seq_length: int = 512,
+        *args, **kwargs
+    ):
         super(BecauseConfig).__init__(*args, **kwargs)
         self.max_nodes = max_nodes
         self.num_node_features = num_node_features
+        self.freeze_pretrained = freeze_pretrained
+        self.hidden_features = hidden_features
+        self.max_nodes = max_nodes
+        self.num_entities = num_entities
+        self.num_interactions = num_interactions
+        self.num_node_features = num_node_features
+        self.sampling_iterations = num_node_features
+        self.seq_length = seq_length
 
 
 @dataclass
@@ -102,21 +121,12 @@ class BecauseOutput(MaskedLMOutput):
 
 class Because(nn.Module):
 
-    def __init__(
-        self,
-        pretrained: BartForConditionalGeneration,
-        freeze_pretrained=True,
-        max_nodes=None,
-        num_node_features=None,
-        num_entities=3,
-        num_interactions=3,
-        sampling_iterations=10,
-        seq_length=1024
-    ):
+    def __init__(self, pretrained: BartForConditionalGeneration, config: BecauseConfig):
         super().__init__()
         # from the pretrained model
+        self.config = config
         self.pretrained = pretrained
-        self.freeze_pretrained = freeze_pretrained
+        self.freeze_pretrained = config.freeze_pretrained
         self.encoder = self.pretrained.get_encoder()
         self.decoder = self.pretrained.get_decoder()
         # freeze the pretrained encoder and decoder
@@ -128,16 +138,16 @@ class Because(nn.Module):
         self.lm_head = self.pretrained.lm_head
         self.d_encoder = self.encoder.config.d_model
         self.d_decoder = self.decoder.config.d_model
-        self.seq_length = seq_length
+        self.seq_length = config.seq_length
         self.pad_token_id = self.decoder.config.pad_token_id
         self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
         # latent vars
-        self.max_nodes = max_nodes
-        self.num_node_features = num_node_features
-        self.num_entities = num_entities
-        self.num_interactions = num_interactions
-        self.hidden_features = 100
-        self.sampling_iterations = sampling_iterations
+        self.max_nodes = config.max_nodes
+        self.num_node_features = config.num_node_features
+        self.num_entities = config.num_entities
+        self.num_interactions = config.num_interactions
+        self.hidden_features = config.hidden_features
+        self.sampling_iterations = config.sampling_iterations
         self.z1_dim = self.max_nodes ** 2
         self.z2_dim = self.max_nodes * self.num_node_features
         # own layers
@@ -226,8 +236,8 @@ class Because(nn.Module):
                 adj_sampling, node_label_sampling = interaction_samples(self.max_nodes, self.num_entities, self.num_interactions, self.num_node_features, self.sampling_iterations)
             adj_matrix_distro_loss = mmd(adj_sampling.view(self.sampling_iterations, self.max_nodes ** 2), z_1)
             node_label_distro_lost = mmd(node_label_sampling.view(self.sampling_iterations, self.max_nodes * self.num_node_features), z_2)
-            adj_matrix_distro_loss = 50 * adj_matrix_distro_loss
-            node_label_distro_lost = 50 * node_label_distro_lost
+            adj_matrix_distro_loss = 1000 * adj_matrix_distro_loss
+            node_label_distro_lost = 500 * node_label_distro_lost
             loss = masked_lm_loss + adj_matrix_distro_loss + node_label_distro_lost
             supp_data = torch.cat([
                 masked_lm_loss.unsqueeze_(0),

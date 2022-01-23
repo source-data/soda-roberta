@@ -27,7 +27,7 @@ from transformers import (
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from vae.model import Because
+from vae.model import Because, BecauseConfig
 from .data_collator import (
     DataCollatorForTargetedMasking
 )
@@ -109,16 +109,17 @@ def train(
     elif config.model_type == "GraphRepresentation":
         if config.from_pretrained:
             seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
-            model = Because(
-                pretrained=seq2seq,
+            model_config = BecauseConfig(
                 freeze_pretrained=True,
-                max_nodes=10,
-                num_entities=10,
-                num_interactions=10,
-                num_node_features=10,
-                sampling_iterations=100,
+                hidden_features=100,
+                max_nodes=20,
+                num_entities=5,
+                num_interactions=5,
+                num_node_features=20,
+                sampling_iterations=500,
                 seq_length=config.max_length
             )
+            model = Because(pretrained=seq2seq, config=model_config)
         else:
             raise ValueError("Training GraphRepresentation from scratch is not implemented.")
 
