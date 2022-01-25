@@ -469,7 +469,10 @@ class MyTrainer(Trainer):
                 if isinstance(outputs, dict):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                     # MODIFICATION OF BASE CLASS
-                    supp_data = outputs['supp_data'].detach()
+                    if 'supp_data' in outputs:
+                        supp_data = outputs['supp_data'].detach()
+                    else:
+                        supp_data = None
                 else:
                     logits = outputs[1:]
                     # MODIFICATION OF BASE CLASS
@@ -481,7 +484,10 @@ class MyTrainer(Trainer):
                 if isinstance(outputs, dict):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     # MODIFICATION OF BASE CLASS
-                    supp_data = outputs['supp_data'].mean().detach()
+                    if 'supp_data' in outputs:
+                        supp_data = outputs['supp_data'].detach()
+                    else:
+                        supp_data = None
                 else:
                     logits = outputs
                     # MODIFICATION OF BASE CLASS

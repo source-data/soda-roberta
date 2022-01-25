@@ -110,13 +110,15 @@ def train(
         if config.from_pretrained:
             seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
             model_config = BecauseConfig(
-                freeze_pretrained=True,
-                hidden_features=100,
-                max_nodes=20,
+                freeze_pretrained='both',
+                hidden_features=500,
+                max_nodes=10,
                 num_entities=5,
-                num_interactions=5,
-                num_node_features=20,
-                sampling_iterations=500,
+                num_interactions=10,
+                num_node_features=10,
+                sampling_iterations=100,
+                alpha=3E05,
+                beta=1E05,
                 seq_length=config.max_length
             )
             model = Because(pretrained=seq2seq, config=model_config)
@@ -173,8 +175,8 @@ if __name__ == "__main__":
         logging_steps: int = field(default=100)
         evaluation_strategy: str = IntervalStrategy.STEPS
         prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
-        per_device_train_batch_size: int = field(default=8)
-        per_device_eval_batch_size: int = field(default=8)
+        per_device_train_batch_size: int = field(default=4)
+        per_device_eval_batch_size: int = field(default=4)
         learning_rate: float = field(default=5e-5)
         save_total_limit: int = field(default=5)
         num_train_epochs: int = field(default=10)

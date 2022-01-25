@@ -11,7 +11,6 @@ logger = logging.get_logger(__name__)
 def rewrite_logs(d):
     """
     group into 'losses' eval/loss and train/loss into with the loss breakdown provided as supp_data
-    
     """
     new_d = {}
     for k, v in d.items():
