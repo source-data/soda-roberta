@@ -43,47 +43,48 @@ def mmd(x, y):
     return mmd
 
 
-def sample_node_subset(N_max:int, mu: float = 3.0, sigma: float = 0) -> List[int]:
-    N = min(N_max, round(gauss(mu, sigma)))
-    entities = sample(list(range(N_max)), k=N)
-    return entities
+def sample_node_subset(max_num_nodes: int, avg_num_nodes: float = 3.0, sigma: float = 0) -> List[int]:
+    num_nodes = min(max_num_nodes, round(gauss(avg_num_nodes, sigma)))
+    node_subset = sample(list(range(max_num_nodes)), k=num_nodes)
+    return node_subset
 
 
-def sample_edges(N_max, entity_subset, N_interactions):
-    comb = list(product(entity_subset, entity_subset))
-    z = torch.zeros(N_max, N_max)
-    num_interactions = min(round(gauss(mu=N_interactions, sigma=0)), len(entity_subset)**2)
+def sample_edges(max_num_nodes, node_subset, avg_num_interactions, sigma: float = 0):
+    all_pairwise_interactions = list(product(node_subset, node_subset))
+    adj_matrix = torch.zeros(max_num_nodes, max_num_nodes)
+    max_num_interactions = len(node_subset) ** 2
+    num_interactions = min(round(gauss(mu=avg_num_interactions, sigma=sigma)), max_num_interactions)
     try:
-        coord = sample(comb, k=num_interactions)
+        pairwise_interactions = sample(all_pairwise_interactions, k=num_interactions)
     except ValueError as e:
         print(e)
-        print(f"k={num_interactions}, entity_subset={entity_subset}")
+        print(f"k={num_interactions}, entity_subset={node_subset}")
         return
-    z[list(zip(*coord))] = 1.0
-    return entity_subset
+    adj_matrix[list(zip(*pairwise_interactions))] = 1.0
+    return adj_matrix
 
 
-def sample_node_labels(N_max, entity_subset, M_features=10):
-    p = torch.full([N_max, M_features], 0.5)
+def sample_node_labels(max_num_nodes, node_subset, node_features=10):
+    p = torch.full([max_num_nodes, node_features], 0.5)
     u = torch.bernoulli(p)
-    v = torch.zeros(N_max, M_features)
-    v[entity_subset] = u[entity_subset]
+    v = torch.zeros(max_num_nodes, node_features)
+    v[node_subset] = u[node_subset]
     return v
 
 
-def sample_graph(N_max, N_entities, N_interactions, M_features, iterations=10):
+def sample_graph(max_num_nodes, num_entities, num_interactions, num_node_features, iterations=10):
     # TODO: plot distribution of mmd distance bewteen random pairs
-    interactions = []
-    node_labels = []
+    edges = []
+    node_embeddings = []
     for i in range(iterations):
-        entity_subset = sample_node_subset(N_max, mu=N_entities)
-        edges = sample_edges(N_max, entity_subset, N_interactions)
-        edges = edges.extend(M_features, -1)
-        labeled_nodes = sample_node_labels(N_max, entity_subset, M_features)
-        labelled_graph = torch.matmul(edges, labeled_nodes)
-        interactions.append(labelled_graph.unsqueeze(0))
-    interactions = torch.cat(interactions, 0)
-    return interactions
+        node_subset = sample_node_subset(max_num_nodes, avg_num_nodes=num_entities)
+        adj_matrix = sample_edges(max_num_nodes, node_subset, num_interactions)
+        edges.append(adj_matrix.unsqueeze(0))
+        labeled_nodes = sample_node_labels(max_num_nodes, node_subset, num_node_features)
+        node_embeddings.append(labeled_nodes.unsqueeze(0))
+    edges = torch.cat(edges, 0)
+    node_embeddings = torch.cat(node_embeddings, 0)
+    return edges, node_embeddings
 
 
 class BecauseConfig(BartConfig):
@@ -165,19 +166,28 @@ class Because(nn.Module):
         self.sample_num_interaction_types = self.config.sample_num_interaction_types
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
-        self.z_dim = (self.num_nodes ** 2) * self.num_edge_features * self.num_node_features
+        self.z_1_dim = (self.num_nodes ** 2)  # * self.num_edge_features
+        self.z_2_dim = self.num_nodes * self.num_node_features
         self.alpha = self.config.alpha
         self.beta = self.config.beta
         # own layers
         self.act_fct = nn.GELU()
         self.loss_fct = nn.CrossEntropyLoss()
+
         self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
-        self.fc_z_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
-        self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
-        self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
-        self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
-        self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
+
+        self.fc_z_1_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_1_dim)
+        self.norm_z_1 = nn.LayerNorm(self.z_1_dim, elementwise_affine=False)
+        self.fc_z_1_2 = nn.Linear(self.z_1_dim, self.seq_length * self.hidden_features)
+        self.norm_decompress_1 = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
+
+        self.fc_z_2_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_2_dim)
+        self.norm_z_2 = nn.LayerNorm(self.z_2_dim, elementwise_affine=False)
+        self.fc_z_2_2 = nn.Linear(self.z_2_dim, self.seq_length * self.hidden_features)
+        self.norm_decompress_2 = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
+
+        self.fc_decompress = nn.Linear(2 * self.hidden_features, self.d_decoder)
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> BecauseOutput:
         # encoder
@@ -194,15 +204,30 @@ class Because(nn.Module):
         y = self.norm_compress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
-        # latent var
-        z = self.fc_z_1(y)  # -> B x Z  (example: 32 x (20**2)*10)
-        z = self.norm_z(z)
-        z = self.act_fct(z)
+        # first latent var
+        z_1 = self.fc_z_1_1(y)  # -> B x Z_1  (example: 32 x (20**2)*10)
+        z_1 = self.norm_z_1(z_1)
+        z_1 = self.act_fct(z_1)
+
+        y_1 = self.fc_z_1_2(z_1)  # -> B x (L * H)
+        y_1 = self.norm_decompress_1(y_1)
+        y_1 = self.act_fct(y_1)
+
+        # second latern var
+        z_2 = self.fc_z_2_1(y.clone())  # -> B x Z_2  (example: 32 x (20*10)
+        z_2 = self.norm_z_2(z_2)
+        z_2 = self.act_fct(z_2)
+
+        y_2 = self.fc_z_2_2(z_2)  # -> B x (L * H)
+        y_2 = self.norm_decompress_2(y_2)
+        y_2 = self.act_fct(y_2)
+
+        # combaine
+        y_1 = y_1.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
+        y_2 = y_2.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
+        y = torch.cat([y_1, y_2], -1)  # -> B x L x 2*H
+
         # decompress
-        y = self.fc_z_2(z)  # -> B x (L * H)
-        y = self.norm_decompress(y)
-        y = self.act_fct(y)
-        y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y = self.fc_decompress(y)  # -> B x L x H_dec
         y = x + y  # resnet style
 
@@ -224,18 +249,18 @@ class Because(nn.Module):
         # calculate composite loss
         if labels is not None:
             masked_lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
-            # with torch.no_grad():
-            #     adj_sampling, node_label_sampling = interaction_samples(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
-            # adj_matrix_distro_loss = mmd(adj_sampling.view(self.sampling_iterations, self.max_nodes ** 2), z_1)
-            # node_label_distro_loss = mmd(node_label_sampling.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
-            # adj_matrix_distro_loss = self.alpha * adj_matrix_distro_loss
-            # node_label_distro_loss = self.beta * node_label_distro_loss
-            loss = masked_lm_loss  # + adj_matrix_distro_loss + node_label_distro_loss
-            supp_data = None  # torch.cat([
-            #     masked_lm_loss.unsqueeze_(0),
-            #     adj_matrix_distro_loss.unsqueeze_(0),
-            #     node_label_distro_loss.unsqueeze_(0)
-            # ], 0).unsqueeze(0)
+            with torch.no_grad():
+                edges, node_embeddings = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
+            adj_matrix_distro_loss = mmd(edges.view(self.sampling_iterations, self.num_nodes ** 2), z_1)
+            node_label_distro_loss = mmd(node_embeddings.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
+            adj_matrix_distro_loss = self.alpha * adj_matrix_distro_loss
+            node_label_distro_loss = self.beta * node_label_distro_loss
+            loss = masked_lm_loss  + adj_matrix_distro_loss + node_label_distro_loss
+            supp_data = torch.cat([
+                masked_lm_loss.unsqueeze_(0),
+                adj_matrix_distro_loss.unsqueeze_(0),
+                node_label_distro_loss.unsqueeze_(0)
+            ], 0).unsqueeze(0)
         else:
             loss = None
             supp_data = None

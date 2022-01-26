@@ -119,8 +119,8 @@ def train(
                 sample_num_interactions=10,
                 sample_num_interaction_types=3,
                 sampling_iterations=100,
-                alpha=3E05,
-                beta=1E05,
+                alpha=1,
+                beta=1,
                 seq_length=config.max_length
             )
             model = Because(pretrained=seq2seq, config=model_config)
