@@ -71,7 +71,7 @@ def train(
         elif config.model_type == "GraphRepresentation":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
-                mlm_probability=0.3,
+                mlm_probability=1.0,
                 pad_to_multiple_of=config.max_length
             )
         else:
