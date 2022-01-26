@@ -58,7 +58,7 @@ def train(
         name=data_config_name,  # the name of the dataset configuration
         data_dir=data_dir,  # the data_dir of the dataset configuration.
         split=["train", "validation", "test"],
-        # download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
+        download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
     )
 
@@ -71,7 +71,7 @@ def train(
         elif config.model_type == "GraphRepresentation":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
-                mlm_probability=1.0,
+                mlm_probability=0.3,
                 pad_to_multiple_of=config.max_length
             )
         else:
@@ -111,11 +111,13 @@ def train(
             seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
             model_config = BecauseConfig(
                 freeze_pretrained='both',
-                hidden_features=500,
-                max_nodes=10,
-                num_entities=5,
-                num_interactions=10,
+                hidden_features=128,
+                num_nodes=10,
+                num_edge_features=6,
                 num_node_features=10,
+                sample_num_entities=5,
+                sample_num_interactions=10,
+                sample_num_interaction_types=3,
                 sampling_iterations=100,
                 alpha=3E05,
                 beta=1E05,

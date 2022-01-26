@@ -1,7 +1,7 @@
 from itertools import product
 from random import sample, gauss
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, List
 import torch
 from torch import nn
 from transformers import (
@@ -43,14 +43,13 @@ def mmd(x, y):
     return mmd
 
 
-def sample_entity_subset(N_max, mu=3, sigma=0):
+def sample_node_subset(N_max:int, mu: float = 3.0, sigma: float = 0) -> List[int]:
     N = min(N_max, round(gauss(mu, sigma)))
     entities = sample(list(range(N_max)), k=N)
     return entities
 
 
-def sample_interactions(N_max, N_entities, N_interactions):
-    entity_subset = sample_entity_subset(N_max, mu=N_entities)
+def sample_edges(N_max, entity_subset, N_interactions):
     comb = list(product(entity_subset, entity_subset))
     z = torch.zeros(N_max, N_max)
     num_interactions = min(round(gauss(mu=N_interactions, sigma=0)), len(entity_subset)**2)
@@ -61,29 +60,30 @@ def sample_interactions(N_max, N_entities, N_interactions):
         print(f"k={num_interactions}, entity_subset={entity_subset}")
         return
     z[list(zip(*coord))] = 1.0
-    return z, entity_subset
+    return entity_subset
 
 
-def sample_node_labels(N_entities, entity_subset, M_features=10):
-    p = torch.full([N_entities, M_features], 0.5)
+def sample_node_labels(N_max, entity_subset, M_features=10):
+    p = torch.full([N_max, M_features], 0.5)
     u = torch.bernoulli(p)
-    v = torch.zeros(N_entities, M_features)
+    v = torch.zeros(N_max, M_features)
     v[entity_subset] = u[entity_subset]
     return v
 
 
-def interaction_samples(N_max, N_entities, N_interactions, M_features, iterations=10):
+def sample_graph(N_max, N_entities, N_interactions, M_features, iterations=10):
     # TODO: plot distribution of mmd distance bewteen random pairs
     interactions = []
     node_labels = []
     for i in range(iterations):
-        z1, entity_subset = sample_interactions(N_max, N_entities, N_interactions)
-        interactions.append(z1.unsqueeze(0))
-        z2 = sample_node_labels(N_max, entity_subset, M_features)
-        node_labels.append(z2.unsqueeze(0))
+        entity_subset = sample_node_subset(N_max, mu=N_entities)
+        edges = sample_edges(N_max, entity_subset, N_interactions)
+        edges = edges.extend(M_features, -1)
+        labeled_nodes = sample_node_labels(N_max, entity_subset, M_features)
+        labelled_graph = torch.matmul(edges, labeled_nodes)
+        interactions.append(labelled_graph.unsqueeze(0))
     interactions = torch.cat(interactions, 0)
-    node_labels = torch.cat(node_labels, 0)
-    return interactions, node_labels
+    return interactions
 
 
 class BecauseConfig(BartConfig):
@@ -91,10 +91,12 @@ class BecauseConfig(BartConfig):
         self,
         freeze_pretrained: str = 'both',
         hidden_features: int = 100,
-        max_nodes: int = 10,
-        num_entities: int = 10,
-        num_interactions: int = 10,
+        num_nodes: int = 10,
         num_node_features: int = 10,
+        num_edge_features:int = 10,
+        sample_num_entities: int = 10,
+        sample_num_interactions: int = 10,
+        sample_num_interaction_types = 3,
         sampling_iterations: int = 100,
         seq_length: int = 512,
         alpha: float = 1E05,
@@ -102,14 +104,14 @@ class BecauseConfig(BartConfig):
         *args, **kwargs
     ):
         super(BecauseConfig).__init__(*args, **kwargs)
-        self.max_nodes = max_nodes
+        self.num_nodes = num_nodes
         self.num_node_features = num_node_features
+        self.num_edge_features = num_edge_features
         self.freeze_pretrained = freeze_pretrained
         self.hidden_features = hidden_features
-        self.max_nodes = max_nodes
-        self.num_entities = num_entities
-        self.num_interactions = num_interactions
-        self.num_node_features = num_node_features
+        self.sample_num_entities = sample_num_entities
+        self.sample_num_interactions = sample_num_interactions
+        self.sample_num_interaction_types = sample_num_interaction_types
         self.sampling_iterations = num_node_features
         self.seq_length = seq_length
         self.alpha = alpha
@@ -155,13 +157,15 @@ class Because(nn.Module):
         self.pad_token_id = self.decoder.config.pad_token_id
         self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
         # latent vars
-        self.max_nodes = self.config.max_nodes
+        self.num_nodes = self.config.num_nodes
         self.num_node_features = self.config.num_node_features
-        self.num_entities = self.config.num_entities
-        self.num_interactions = self.config.num_interactions
+        self.num_edge_features = self.config.num_edge_features
+        self.sample_num_entities = self.config.sample_num_entities
+        self.sample_num_interactions = self.config.sample_num_interactions
+        self.sample_num_interaction_types = self.config.sample_num_interaction_types
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
-        self.z_dim = (self.max_nodes ** 2) * self.num_node_features
+        self.z_dim = (self.num_nodes ** 2) * self.num_edge_features * self.num_node_features
         self.alpha = self.config.alpha
         self.beta = self.config.beta
         # own layers
@@ -173,6 +177,7 @@ class Because(nn.Module):
         self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
         self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
         self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
+        self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> BecauseOutput:
         # encoder
@@ -195,6 +200,8 @@ class Because(nn.Module):
         z = self.act_fct(z)
         # decompress
         y = self.fc_z_2(z)  # -> B x (L * H)
+        y = self.norm_decompress(y)
+        y = self.act_fct(y)
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y = self.fc_decompress(y)  # -> B x L x H_dec
         y = x + y  # resnet style
@@ -218,13 +225,13 @@ class Because(nn.Module):
         if labels is not None:
             masked_lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             # with torch.no_grad():
-            #     adj_sampling, node_label_sampling = interaction_samples(self.max_nodes, self.num_entities, self.num_interactions, self.num_node_features, self.sampling_iterations)
+            #     adj_sampling, node_label_sampling = interaction_samples(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
             # adj_matrix_distro_loss = mmd(adj_sampling.view(self.sampling_iterations, self.max_nodes ** 2), z_1)
-            # node_label_distro_loss = mmd(node_label_sampling.view(self.sampling_iterations, self.max_nodes * self.num_node_features), z_2)
+            # node_label_distro_loss = mmd(node_label_sampling.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
             # adj_matrix_distro_loss = self.alpha * adj_matrix_distro_loss
             # node_label_distro_loss = self.beta * node_label_distro_loss
-            loss = masked_lm_loss #+ adj_matrix_distro_loss + node_label_distro_loss
-            supp_data = None #torch.cat([
+            loss = masked_lm_loss  # + adj_matrix_distro_loss + node_label_distro_loss
+            supp_data = None  # torch.cat([
             #     masked_lm_loss.unsqueeze_(0),
             #     adj_matrix_distro_loss.unsqueeze_(0),
             #     node_label_distro_loss.unsqueeze_(0)
