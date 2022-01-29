@@ -268,11 +268,13 @@ class MyTrainer(Trainer):
         losses_host = None
         preds_host = None
         labels_host = None
+        # MODIFICATION OF BASE CLASS
         supp_data_host = None  # custom data returned by model for logging
         # losses/preds/labels on CPU (final containers)
         all_losses = None
         all_preds = None
         all_labels = None
+        # MODIFICATION OF BASE CLASS
         all_supp_data = None  # custom data returned by model for logging
         # Will be useful when we have an iterable dataset so don't know its length.
 
@@ -291,6 +293,7 @@ class MyTrainer(Trainer):
 ##############################
 
             # Prediction step
+            # MODIFICATION OF BASE CLASS
             loss, logits, labels, supp_data = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
 
 ##############################
@@ -308,6 +311,7 @@ class MyTrainer(Trainer):
                 labels = self._pad_across_processes(labels)
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+            # MODIFICATION OF BASE CLASS
             if supp_data is not None:
                 supp_data = self._nested_gather(supp_data)
                 supp_data_host = supp_data if supp_data_host is None else torch.cat((supp_data_host, supp_data), dim=0)
@@ -327,6 +331,7 @@ class MyTrainer(Trainer):
                     all_labels = (
                         labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
                     )
+                # MODIFICATION OF BASE CLASS
                 if supp_data_host is not None:
                     supp_data = nested_numpify(supp_data_host)
                     all_supp_data = supp_data if all_supp_data is None else np.concatenate((all_supp_data, supp_data), axis=0)
@@ -348,6 +353,7 @@ class MyTrainer(Trainer):
         if labels_host is not None:
             labels = nested_numpify(labels_host)
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
+        # MODIFICATION OF BASE CLASS
         if supp_data_host is not None:
             supp_data = nested_numpify(supp_data_host)
             all_supp_data = supp_data if all_supp_data is None else np.concatenate((all_supp_data, supp_data), axis=0)
@@ -370,6 +376,7 @@ class MyTrainer(Trainer):
             all_preds = nested_truncate(all_preds, num_samples)
         if all_labels is not None:
             all_labels = nested_truncate(all_labels, num_samples)
+        # MODIFICATION OF BASE CLASS
         if all_supp_data is not None:
             all_supp_data = all_supp_data[:num_samples]
 
@@ -502,7 +509,7 @@ class MyTrainer(Trainer):
                 None,
                 None,
                 # MODIFICATION OF BASE CLASS
-                supp_data  # customized data for logging returned by the model as Tuple
+                supp_data  # customized logging data returned by the model as Tuple
             )
 
         logits = nested_detach(logits)
@@ -514,5 +521,5 @@ class MyTrainer(Trainer):
             logits,
             labels,
             # MODIFICATION OF BASE CLASS
-            supp_data  # customized data for logging returned by the model as Tuple
+            supp_data  # customized logging data returned by the model as Tuple
         )

@@ -102,6 +102,7 @@ class BecauseConfig(BartConfig):
         seq_length: int = 512,
         alpha: float = 1E05,
         beta: float = 1E05,
+        residuals: bool = True,
         *args, **kwargs
     ):
         super(BecauseConfig).__init__(*args, **kwargs)
@@ -117,6 +118,7 @@ class BecauseConfig(BartConfig):
         self.seq_length = seq_length
         self.alpha = alpha
         self.beta = beta
+        self.residuals = residuals
 
 
 @dataclass
@@ -158,6 +160,7 @@ class Because(nn.Module):
         self.seq_length = self.config.seq_length
         self.pad_token_id = self.decoder.config.pad_token_id
         self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
+        self.residuals = self.config.residuals
         # latent vars
         self.num_nodes = self.config.num_nodes
         self.num_node_features = self.config.num_node_features
@@ -194,7 +197,7 @@ class Because(nn.Module):
         # encoder
         encoder_outputs: BaseModelOutput = self.encoder(input_ids=input_ids, **kwargs)
         x = encoder_outputs[0]  # B x L x H_enc
-        if self.freeze_pretrained is not None:
+        if self.freeze_pretrained in ['encoder', 'both']:
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         assert length == self.seq_length, f"{length} <> {self.seq_length}"
@@ -224,13 +227,17 @@ class Because(nn.Module):
         y_2 = self.act_fct(y_2)
 
         # combaine
+        y_1 = y_1.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
+        y_2 = y_2.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y = torch.cat([y_1, y_2], -1)  # -> B x L x 2*H
 
         # decompress
         y = self.fc_decompress(y)  # -> B x L x H_dec
-        y = x + y  # resnet style
+        if self.residuals:
+            y = x + y  # resnet style
 
         # decoder
+        # might be provided by seq2seqdatacollator
         decoder_input_ids = shift_tokens_right(
             input_ids,
             self.pad_token_id,
@@ -243,11 +250,11 @@ class Because(nn.Module):
         )
 
         # trainable language model head
-        lm_logits = self.lm_head(decoder_outputs[0])  # maybe not necessary
+        lm_logits = self.lm_head(decoder_outputs[0])
 
         # calculate composite loss
         if labels is not None:
-            masked_lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             with torch.no_grad():
                 edges, node_embeddings = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
             adj_matrix_distro_loss = mmd(edges.view(self.sampling_iterations, self.num_nodes ** 2), z_1)
@@ -264,9 +271,9 @@ class Because(nn.Module):
             # https://github.com/xunzheng/notears/blob/master/notears/linear.py
             # I = torch.eye(self.num_nodes).unsqueeze(0).expand(batch_size)
             # L_dag = ((I - 0.1 * (adj * adj)).diagonal(offset=0, sim1=-1, dim2=-2)) - self.num_nodes).sum()
-            loss = masked_lm_loss #+ adj_matrix_distro_loss + node_label_distro_loss + L_adj_sparse + L_dag + L_node_sparse
+            loss = lm_loss + adj_matrix_distro_loss + node_label_distro_loss + L_adj_sparse + L_dag + L_node_sparse
             supp_data = torch.cat([
-                masked_lm_loss.unsqueeze_(0),
+                lm_loss.unsqueeze_(0),
                 adj_matrix_distro_loss.unsqueeze_(0),
                 node_label_distro_loss.unsqueeze_(0),
                 L_adj_sparse.unsqueeze_(0),

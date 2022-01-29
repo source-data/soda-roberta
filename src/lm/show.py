@@ -1,5 +1,7 @@
+from sklearn.metrics import adjusted_rand_score
 from transformers import TrainerCallback, RobertaTokenizerFast
 from random import randrange
+import math
 import torch
 
 # uses spcial color characters for the console output
@@ -61,17 +63,33 @@ class ShowExample(TrainerCallback):
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
-            pred = pred_idx[i]
+            pred_id = pred_idx[i]
             label = labels[i]
-            masked = label != -100
-            decoded_pred = self.tokenizer.decode(pred)
-            decoded_input = self.tokenizer.decode(input_id)
-            if masked:
-                decoded_label = self.tokenizer.decode(label)
-                correct = (pred == label)
-                color = "blue" if correct else "red"
-                insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
-                colored += f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
+            is_prediction = label != -100
+            if is_prediction:
+                colored += self._correct_incorrect(pred_id, label)
             elif attention_mask[i] == 1:
-                colored += decoded_input
+                colored += self.tokenizer.decode(input_id)
         print(f"\n\n{colored}\n\n")
+        print("raw prediction:")
+        print(self.tokenizer.decode(pred_idx))
+        # if 'adjascency' in pred:
+        #     adjascency = pred['adjascency']
+        #     mu = adjascency.mean()
+        #     sd = adjascency.std()
+        #     adjascency = adjascency > (mu + sd)
+        #     _, N = adjascency.size()
+        #     N = int(math.sqrt(N))
+        #     adjascency = adjascency[0].view(N, N)
+        #     adjascency = adjascency.int()
+        #     for i in range(N):
+        #         print(''.join([str(e.item()) for e in adjascency[i]]))
+
+    def _correct_incorrect(self, pred_id, label):
+        decoded_pred = self.tokenizer.decode(pred_id)
+        decoded_label = self.tokenizer.decode(label)
+        correct = (pred_id == label)
+        color = "blue" if correct else "red"
+        insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
+        colored = f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
+        return colored

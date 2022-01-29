@@ -272,8 +272,11 @@ class DataCollatorForTargetedMasking(DataCollatorMixin):
                 "A mask should be provided to indicate which input token class to mask."
             )
         # pop tag_mask from examples before padding to avoid tokenizer being confused
+        # in case labels are provided by a token classification dataset, pop them too
         for e in examples:
             e.pop('tag_mask')
+            if 'labels' in e:
+                e.pop('labels')
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)

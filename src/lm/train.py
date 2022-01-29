@@ -24,15 +24,16 @@ from transformers import (
     AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
     TrainingArguments, HfArgumentParser,
     DataCollatorForLanguageModeling,
+    DataCollatorForSeq2Seq,
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from vae.model import Because, BecauseConfig
+from experimental.vae import Because, BecauseConfig
 from .data_collator import (
     DataCollatorForTargetedMasking
 )
 
-from.trainer import MyTrainer
+from .trainer import MyTrainer
 from .show import ShowExample
 from .metrics import compute_metrics
 from .tb_callback import MyTensorBoardCallback
@@ -62,7 +63,7 @@ def train(
         cache_dir=CACHE
     )
 
-    if data_config_name != "MLM":
+    if data_config_name in ["DET", "NOUN", "VERB", "SMALL", "ROLES"]:
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
@@ -71,12 +72,12 @@ def train(
         elif config.model_type == "GraphRepresentation":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
-                mlm_probability=1.0,
+                mlm_probability=0.5,
                 pad_to_multiple_of=config.max_length
             )
         else:
             raise ValueError(f"unknown config.model_type: {config.model_type}")
-    else:
+    elif data_config_name == "MLM":
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
@@ -90,6 +91,13 @@ def train(
             )
         else:
             raise ValueError(f"unknon config.model_type: {config.model_tyle}")
+    elif data_config_name == "SEQ2SEQ":
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer=tokenizer,
+            pad_to_multiple_of=config.max_length
+        )
+    else:
+        raise NotImplementedError(f"{data_config_name} is not implemented")
 
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
@@ -110,18 +118,19 @@ def train(
         if config.from_pretrained:
             seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
             model_config = BecauseConfig(
-                freeze_pretrained='both',
+                freeze_pretrained='encoder',
                 hidden_features=128,
-                num_nodes=10,
+                num_nodes=50,
                 num_edge_features=6,
-                num_node_features=10,
+                num_node_features=100,
                 sample_num_entities=5,
                 sample_num_interactions=10,
                 sample_num_interaction_types=3,
-                sampling_iterations=100,
-                alpha=1,
-                beta=1,
-                seq_length=config.max_length
+                sampling_iterations=1000,
+                alpha=1E4,
+                beta=1E5,
+                seq_length=config.max_length,
+                residuals=False
             )
             model = Because(pretrained=seq2seq, config=model_config)
         else:
@@ -177,8 +186,8 @@ if __name__ == "__main__":
         logging_steps: int = field(default=100)
         evaluation_strategy: str = IntervalStrategy.STEPS
         prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
-        per_device_train_batch_size: int = field(default=4)
-        per_device_eval_batch_size: int = field(default=4)
+        per_device_train_batch_size: int = field(default=16)
+        per_device_eval_batch_size: int = field(default=16)
         learning_rate: float = field(default=5e-5)
         save_total_limit: int = field(default=5)
         num_train_epochs: int = field(default=10)
@@ -186,9 +195,9 @@ if __name__ == "__main__":
 
     parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
     parser.add_argument("path", nargs="?", default="EMBO/biolang", help="Path of the loader.")
-    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN", "SEQ2SEQ", "ROLES"], help="Name of the dataset configuration to use.")
     parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")
-    parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cacher.")
+    parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cache.")
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
     path = args.path

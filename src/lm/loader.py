@@ -53,6 +53,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.1")
 
     BUILDER_CONFIGS = [
+        datasets.BuilderConfig(name="SEQ2SEQ", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
         datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
@@ -68,10 +69,15 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name in ["DET", "VERB", "SMALL", "NOUN"]:
+        elif self.config.name in ["DET", "VERB", "SMALL", "NOUN", "NULL"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
+            })
+        elif self.config.name == "SEQ2SEQ":
+            features = datasets.Features({
+                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                "labels": datasets.Sequence(feature=datasets.Value("int32"))
             })
 
         return datasets.DatasetInfo(
@@ -162,4 +168,11 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     yield id_, {
                         "input_ids": data['input_ids'],
                         "tag_mask": pos_mask,
+                    }
+                elif self.config.name == "SEQ2SEQ":
+                    "Seq2seq training needs the input_ids as labels, no masking"
+                    pos_mask = [0] * len(data['input_ids'])
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "labels": data['input_ids']
                     }

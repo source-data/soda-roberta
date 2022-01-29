@@ -56,12 +56,28 @@ class Preparator:
 
     def verify(self):
         with self.dest_file_path.open() as f:
+            cumul_len = 0
+            max_len = 0
+            longest_example = ''
+            min_len = 1E3
+            shortest_example = ''
             for n, line in enumerate(f):
                 j = json.loads(line)
-                assert len(j['input_ids']) <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
-                assert len(j['label_ids']) == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
-                assert len(j['special_tokens_mask']) == len(j['input_ids']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
+                L = len(j['input_ids'])
+                assert L <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
+                assert L == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
+                assert L == len(j['special_tokens_mask']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
+                cumul_len += L
+                if L > max_len:
+                    max_len = L
+                    longest_example = j['input_ids']
+                if L < min_len:
+                    min_len = L
+                    shortest_example = j['input_ids']
         print("\nLength verification: OK!")
+        print(f"\naverage input_ids length = {round(cumul_len / n)} (min={min_len}, max={max_len}) tokens")
+        print(f"longest example: {config.tokenizer.decode(longest_example)}")
+        print(f"shortest example: {config.tokenizer.decode(shortest_example)}")
         return True
 
 
@@ -106,10 +122,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir_path = args.source_dir
     if source_dir_path:
+        source_dir_path = Path(source_dir_path)
         dest_dir_path = args.dest_dir
-        dest_dir_path = Path(dest_dir_path)
-        if dest_dir_path.exists():
-            source_dir_path = Path(source_dir_path)
+        if dest_dir_path:
+            dest_dir_path = Path(dest_dir_path)
+            if not dest_dir_path.exists():
+                dest_dir_path.mkdir()
+                print(f"{dest_dir_path} created")
             for subset in ["train", "eval", "test"]:
                 print(f"Preparing: {subset}")
                 sdprep = Preparator(source_dir_path / f"{subset}.txt", dest_dir_path / f"{subset}.jsonl")
@@ -117,6 +136,6 @@ if __name__ == "__main__":
                 sdprep.verify()
             print("\nDone!")
         else:
-            print(f"{dest_dir_path} does not exist. Cannot proceed.")
+            raise ValueError("Please explicitly provide the detination path. Cannot proceed without it.")
     else:
         self_test()

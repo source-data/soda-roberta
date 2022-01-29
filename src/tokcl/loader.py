@@ -185,7 +185,11 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                 if self.config.name == "NER":
                     labels_type = data["label_ids"]["entity_types"]
                     tag_mask = [0 if tag == "O" else 1 for tag in labels_type]
-                    yield id_, {"input_ids": data["input_ids"], "labels": labels_type, "tag_mask": tag_mask}
+                    yield id_, {
+                        "input_ids": data["input_ids"],
+                        "labels": labels_type,
+                        "tag_mask": tag_mask
+                    }
                 elif self.config.name == "ROLES":
                     labels_type = data["label_ids"]["entity_types"]
                     geneprod = ["B-GENEPROD", "I-GENEPROD", "B-PROTEIN", "I-PROTEIN", "B-GENE", "I-GENE"]
