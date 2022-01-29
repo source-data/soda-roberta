@@ -8,8 +8,9 @@ from . import TOKENIZER_PATH
 
 class Config:
     vocab_size = 54_000
-    max_length = 512  # tokens!
-    min_char_length = 120  # characters
+    max_length = 64 # 512  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    truncation = True
+    min_char_length = 120  # characters!
     split_ratio = {
         "train": 0.7,
         "eval": 0.2,
@@ -27,6 +28,6 @@ class Config:
 config = Config()
 
 if config.from_pretrained:
-    config.tokenizer = AutoTokenizer.from_pretrained(config.from_pretrained, max_len=config.max_length)
+    config.tokenizer = AutoTokenizer.from_pretrained(config.from_pretrained)
 else:
-    config.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, max_len=config.max_length)
+    config.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)

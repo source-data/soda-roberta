@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 from pathlib import Path
 import argparse
 from random import random
@@ -141,6 +142,11 @@ def main():
         corpus_path = Path(args.corpus)
         if destination:
             destination_dir = Path(destination)
+            if not destination_dir.parents[0].exists():
+                raise ValueError(f"{destination_dir.parents[0]} does not exists, cannot proceed")
+            elif not destination_dir.exists():
+                Path.mkdir(destination_dir)
+                print(f"{destination_dir} created")
         else:
             basename = corpus_path.name
             destination_dir = Path("/data/text") / basename

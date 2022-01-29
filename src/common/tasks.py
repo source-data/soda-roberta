@@ -54,7 +54,7 @@ def _extract_text_from_elements(elements: Element, punkt: bool, keep_xml: bool) 
             text = innertext(e)
             if punkt:
                 sentences = PunktSentenceTokenizer().tokenize(text=text)
-                filtered_sentences = [s for s in sentences if self._filter(s)]
+                filtered_sentences = [s for s in sentences if _filter(s)]
                 examples += filtered_sentences
             else:
                 if _filter(text):
@@ -96,7 +96,7 @@ def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     tokenized = config.tokenizer(
         example,
         max_length=max_length,
-        truncation=True,
+        truncation=config.truncation,
         return_offsets_mapping=True,
         return_special_tokens_mask=True,
         add_special_tokens=True
