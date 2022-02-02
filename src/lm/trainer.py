@@ -129,6 +129,8 @@ class MyTrainer(Trainer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.args.use_legacy_prediction_loop:
+            raise NotImplementedError("legacy prediction loop not implemented")
 
     def evaluate(
         self,
@@ -164,8 +166,7 @@ class MyTrainer(Trainer):
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         start_time = time.time()
 
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
-        output = eval_loop(
+        output = self.evaluation_loop(
             eval_dataloader,
             description="Evaluation",
             # No point gathering the predictions if there are no metrics, otherwise we defer to
@@ -269,13 +270,13 @@ class MyTrainer(Trainer):
         preds_host = None
         labels_host = None
         # MODIFICATION OF BASE CLASS
-        supp_data_host = None  # custom data returned by model for logging
+        supp_data_host_dict = {}  # custom data returned by model for logging
         # losses/preds/labels on CPU (final containers)
         all_losses = None
         all_preds = None
         all_labels = None
         # MODIFICATION OF BASE CLASS
-        all_supp_data = None  # custom data returned by model for logging
+        all_supp_data_dict = {}  # custom data returned by model for logging
         # Will be useful when we have an iterable dataset so don't know its length.
 
         observed_num_examples = 0
@@ -294,7 +295,7 @@ class MyTrainer(Trainer):
 
             # Prediction step
             # MODIFICATION OF BASE CLASS
-            loss, logits, labels, supp_data = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            loss, logits, labels, supp_data_dict = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
 
 ##############################
 
@@ -312,9 +313,13 @@ class MyTrainer(Trainer):
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             # MODIFICATION OF BASE CLASS
-            if supp_data is not None:
-                supp_data = self._nested_gather(supp_data)
-                supp_data_host = supp_data if supp_data_host is None else torch.cat((supp_data_host, supp_data), dim=0)
+            for k, supp_data in supp_data_dict.items():
+                if supp_data is not None:  # could happen depending on how model initialize supp_data_dict
+                    supp_data = self._nested_gather(supp_data)
+                    if k in supp_data_host_dict:
+                        torch.cat((supp_data_host_dict[k], supp_data), dim=0)
+                    else:
+                        supp_data_host_dict[k] = supp_data
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
@@ -332,12 +337,15 @@ class MyTrainer(Trainer):
                         labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
                     )
                 # MODIFICATION OF BASE CLASS
-                if supp_data_host is not None:
+                for k, supp_data_host in supp_data_host_dict.items():
                     supp_data = nested_numpify(supp_data_host)
-                    all_supp_data = supp_data if all_supp_data is None else np.concatenate((all_supp_data, supp_data), axis=0)
+                    if k in all_supp_data_dict:
+                        np.concatenate((all_supp_data_dict[k], supp_data), axis=0)
+                    else:
+                        all_supp_data_dict[k] = supp_data
 
                 # Set back to None to begin a new accumulation
-                losses_host, preds_host, labels_host, supp_data_host = None, None, None, None
+                losses_host, preds_host, labels_host, supp_data_host_dict = None, None, None, {}
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -354,9 +362,12 @@ class MyTrainer(Trainer):
             labels = nested_numpify(labels_host)
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
         # MODIFICATION OF BASE CLASS
-        if supp_data_host is not None:
+        for k, supp_data_host in supp_data_host_dict.items():
             supp_data = nested_numpify(supp_data_host)
-            all_supp_data = supp_data if all_supp_data is None else np.concatenate((all_supp_data, supp_data), axis=0)
+            if k in all_supp_data_dict:
+                np.concatenate((all_supp_data_dict[k], supp_data), axis=0)
+            else:
+                all_supp_data_dict[k] = supp_data
 
         # Number of samples
         if not isinstance(eval_dataset, IterableDataset):
@@ -377,8 +388,8 @@ class MyTrainer(Trainer):
         if all_labels is not None:
             all_labels = nested_truncate(all_labels, num_samples)
         # MODIFICATION OF BASE CLASS
-        if all_supp_data is not None:
-            all_supp_data = all_supp_data[:num_samples]
+        for k, all_supp_data in all_supp_data_dict.items():
+            all_supp_data_dict[k] = all_supp_data[:num_samples]
 
         # Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
@@ -392,10 +403,9 @@ class MyTrainer(Trainer):
         if all_losses is not None:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
         # MODIFICATION OF BASE CLASS
-        if all_supp_data is not None:
-            all_supp_data = all_supp_data.mean(0)
-            for i, d in enumerate(all_supp_data):
-                metrics[f"{metric_key_prefix}_supp_data_{i}"] = d.item()
+        for k, all_supp_data in all_supp_data_dict.items():
+            supp_data = all_supp_data.mean(0)
+            metrics[f"{metric_key_prefix}_supp_data_{k}"] = supp_data.item()
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
@@ -477,13 +487,13 @@ class MyTrainer(Trainer):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                     # MODIFICATION OF BASE CLASS
                     if 'supp_data' in outputs:
-                        supp_data = outputs['supp_data'].detach()
+                        supp_data = {k: v.detach() for k, v in outputs['supp_data'].items()}
                     else:
                         supp_data = None
                 else:
                     logits = outputs[1:]
                     # MODIFICATION OF BASE CLASS
-                    supp_data = None
+                    supp_data = {}
             else:
                 loss = None
                 with self.autocast_smart_context_manager():
@@ -492,13 +502,13 @@ class MyTrainer(Trainer):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     # MODIFICATION OF BASE CLASS
                     if 'supp_data' in outputs:
-                        supp_data = outputs['supp_data'].detach()
+                        supp_data = {k: v.detach() for k, v in outputs['supp_data'].items()}
                     else:
-                        supp_data = None
+                        supp_data = {}
                 else:
                     logits = outputs
                     # MODIFICATION OF BASE CLASS
-                    supp_data = None
+                    supp_data = {}
                 # TODO: this needs to be fixed and made cleaner later.
                 if self.args.past_index >= 0:
                     self._past = outputs[self.args.past_index - 1]
@@ -521,5 +531,29 @@ class MyTrainer(Trainer):
             logits,
             labels,
             # MODIFICATION OF BASE CLASS
-            supp_data  # customized logging data returned by the model as Tuple
+            supp_data  # customized logging data returned by the model as Dict
         )
+
+    # def compute_loss(self, model, inputs, return_outputs=False):
+    #     """
+    #     How the loss is computed by Trainer. By default, all models return the loss in the first element.
+
+    #     Subclass and override for custom behavior.
+    #     """
+    #     if self.label_smoother is not None and "labels" in inputs:
+    #         labels = inputs.pop("labels")
+    #     else:
+    #         labels = None
+    #     outputs = model(**inputs)
+    #     # Save past state if it exists
+    #     # TODO: this needs to be fixed and made cleaner later.
+    #     if self.args.past_index >= 0:
+    #         self._past = outputs[self.args.past_index]
+
+    #     if labels is not None:
+    #         loss = self.label_smoother(outputs, labels)
+    #     else:
+    #         # We don't use .loss here since the model may return tuples instead of ModelOutput.
+    #         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+    #     return (loss, outputs) if return_outputs else loss

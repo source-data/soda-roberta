@@ -22,7 +22,7 @@ def rewrite_logs(d):
             m = re.search(r"^(.*)_supp_data_(.*)", k)
             if m is not None:
                 main_tag = f"losses/{m.group(1)}_supp"
-                scalar_tag = f"series_{m.group(2)}"
+                scalar_tag = m.group(2)
                 if main_tag not in new_d:
                     new_d[main_tag] = {}
                 new_d[main_tag][scalar_tag] = v

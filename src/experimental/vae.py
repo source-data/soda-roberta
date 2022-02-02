@@ -1,9 +1,10 @@
 from itertools import product
 from random import sample, gauss
-from dataclasses import dataclass
-from typing import Tuple, List
+from dataclasses import dataclass, field
+from typing import Tuple, List, Dict
 import torch
 from torch import nn
+import torch.nn.functional as F
 from transformers import (
     BartConfig, BartTokenizerFast, BartForConditionalGeneration,
 )
@@ -65,10 +66,10 @@ def sample_edges(max_num_nodes, node_subset, avg_num_interactions, sigma: float 
 
 
 def sample_node_labels(max_num_nodes, node_subset, node_features=10):
-    p = torch.full([max_num_nodes, node_features], 0.5)
-    u = torch.bernoulli(p)
     v = torch.zeros(max_num_nodes, node_features)
-    v[node_subset] = u[node_subset]
+    p = torch.full_like(v[node_subset], 0.5)
+    sample = torch.bernoulli(p)
+    v[node_subset] = sample
     return v
 
 
@@ -125,7 +126,7 @@ class BecauseConfig(BartConfig):
 class BecauseOutput(MaskedLMOutput):
     adjascency: torch.Tensor = None
     node_embeddings: torch.Tensor = None
-    supp_data: torch.Tensor = None  # custom data for logging
+    supp_data: Dict = None #field(default_factory=dict)  # custom data for logging
 
 
 class Because(nn.Module):
@@ -191,7 +192,8 @@ class Because(nn.Module):
         self.fc_z_2_2 = nn.Linear(self.z_2_dim, self.seq_length * self.hidden_features)
         self.norm_decompress_2 = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
 
-        self.fc_decompress = nn.Linear(2 * self.hidden_features, self.d_decoder)
+        # self.fc_decompress = nn.Linear(2 * self.hidden_features, self.d_decoder)
+        self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> BecauseOutput:
         # encoder
@@ -209,28 +211,26 @@ class Because(nn.Module):
         y = self.act_fct(y)
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
         # first latent var
-        z_1 = self.fc_z_1_1(y)  # -> B x Z_1  (example: 32 x (20**2)*10)
+        z_1 = self.fc_z_1_1(y)  # -> B x Z_1
         z_1 = self.norm_z_1(z_1)
         z_1 = self.act_fct(z_1)
-
-        y_1 = self.fc_z_1_2(z_1)  # -> B x (L * H)
-        y_1 = self.norm_decompress_1(y_1)
-        y_1 = self.act_fct(y_1)
-
         # second latent var
         z_2 = self.fc_z_2_1(y.clone())  # -> B x Z_2  (example: 32 x (20*10)
         z_2 = self.norm_z_2(z_2)
         z_2 = self.act_fct(z_2)
+        # decompress
+        y_1 = self.fc_z_1_2(z_1)  # -> B x (L * H)
+        y_1 = self.norm_decompress_1(y_1)
+        y_1 = self.act_fct(y_1)
 
         y_2 = self.fc_z_2_2(z_2)  # -> B x (L * H)
         y_2 = self.norm_decompress_2(y_2)
         y_2 = self.act_fct(y_2)
-
-        # combaine
+        # combine
         y_1 = y_1.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y_2 = y_2.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
-        y = torch.cat([y_1, y_2], -1)  # -> B x L x 2*H
-
+        # y = torch.cat([y_1, y_2], -1)  # -> B x L x 2*H
+        y = y_1
         # decompress
         y = self.fc_decompress(y)  # -> B x L x H_dec
         if self.residuals:
@@ -257,29 +257,44 @@ class Because(nn.Module):
             lm_loss = self.loss_fct(lm_logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             with torch.no_grad():
                 edges, node_embeddings = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
-            adj_matrix_distro_loss = mmd(edges.view(self.sampling_iterations, self.num_nodes ** 2), z_1)
-            node_label_distro_loss = mmd(node_embeddings.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
-            adj_matrix_distro_loss = self.alpha * adj_matrix_distro_loss
-            node_label_distro_loss = self.beta * node_label_distro_loss
-            L_adj_sparse = 0.01 * z_1.abs().sum()
-            L_node_sparse = 0.01 * z_2.abs().sum()
+            adj_matrix_distro_loss = self.alpha * mmd(edges.view(self.sampling_iterations, self.num_nodes ** 2), z_1)
+            node_label_distro_loss = self.beta * mmd(node_embeddings.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
+            L_adj_sparse = z_1.abs().mean()
+            L_node_sparse = z_2.abs().mean()
             # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
             # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
-            adj = z_1.view(-1, self.num_nodes, self.num_nodes)
-            L_dag = 10 * (adj * adj).diagonal(dim1=-1, dim2=-2).sum()
-            # torch.linalg.matrix_power
-            # https://github.com/xunzheng/notears/blob/master/notears/linear.py
-            # I = torch.eye(self.num_nodes).unsqueeze(0).expand(batch_size)
-            # L_dag = ((I - 0.1 * (adj * adj)).diagonal(offset=0, sim1=-1, dim2=-2)) - self.num_nodes).sum()
-            loss = lm_loss + adj_matrix_distro_loss + node_label_distro_loss + L_adj_sparse + L_dag + L_node_sparse
-            supp_data = torch.cat([
-                lm_loss.unsqueeze_(0),
-                adj_matrix_distro_loss.unsqueeze_(0),
-                node_label_distro_loss.unsqueeze_(0),
-                L_adj_sparse.unsqueeze_(0),
-                L_dag.unsqueeze_(0),
-                L_node_sparse.unsqueeze_(0),
-            ], 0).unsqueeze(0)
+            # naive (me...):
+            d = self.num_nodes  # cosmetic
+            W = z_1.view(batch_size, d, d)
+            I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
+            if torch.cuda.is_available():
+                W = W.cuda()
+                I = I.cuda()
+            mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
+            trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
+            L_dag = (trace - d).mean()
+            #
+            # Zheng et al 2018 DAG with NOTEARS
+            # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
+            # Section 3.2 The general case: Weighted adjacency matrices
+            # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
+            # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
+            # L_dag = h.mean()
+            # in NOTEARS github code:
+            # A different formulation, slightly faster at the cost odf numerical stability
+            # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
+            # M = np.eye(d) + W * W / d
+            # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
+            # h = (E.T * M).sum() - d
+            loss = adj_matrix_distro_loss + lm_loss  # L_dag + node_label_distro_loss + L_adj_sparse + L_node_sparse
+            supp_data = {
+                "lm_loss": lm_loss,
+                "adj_distro_loss": adj_matrix_distro_loss,
+                "nodes_distro_loss": node_label_distro_loss,
+                "L_adj_sparse": L_adj_sparse,
+                "L_dag": L_dag,
+                "L_node_sparse": L_node_sparse,
+            }
         else:
             loss = None
             supp_data = None
@@ -289,8 +304,8 @@ class Because(nn.Module):
             logits=lm_logits,
             # supplementarty data for logging only
             supp_data=supp_data,
-            adjascency=z_1,
-            node_embeddings=z_2,
+            adjascency=z_1.view(-1, self.num_nodes, self.num_nodes),
+            node_embeddings=z_2.view(-1, self.num_nodes, self.num_node_features),
             # past_key_values=decoder_outputs.past_key_values,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,

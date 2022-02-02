@@ -123,12 +123,12 @@ def train(
                 num_nodes=50,
                 num_edge_features=6,
                 num_node_features=100,
-                sample_num_entities=5,
-                sample_num_interactions=10,
+                sample_num_entities=20, #5,
+                sample_num_interactions=20, #10,
                 sample_num_interaction_types=3,
                 sampling_iterations=1000,
-                alpha=1E4,
-                beta=1E5,
+                alpha=1E6,
+                beta=1E7,
                 seq_length=config.max_length,
                 residuals=False
             )
@@ -148,7 +148,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
-            callbacks=[ShowExample(tokenizer)],
+            callbacks=[ShowExample(tokenizer, detailed=True)],
         )
     else:
         trainer = Trainer(
@@ -158,7 +158,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
-            callbacks=[ShowExample(tokenizer)],
+            callbacks=[ShowExample(tokenizer, detailed=True)],
         )
 
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback

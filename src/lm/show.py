@@ -1,8 +1,9 @@
-from sklearn.metrics import adjusted_rand_score
-from transformers import TrainerCallback, RobertaTokenizerFast
-from random import randrange
 import math
+from random import randrange
+
 import torch
+from sklearn.metrics import adjusted_rand_score
+from transformers import RobertaTokenizerFast, TrainerCallback
 
 # uses spcial color characters for the console output
 # for code in {1..256}; do printf "\e[38;5;${code}m"$code"\e[0m";echo; done
@@ -29,12 +30,13 @@ class ShowExample(TrainerCallback):
             "close": '\033[0m'
         }
 
-    def __init__(self, tokenizer: RobertaTokenizerFast, *args, **kwargs):
+    def __init__(self, tokenizer: RobertaTokenizerFast, detailed: bool = False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tokenizer = tokenizer
+        self.detailed = detailed
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
-        """Method called when evaluating the model. Only the neede args are unpacked.
+        """Method called when evaluating the model. Only the neede kwargs are unpacked.
 
         Args:
 
@@ -71,19 +73,27 @@ class ShowExample(TrainerCallback):
             elif attention_mask[i] == 1:
                 colored += self.tokenizer.decode(input_id)
         print(f"\n\n{colored}\n\n")
-        print("raw prediction:")
-        print(self.tokenizer.decode(pred_idx))
-        # if 'adjascency' in pred:
-        #     adjascency = pred['adjascency']
-        #     mu = adjascency.mean()
-        #     sd = adjascency.std()
-        #     adjascency = adjascency > (mu + sd)
-        #     _, N = adjascency.size()
-        #     N = int(math.sqrt(N))
-        #     adjascency = adjascency[0].view(N, N)
-        #     adjascency = adjascency.int()
-        #     for i in range(N):
-        #         print(''.join([str(e.item()) for e in adjascency[i]]))
+        # print("raw prediction:")
+        # print(self.tokenizer.decode(pred_idx))
+        if 'adjascency' in pred and self.detailed:
+            self._view_matrix(pred['adjascency'][0])
+        if 'node_embeddings' in pred and self.detailed:
+            self._view_matrix(pred['node_embeddings'][0])
+
+    def _view_matrix(self, x):
+        if x.dim() == 2:
+            x = torch.sigmoid(x)
+            mu = x.mean()
+            sigma = x.std()
+            x = x > (mu + 2*sigma)
+            x = x.int()
+            for r in x:
+                # ○○○○○○●●●●●●
+                # ■■■■■■□□□□□□
+                # ∙
+                # •
+                # ◦
+                print(''.join([f"{'•' if e.item() == 1 else '◦'}" for e in r]))
 
     def _correct_incorrect(self, pred_id, label):
         decoded_pred = self.tokenizer.decode(pred_id)
