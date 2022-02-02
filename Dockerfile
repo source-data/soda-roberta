@@ -28,5 +28,8 @@ RUN pip install notebook
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
 RUN pip install ipywidgets
 
+# optional for plotting
+RUN pip install plotly 
+
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*1

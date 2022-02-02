@@ -10,3 +10,6 @@ celery
 flower
 lxml==4.6.2
 spacy==2.3.5
+notebook
+ipywidgets  # https://ipywidgets.readthedocs.io/en/stable/user_install.html
+plotly
