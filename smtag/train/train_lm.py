@@ -10,36 +10,51 @@
 # a weight decay of 0.01, learning rate warmup for 24,000 steps 
 # and linear decay of the learning rate after.
 
-from multiprocessing.sharedctypes import Value
+import pdb
 from typing import NamedTuple
 from pathlib import Path
 from datetime import datetime
-import torch
-from torch import nn
 from dataclasses import dataclass, field
+import torch
 from transformers import (
     Trainer,
     IntervalStrategy,
-    RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
-    AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
-    TrainingArguments, HfArgumentParser,
+    RobertaForMaskedLM, RobertaConfig,
+    AutoModelForMaskedLM, AutoTokenizer,
+    TrainingArguments,
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from experimental.vae import Because, BecauseConfig
-from .data_collator import (
+from ..models.vae import Because, BecauseConfig
+from ..data_collator import (
     DataCollatorForTargetedMasking
 )
 
-from .trainer import MyTrainer
-from .show import ShowExample
-from .metrics import compute_metrics
-from .tb_callback import MyTensorBoardCallback
+from ..trainer import MyTrainer
+from ..show import ShowExampleLM
+from ..metrics import compute_metrics_lm
+from ..tb_callback import MyTensorBoardCallback
 
-from common.config import config
-from common import LM_MODEL_PATH, CACHE, RUNS_DIR
+from ..config import config
+from .. import LM_MODEL_PATH, CACHE, RUNS_DIR
+
+
+# changing default values
+@dataclass
+class TrainingArgumentsLM(TrainingArguments):
+    output_dir: str = field(default=LM_MODEL_PATH)
+    overwrite_output_dir: bool = field(default=True)
+    logging_steps: int = field(default=100)
+    evaluation_strategy: str = IntervalStrategy.STEPS
+    prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
+    per_device_train_batch_size: int = field(default=16)
+    per_device_eval_batch_size: int = field(default=16)
+    learning_rate: float = field(default=5e-5)
+    save_total_limit: int = field(default=5)
+    num_train_epochs: int = field(default=10)
+    # eval_accumulation_steps: int = field(default=2)  # to avoid out of memory at evaluation step that otherwise accumulates ALL the eval stesp on GPU
 
 
 def train(
@@ -47,17 +62,24 @@ def train(
     path: str,
     data_dir: str,
     data_config_name: str,
-    training_args: TrainingArguments,
-    tokenizer: AutoTokenizer
+    training_args: TrainingArgumentsLM,
+    tokenizer: AutoTokenizer = config.tokenizer
 ):
+
+    training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
+    output_dir_path = Path(training_args.output_dir)
+    if not output_dir_path.exists():
+        output_dir_path.mkdir()
+        print(f"Created {output_dir_path}.")
 
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading datasets found in {data_dir}.")
+    print(f"using {path} as dataset loader.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        path=path,  # a dataset repository on the HF hub with a dataset script (if the script has the same name as the directory) -> load the dataset builder from the dataset script in the dataset repository e.g. 'username/dataset_name', a dataset repository on the HF hub containing a dataset script ‘dataset_name.py
-        name=data_config_name,  # the name of the dataset configuration
-        data_dir=data_dir,  # the data_dir of the dataset configuration.
+        path=path,  # to the dataset loading script: a dataset repository on the HF hub with a dataset script (if the script has the same name as the directory) -> load the dataset builder from the dataset script in the dataset repository e.g. 'username/dataset_name', a dataset repository on the HF hub containing a dataset script ‘dataset_name.py
+        name=data_config_name,  # the name of the dataset configuration name
+        data_dir=data_dir,  # the data_dir owhere the files for the dataset configuration are found
         split=["train", "validation", "test"],
         download_mode=GenerateMode.FORCE_REDOWNLOAD if no_cache else GenerateMode.REUSE_DATASET_IF_EXISTS,
         cache_dir=CACHE
@@ -147,8 +169,8 @@ def train(
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics,
-            callbacks=[ShowExample(tokenizer, detailed=True)],
+            compute_metrics=compute_metrics_lm,
+            callbacks=[ShowExampleLM(tokenizer, detailed=True)],
         )
     else:
         trainer = Trainer(
@@ -157,8 +179,8 @@ def train(
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics,
-            callbacks=[ShowExample(tokenizer, detailed=True)],
+            compute_metrics=compute_metrics_lm,
+            callbacks=[ShowExampleLM(tokenizer, detailed=True)],
         )
 
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
@@ -173,40 +195,6 @@ def train(
     trainer.save_model(training_args.output_dir)
 
     print(f"Testing on {len(test_dataset)}.")
+    trainer.args.prediction_loss_only = False
     pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix="test")
     print(f"{pred.metrics}")
-
-
-if __name__ == "__main__":
-    # changing default values
-    @dataclass
-    class MyTrainingArguments(TrainingArguments):
-        output_dir: str = field(default=LM_MODEL_PATH)
-        overwrite_output_dir: bool = field(default=True)
-        logging_steps: int = field(default=100)
-        evaluation_strategy: str = IntervalStrategy.STEPS
-        prediction_loss_only: bool = field(default=True)  # crucial to avoid OOM at evaluation stage!
-        per_device_train_batch_size: int = field(default=16)
-        per_device_eval_batch_size: int = field(default=16)
-        learning_rate: float = field(default=5e-5)
-        save_total_limit: int = field(default=5)
-        num_train_epochs: int = field(default=10)
-        # eval_accumulation_steps: int = field(default=2)  # to avoid out of memory at evaluation step that otherwise accumulates ALL the eval stesp on GPU
-
-    parser = HfArgumentParser((MyTrainingArguments), description="Traing script.")
-    parser.add_argument("path", nargs="?", default="EMBO/biolang", help="Path of the loader.")
-    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN", "SEQ2SEQ", "ROLES"], help="Name of the dataset configuration to use.")
-    parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")
-    parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cache.")
-    training_args, args = parser.parse_args_into_dataclasses()
-    no_cache = args.no_cache
-    path = args.path
-    data_config_name = args.data_config_name
-    data_dir = args.data_dir
-    output_dir_path = Path(training_args.output_dir)
-    training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
-    if not output_dir_path.exists():
-        output_dir_path.mkdir()
-        print(f"Created {output_dir_path}.")
-    tokenizer = config.tokenizer  # tokenizer has to be the same application-wide
-    train(no_cache, path, data_dir, data_config_name, training_args, tokenizer)
