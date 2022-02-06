@@ -3,19 +3,19 @@ version: '2.3'
 services:
   nlp:
     build:
-      context: ./src
-      dockerfile: ../Dockerfile
+      context: .
+      dockerfile: Dockerfile
       # args: # abandoning this for now, transfomers needs to be able to mkdir /.cache
       #   - user_id=${USER_ID}
       #   - group_id=${GROUP_ID}
-    image: sdbert
+    image: smtag
     depends_on:
     - tensorboard
     - celery
     - flower
     runtime: nvidia
     volumes: &volumes
-    - ./src:/app
+    - .:/app
     - ./data:/data
     - ./tokenizer:${TOKENIZER_PATH}
     - ./lm_models:${LM_MODEL_PATH}
@@ -32,7 +32,7 @@ services:
 
 
   tensorboard:
-    image: sdbert
+    image: smtag
     runtime: nvidia
     ports:
     - 6007:6007
@@ -42,27 +42,28 @@ services:
     command: tensorboard --logdir /runs --port 6007 --bind_all
 
   celery:
-    image: sdbert
+    image: smtag
     depends_on:
     - rabbitmq
     env_file:
     - ./.env
     volumes: *volumes
     working_dir: /app
-    command: celery --app=common worker --loglevel=info
+    command: celery --app=smtag worker --loglevel=info
 
   flower:
-    image: sdbert
+    image: smtag
     depends_on:
     - celery
     volumes: *volumes
     working_dir: /app
     ports:
       - "5555:5555"
-    command: flower --app=common --port=5555 --broker=rabbitmq
+    command: flower --app=smtag --port=5555 --broker=rabbitmq
 
   rabbitmq:
     image: rabbitmq:3-management
+    working_dir: /app
     ports:
       # The standard AMQP protocol port
       - '5672:5672'

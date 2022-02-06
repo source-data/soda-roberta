@@ -89,6 +89,7 @@ class PreparatorLM:
                 if L < min_len:
                     min_len = L
                     shortest_example = j['input_ids']
+        n += 1
         print("\nLength verification: OK!")
         print(f"\naverage input_ids length = {round(cumul_len / n)} (min={min_len}, max={max_len}) tokens")
         print(f"longest example: {config.tokenizer.decode(longest_example)}")
@@ -293,6 +294,7 @@ class PreparatorTOKCL:
                 if L < min_len:
                     min_len = L
                     shortest_example = j['input_ids']
+        n += 1
         print("\nLength verification: OK!")
         print(f"\naverage input_ids length = {round(cumul_len / n)} (min={min_len}, max={max_len}) tokens")
         print(f"longest example: {config.tokenizer.decode(longest_example)}")

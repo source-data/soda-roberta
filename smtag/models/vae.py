@@ -89,6 +89,9 @@ def sample_graph(max_num_nodes, num_entities, num_interactions, num_node_feature
 
 
 class BecauseConfig(BartConfig):
+
+    keys_to_ignore_at_inference = ['adjascency', 'node_embeddings', 'supp_data']
+
     def __init__(
         self,
         freeze_pretrained: str = 'both',
@@ -104,9 +107,9 @@ class BecauseConfig(BartConfig):
         alpha: float = 1E05,
         beta: float = 1E05,
         residuals: bool = True,
-        *args, **kwargs
+        **kwargs
     ):
-        super(BecauseConfig).__init__(*args, **kwargs)
+        super(BecauseConfig).__init__(**kwargs)
         self.num_nodes = num_nodes
         self.num_node_features = num_node_features
         self.num_edge_features = num_edge_features
@@ -202,9 +205,6 @@ class Because(nn.Module):
         if self.freeze_pretrained in ['encoder', 'both']:
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
-        assert length == self.seq_length, f"{length} <> {self.seq_length}"
-        assert hidden_size == self.d_encoder, f"{hidden_size} <> {self.d_encoder}"
-
         # compress
         y = self.fc_compress(x)  # -> B x L x H (example: 32 x 512 x 100)
         y = self.norm_compress(y)

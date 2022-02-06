@@ -10,7 +10,6 @@
 # a weight decay of 0.01, learning rate warmup for 24,000 steps 
 # and linear decay of the learning rate after.
 
-import pdb
 from typing import NamedTuple
 from pathlib import Path
 from datetime import datetime
@@ -29,10 +28,12 @@ from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import Because, BecauseConfig
 from ..data_collator import (
-    DataCollatorForTargetedMasking
+    DataCollatorForTargetedMasking,
+    MyDataCollatorForSeq2Seq
 )
 
 from ..trainer import MyTrainer
+# from ..legacy.lm.trainer import MyTrainer
 from ..show import ShowExampleLM
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -152,7 +153,7 @@ def train(
                 alpha=1E6,
                 beta=1E7,
                 seq_length=config.max_length,
-                residuals=False
+                residuals=False,
             )
             model = Because(pretrained=seq2seq, config=model_config)
         else:

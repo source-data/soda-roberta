@@ -1,5 +1,4 @@
 from celery import Celery
-
 app = Celery(
     'smtag',
     backend='rpc',

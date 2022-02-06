@@ -1,9 +1,9 @@
-from argparse import ArgumentParser
+import argparse
 from ...extract import ExtractorXML
 
 
 def main():
-    parser = ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description='Extracts datsets from documents.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('corpus', default=None, help='path to the corpus of documents to use.')
     parser.add_argument('destination_dir', nargs="?", default=None, help='Destination folder for extracted text files.')
     parser.add_argument('-S', '--sentence_level', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
@@ -14,10 +14,10 @@ def main():
     args = parser.parse_args()
     corpus = args.corpus
     destination_dir = args.destination_dir
-    sentence_level = args.sentences
+    sentence_level = args.sentence_level
     xpath = args.xpath
     keep_xml = args.keep_xml
-    inclusion_probability = args.proba
+    inclusion_probability = args.inclusion_probability
 
     x = ExtractorXML(
         corpus,

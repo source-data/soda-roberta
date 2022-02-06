@@ -126,5 +126,6 @@ def train(
     trainer.save_model(training_args.output_dir)
 
     print(f"Testing on {len(test_dataset)}.")
+    trainer.args.prediction_loss_only = False
     pred: NamedTuple = trainer.predict(test_dataset, metric_key_prefix='test')
     print(f"{pred.metrics}")
