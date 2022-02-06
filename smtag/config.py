@@ -6,7 +6,6 @@ from transformers import AutoTokenizer
 import spacy
 from spacy.lang.en import English
 from typing import Dict
-from . import TOKENIZER_PATH
 
 
 @dataclass
@@ -34,8 +33,4 @@ class Config:
 
 
 config = Config()
-
-if config.from_pretrained:
-    config.tokenizer = AutoTokenizer.from_pretrained(config.from_pretrained)
-else:
-    config.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+config.tokenizer = AutoTokenizer.from_pretrained(config.from_pretrained)

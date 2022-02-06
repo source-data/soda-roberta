@@ -5,7 +5,7 @@ services:
     image: tlemberger/smarttag:latest  # docker pull tlemberger/smarttag:firsthub
     volumes:
       - cache:/root/.cache
-    entrypoint: ["python", "-m", "predict.smtag"]
+    entrypoint: ["python", "-m", "smtag.cli.inference.tag"]
 
 volumes:
     cache:

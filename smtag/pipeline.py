@@ -2,11 +2,11 @@ from transformers import (
     BatchEncoding,
     RobertaForTokenClassification, RobertaTokenizerFast
 )
-from argparse import ArgumentParser
+
 import json
 import torch
 from typing import List, Dict
-from tokcl.xmlcode import CodeMap, SourceDataCodes as sd
+from .xml2labels import CodeMap, SourceDataCodes as sd
 
 
 class Entity:
@@ -226,20 +226,12 @@ class Tagger:
         return output
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="SmartTagging of free text.")
-    parser.add_argument("text", nargs="?", default="We studied mice with genetic ablation of the ERK1 gene in brain and muscle.", help="The text to tag.")
-    args = parser.parse_args()
-    text = args.text
-    panel_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-panels")
-    ner_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-ner")
-    role_model = RobertaForTokenClassification.from_pretrained(f"EMBO/sd-roles")
-    tokenizer = RobertaTokenizerFast.from_pretrained(f"roberta-base")
-    tagger = Tagger(
-        tokenizer,
-        panel_model,  # segments figure legends into panel legends
-        ner_model,  # tags biolgical entities
-        role_model  # semantic roles of entities
-    )
-    tagged = tagger(text)
-    print(tagged)
+class SmartTagger(Tagger):
+
+    def __init__(self):
+        super().__init__(
+            RobertaTokenizerFast.from_pretrained("roberta-base"),
+            RobertaForTokenClassification.from_pretrained("EMBO/sd-panels"),
+            RobertaForTokenClassification.from_pretrained("EMBO/sd-ner"),
+            RobertaForTokenClassification.from_pretrained("EMBO/sd-roles"),
+        )
