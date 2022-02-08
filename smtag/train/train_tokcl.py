@@ -36,12 +36,13 @@ class TrainingArgumentsTOKCL(TrainingArguments):
 
 
 def train(
-    no_cache: bool,
-    path: str,
-    data_dir: str,
-    data_config_name: str,
     training_args: TrainingArgumentsTOKCL,
-    tokenizer: AutoTokenizer = config.tokenizer
+    loader_path: str,
+    data_config_name: str,
+    data_dir: str,
+    no_cache: bool,
+    tokenizer: AutoTokenizer = config.tokenizer,
+    from_pretrained: str = LM_MODEL_PATH
 ):
 
     training_args.logging_dir = f"{RUNS_DIR}/tokcl-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
@@ -65,9 +66,10 @@ def train(
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading and tokenizing datasets found in {data_dir}.")
+    print(f"using {loader_path} as dataset loader.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        path,
-        data_config_name,
+        path=loader_path,
+        name=data_config_name,
         script_version="main",
         data_dir=data_dir,
         split=["train", "validation", "test"],
@@ -102,9 +104,9 @@ def train(
     compute_metrics = MetricsTOKCL(label_list=label_list)
 
     model = AutoModelForTokenClassification.from_pretrained(
-        LM_MODEL_PATH,
+        from_pretrained,
         num_labels=num_labels,
-        max_position_embeddings=config.max_length + 2  # is this necessary?
+        max_position_embeddings=config.max_length  #+ 2  # max_length + 2 for start/end token
     )
 
     print("\nTraining arguments:")

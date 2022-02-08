@@ -1,11 +1,11 @@
+import pdb
 from transformers import (
-    BatchEncoding,
     RobertaForTokenClassification, RobertaTokenizerFast
 )
 
 import json
 import torch
-from typing import List, Dict
+from typing import List, Dict, Tuple, Union
 from .xml2labels import CodeMap, SourceDataCodes as sd
 
 
@@ -49,53 +49,61 @@ class Serializer:
         else:
             return input
 
-    def to_json(self, pred_types: List[Dict[str, List]], pred_roles: List[Dict[str, List]]) -> str:
+    def to_json(self, tagged_panel_groups: List[Tuple[Dict[str, torch.Tensor]]]) -> str:
 
         j = {'smtag': []}
-        for entity_types, entity_roles in zip(pred_types, pred_roles):
-            entity_list = []
-            entity = None
-            for i in range(len(entity_types['input_ids'])):
-                input_id_ner = entity_types['input_ids'][i]
-                idx_ner = entity_types['labels_idx'][i]
-                iob_ner = self.ner_code_map.iob2_labels[idx_ner]  # convert label idx into IOB2 label
-                idx_role = entity_roles['labels_idx'][i]
-                iob_role = self.role_code_map.iob2_labels[idx_role]
-                if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
-                    prefix = iob_ner[0:2]  # for example B-
-                    label_ner = iob_ner[2:]  # for example GENEPROD
-                    if prefix == "B-":  # begining of a new entity
-                        if entity is not None:  # save current entity before creating new one
-                            entity_list.append(entity.to_dict(self.tokenizer))
-                        entity = Entity(
-                            input_id=input_id_ner,
-                            ner_label=label_ner,
-                            role_label=iob_role[2:] if iob_role != "O" else "",
-                            ner_code_map=self.ner_code_map,
-                            role_code_map=self.role_code_map
-                        )
-                    elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
-                        entity.input_ids.append(input_id_ner)
-                    # if currently I-nside and entity predicted but no prior B-eginging detected.
-                    # Would be an inference mistake.
-                    elif prefix == "I-" and entity is None:  # should not happen, but who knows...
-                        entity = Entity(
-                            input_id=input_id_ner,
-                            ner_label=label_ner,
-                            role_label=iob_role[2:] if iob_role != "O" else "",
-                            ner_code_map=self.ner_code_map,
-                            role_code_map=self.role_code_map
-                        )
-                    else:
-                        # something is wrong...
-                        print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
-                        print(j)
-                        raise Exception("serialization failed")
-                elif entity is not None:
-                    entity_list.append(entity.to_dict(self.tokenizer))
-                    entity = None
-            j['smtag'].append(entity_list)
-        return json.dumps(j, indent=4)
+        for panel_group in tagged_panel_groups:
+            j_panel_group = {'panel_group': []}
+            ner_results, roles_results = panel_group
+            num_panels = len(ner_results['input_ids'])
+            for panel_idx in range(num_panels):
+                label_ids = ner_results['input_ids'][panel_idx]
+                entity_types = ner_results['labels'][panel_idx]
+                entity_roles = roles_results['labels'][panel_idx]
+                entity_list = []
+                entity = None
+                for i in range(len(label_ids)):
+                    input_id_ner = label_ids[i]
+                    label_ner = entity_types[i]
+                    iob_ner = self.ner_code_map.iob2_labels[label_ner]  # convert label idx into IOB2 label
+                    label_role = entity_roles[i]
+                    iob_role = self.role_code_map.iob2_labels[label_role]
+                    if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
+                        prefix = iob_ner[0:2]  # for example B-
+                        label_ner = iob_ner[2:]  # for example GENEPROD
+                        if prefix == "B-":  # begining of a new entity
+                            if entity is not None:  # save current entity before creating new one
+                                entity_list.append(entity.to_dict(self.tokenizer))
+                            entity = Entity(
+                                input_id=input_id_ner,
+                                ner_label=label_ner,
+                                role_label=iob_role[2:] if iob_role != "O" else "",
+                                ner_code_map=self.ner_code_map,
+                                role_code_map=self.role_code_map
+                            )
+                        elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
+                            entity.input_ids.append(input_id_ner)
+                        # if currently I-nside and entity predicted but no prior B-eginging detected.
+                        # Would be an inference mistake.
+                        elif prefix == "I-" and entity is None:  # should not happen, but who knows...
+                            entity = Entity(
+                                input_id=input_id_ner,
+                                ner_label=label_ner,
+                                role_label=iob_role[2:] if iob_role != "O" else "",
+                                ner_code_map=self.ner_code_map,
+                                role_code_map=self.role_code_map
+                            )
+                        else:
+                            # something is wrong...
+                            print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
+                            print(j)
+                            raise Exception("serialization failed")
+                    elif entity is not None:
+                        entity_list.append(entity.to_dict(self.tokenizer))
+                        entity = None
+                j_panel_group['panel_group'].append(entity_list)
+            j['smtag'].append(j_panel_group)
+        return json.dumps(j, indent=2)
 
 
 class Tagger:
@@ -120,110 +128,124 @@ class Tagger:
             self.tokenizer,  # for decoding
         )
 
-    def __call__(self, text: str) -> str:
-        return self._pipeline(text)
+    def __call__(self, examples: Union[str, List[str]]) -> str:
+        if isinstance(examples, list):
+            return self._pipeline(examples)
+        else:
+            return self._pipeline([examples])
 
-    def _pipeline(self, text: str) -> str:
-        output = self._tokenize(text)
-        panelized: List[BatchEncoding] = self.panelize(output)
-        entity_types: List[Dict[List]] = self.ner(panelized)
-        geneprod_roles: List[Dict[List]] = self.roles(entity_types)
-        serialized = self.serializer(entity_types, geneprod_roles, format='json')
+    def _pipeline(self, examples: List[str]) -> List:
+        tagged = []
+        tokenized = self._tokenize(examples)
+        panelized = self.panelize(tokenized)
+        for panel_group in panelized:
+            ner_results = self.ner(panel_group)
+            roles_results = self.roles(ner_results)
+            tagged.append((ner_results, roles_results))
+        serialized = self.serializer(tagged, format='json')
         return serialized
 
-    def _tokenize(self, text) -> BatchEncoding:
-        tokens = self.tokenizer(
-            text,
+    def _tokenize(self, examples: List[str]) -> Dict[str, List[int]]:
+        tokenized = self.tokenizer(
+            examples,
             return_attention_mask=False,
             return_special_tokens_mask=True,
-            return_tensors='pt',
+            # return_tensors='pt',
             truncation=True
         )
-        return tokens
+        return tokenized
 
-    def panelize(self, input: BatchEncoding) -> List[BatchEncoding]:
-        labeled = self.predict([input], self.panel_model)
-        labeled = labeled[0]
+    def panelize(self, inputs: Dict[str, List[int]]) -> List[Dict[str, List[int]]]:
         panel_start_label_code = self.panel_code_map.iob2_labels.index('B-PANEL_START')
-        panels = []
-        panel = []
-        for input_id in labeled['input_ids']:
-            if input_id == panel_start_label_code:
-                if panel:
-                    encoding = self._tokenize(self.tokenizer.decode(panel))  # nicely return tensors and special tokens
-                    panels.append(encoding)
-                    panel = []
-            panel.append(input_id)
-        # don't forget to include last accumulated panel
-        if panel:
-            encoding = self._tokenize(self.tokenizer.decode(panel))
-            panels.append(encoding)
-        return panels
-
-    def ner(self, input: List[BatchEncoding]) -> List[Dict[str, List]]:
-        output = self.predict(input, self.ner_model)
-        return output
-
-    def roles(self, input) -> List[Dict[str, List]]:
-        mask_token_id = self.tokenizer.mask_token_id
-        geneprod_codes = [
-            self.ner_code_map.iob2_labels.index('B-GENEPROD'),
-            self.ner_code_map.iob2_labels.index('I-GENEPROD'),
-        ]
-        masked_input = []
-        for panel in input:
-            masked_input_ids = []
-            for i in range(len(panel['input_ids'])):
-                input_id = panel['input_ids'][i]
-                label_idx = panel['labels_idx'][i]
-                if label_idx in geneprod_codes:
-                    input_id = mask_token_id
-                masked_input_ids.append(input_id)
-            # tensorify
-            masked_input_ids = torch.tensor(masked_input_ids).unsqueeze(0)
-            special_tokens_mask = torch.tensor(panel['special_tokens_mask']).unsqueeze(0)
-            masked_panel = {
-                'input_ids': masked_input_ids,
-                'special_tokens_mask': special_tokens_mask,
+        predictions = self.predict(inputs, self.panel_model)
+        batch = []
+        # each element of the predictions['input_ids'] list is a group of panels
+        # each group of panel need to be segmented into individual panels using the predicted B-PANEL_START tag
+        for input_ids in predictions['input_ids']:
+            panel_group = {
+                'input_ids': [],
+                # 'attention_mask': [],
+                'special_tokens_mask': []
             }
-            masked_input.append(masked_panel)
-        # tensorify
-        output = self.predict(masked_input, self.role_model)
-        return output
+            panel = []
+            for input_id in input_ids:
+                # are we at the start of a new panel? 
+                if input_id == panel_start_label_code:
+                    # have we accumulated input_ids to make a panel?
+                    if panel:
+                        # it is time to add the panel to the current panel group
+                        encoded_panel = self._tokenize(self.tokenizer.decode(panel))  # nicely return tensors and special tokens
+                        # what happens to bos and eos special tokens?
+                        panel_group['input_ids'].append(encoded_panel['input_ids'])
+                        # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
+                        panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
+                        panel = []
+                panel.append(input_id)
+            # don't forget to include last accumulated panel
+            if panel:
+                encoded_panel = self._tokenize(self.tokenizer.decode(panel))
+                panel_group['input_ids'].append(encoded_panel['input_ids'])
+                # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
+                panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
+                panel = []
+            batch.append(panel_group)
+        return batch
 
-    def predict(self, input: List[BatchEncoding], model: RobertaForTokenClassification) -> List[Dict[str, List]]:
+    def ner(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]:
+        outputs = self.predict(inputs, self.ner_model)
+        return outputs
+
+    def roles(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]:
+        masked_inputs = {
+            "input_ids": torch.tensor(inputs["input_ids"], dtype=torch.long),
+            "special_tokens_mask": torch.tensor(inputs["special_tokens_mask"], dtype=torch.uint8)
+        }
+        mask_begin_geneprod = inputs["labels"] == self.ner_code_map.iob2_labels.index('B-GENEPROD')
+        mask_inside_geneprod = inputs["labels"] == self.ner_code_map.iob2_labels.index('I-GENEPROD')
+        mask = mask_begin_geneprod | mask_inside_geneprod
+        masked_inputs['input_ids'][mask] = self.tokenizer.mask_token_id
+        outputs = self.predict(masked_inputs, self.role_model)
+        return outputs
+
+    def predict(self, inputs: Dict[str, List[int]], model: RobertaForTokenClassification) -> Dict[str, List[int]]:
         # what follows is inspired from TokenClassificationPipeline but avoiding transforming labels_idx into str
-        # returning a List[Dict[List]] instead of List[List[Dict]] to faciliate serial input-output predictions
-        # TODO handle this as a batch rather than one by one
-        output = []
-        for tokens in input:
-            with torch.no_grad():
-                # pop() to remove from tokens which are submittted to module.forward()
-                special_tokens_mask = tokens.pop("special_tokens_mask").cpu()[0]
-                # tokens = self.ensure_tensor_on_device(**tokens)
-                entities = model(**tokens)[0][0].cpu()
-                input_ids = tokens["input_ids"][0].cpu()
-                scores = entities.softmax(-1)
-                labels_idx = entities.argmax(-1)
-            special_tokens_mask = special_tokens_mask.numpy()
-            labels_idx = labels_idx.numpy()
-            entities = entities.numpy()
-            scores = scores.numpy()
-            labels_idx = [(idx, label_idx) for idx, label_idx in enumerate(labels_idx)]
-            entities = {
-                "input_ids": [],
-                "scores": [],
-                "labels_idx": []
+        model.eval()
+        # pad lists to same length and tensorify
+        if isinstance(inputs["input_ids"], (list, tuple)):
+            examples = self.tokenizer.pad(
+                inputs,
+                return_tensors="pt",
+                padding=True  # this will pad to the max length in the batch
+            )
+        else:
+            # already as tensor; need to clone before popping things out
+            examples = {
+                "input_ids": inputs["input_ids"].clone(),
+                "special_tokens_mask": inputs["special_tokens_mask"].clone()
             }
-            for idx, label_idx in labels_idx:
-                input_id = int(input_ids[idx])
-                score = scores[idx][label_idx].item()
-                entities["input_ids"].append(input_id)
-                entities["scores"].append(score)
-                entities["labels_idx"].append(label_idx)
-            entities["special_tokens_mask"] = special_tokens_mask  # restore special_tokens_mask for potential carry over to next serial model
-            output.append(entities)
-        return output
+        # pop() to remove from examples but keep for later
+        special_tokens_mask = examples.pop("special_tokens_mask")
+        # examples.pop("labels")
+        with torch.no_grad():
+            # tokens = self.ensure_tensor_on_device(**tokens)
+            try:
+                outputs = model(**examples)
+            except RuntimeError as e:
+                print(e)
+                import pdb; pdb.set_trace()
+            logits = outputs[0].cpu()  # B x L H
+            proba = logits.softmax(-1)  # B x L x H
+            input_ids = examples["input_ids"].cpu()
+            labels = logits.argmax(-1)  # B x L
+            scores = proba.take_along_dim(labels.unsqueeze(-1), -1)
+            scores.squeeze_(-1)
+        predictions = {
+            "input_ids": input_ids.tolist(),
+            "scores": scores.tolist(),
+            "labels": labels.tolist(),
+            "special_tokens_mask": special_tokens_mask.tolist(),
+        }
+        return predictions
 
 
 class SmartTagger(Tagger):

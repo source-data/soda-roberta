@@ -59,12 +59,14 @@ class TrainingArgumentsLM(TrainingArguments):
 
 
 def train(
-    no_cache: bool,
-    path: str,
-    data_dir: str,
-    data_config_name: str,
     training_args: TrainingArgumentsLM,
-    tokenizer: AutoTokenizer = config.tokenizer
+    loader_path: str,
+    data_config_name: str,
+    data_dir: str,
+    no_cache: bool,
+    tokenizer: AutoTokenizer = config.tokenizer,
+    model_type: str = config.model_type,
+    from_pretrained: str = config.from_pretrained
 ):
 
     training_args.logging_dir = f"{RUNS_DIR}/lm-{data_config_name}-{datetime.now().isoformat().replace(':','-')}"
@@ -76,9 +78,9 @@ def train(
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
 
     print(f"\nLoading datasets found in {data_dir}.")
-    print(f"using {path} as dataset loader.")
+    print(f"using {loader_path} as dataset loader.")
     train_dataset, eval_dataset, test_dataset = load_dataset(
-        path=path,  # to the dataset loading script: a dataset repository on the HF hub with a dataset script (if the script has the same name as the directory) -> load the dataset builder from the dataset script in the dataset repository e.g. 'username/dataset_name', a dataset repository on the HF hub containing a dataset script ‘dataset_name.py
+        path=loader_path,  # to the dataset loading script: a dataset repository on the HF hub with a dataset script (if the script has the same name as the directory) -> load the dataset builder from the dataset script in the dataset repository e.g. 'username/dataset_name', a dataset repository on the HF hub containing a dataset script ‘dataset_name.py
         name=data_config_name,  # the name of the dataset configuration name
         data_dir=data_dir,  # the data_dir owhere the files for the dataset configuration are found
         split=["train", "validation", "test"],
@@ -99,7 +101,7 @@ def train(
                 pad_to_multiple_of=config.max_length
             )
         else:
-            raise ValueError(f"unknown config.model_type: {config.model_type}")
+            raise ValueError(f"unknown config.model_type: {model_type}")
     elif data_config_name == "MLM":
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForLanguageModeling(
@@ -113,7 +115,7 @@ def train(
                 pad_to_multiple_of=config.max_length
             )
         else:
-            raise ValueError(f"unknon config.model_type: {config.model_tyle}")
+            raise ValueError(f"unknon config.model_type: {model_type}")
     elif data_config_name == "SEQ2SEQ":
         data_collator = DataCollatorForSeq2Seq(
             tokenizer=tokenizer,
@@ -125,21 +127,21 @@ def train(
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
 
-    if config.model_type == "Autoencoder":
+    if model_type == "Autoencoder":
         if config.from_pretrained:
-            model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
+            model = AutoModelForMaskedLM.from_pretrained(from_pretrained)
         else:
             model_config = RobertaConfig(
                 vocab_size=config.vocab_size,
-                max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
+                max_position_embeddings=config.max_length, #+ 2,  # max_length + 2 for start/end token
                 num_attention_heads=12,
                 num_hidden_layers=6,
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
-    elif config.model_type == "GraphRepresentation":
+    elif model_type == "GraphRepresentation":
         if config.from_pretrained:
-            seq2seq = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
+            seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
             model_config = BecauseConfig(
                 freeze_pretrained='encoder',
                 hidden_features=128,
@@ -163,7 +165,7 @@ def train(
 
     print("\nTraining arguments:")
     print(training_args)
-    if config.model_type == "GraphRepresentation":
+    if model_type == "GraphRepresentation":
         trainer = MyTrainer(
             model=model,
             args=training_args,

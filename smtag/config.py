@@ -2,10 +2,14 @@
 Application-wide preferences.
 """
 from dataclasses import dataclass, field
-from transformers import AutoTokenizer
+from transformers import (
+    AutoTokenizer,
+    BartTokenizerFast,
+    RobertaTokenizerFast
+)
 import spacy
 from spacy.lang.en import English
-from typing import Dict
+from typing import Dict, Union
 
 
 @dataclass
@@ -20,6 +24,7 @@ class Config:
     model_type: str = "GraphRepresentation" # "Autoencoder"  # 
     tokenizer: str = None
     nlp: English = field(default=spacy.load("en_core_web_sm"))
+    tokenizer: Union[RobertaTokenizerFast, BartTokenizerFast] = None
 
     def __post_init__(
         self,
@@ -30,7 +35,8 @@ class Config:
             "max_eval": 10_000,
             "max_test": 10_000}):
         self.split_ratio = split_ratio
+        # the tokenizer is provided in config since it should be the same application-wide
+        self.tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained)
 
 
 config = Config()
-config.tokenizer = AutoTokenizer.from_pretrained(config.from_pretrained)

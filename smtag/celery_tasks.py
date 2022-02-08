@@ -98,8 +98,7 @@ def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
         max_length=max_length,
         truncation=config.truncation,
         return_offsets_mapping=True,
-        return_special_tokens_mask=True,
-        add_special_tokens=True
+        return_special_tokens_mask=True
     )
     pos_labels = _align_labels(example, pos_words, tokenized)
     labeled_example = {
