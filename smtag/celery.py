@@ -3,7 +3,7 @@ app = Celery(
     'smtag',
     backend='rpc',
     broker='pyamqp://guest@rabbitmq:5672',
-    include=['smtag.celery_tasks']
+    include=['smtag.extract', 'smtag.dataprep']
 )
 
 

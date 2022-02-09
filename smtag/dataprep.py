@@ -8,9 +8,55 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, BatchEncoding
 from .xml2labels import CodeMap
 from .encoder import XMLEncoder
-from .celery_tasks import aligned_tokenization_task
+from .celery import app
 from .config import config
 from .utils import innertext
+
+
+# Celery tasks
+@app.task
+def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
+    labeled_example = {}
+    # invoke Spacy's part-of-speech tagger
+    # will assign universal POS tags https://universaldependencies.org/u/pos/
+    # https://spacy.io/usage/linguistic-features#pos-tagging
+    pos_words = config.nlp(example)
+    tokenized = config.tokenizer(
+        example,
+        max_length=max_length,
+        truncation=config.truncation,
+        return_offsets_mapping=True,
+        return_special_tokens_mask=True
+    )
+    pos_labels = _align_labels(example, pos_words, tokenized)
+    labeled_example = {
+        'input_ids': tokenized.input_ids,
+        'label_ids': pos_labels,
+        'special_tokens_mask': tokenized.special_tokens_mask
+    }
+    _save_json(labeled_example, dest_file_path)
+
+
+def _align_labels(example, pos_words, tokenized) -> List[str]:
+    # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
+    pos_char = [''] * len(example)  # pos for part-of-speech
+    # make a character-level pos from pos_word
+    for w in pos_words:
+        start = w.idx
+        end = start + len(w)
+        pos_char[start:end] = [w.pos_] * len(w)
+    # convert the character-level POS tags into token-level POS labels
+    pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
+    for idx, (start, end) in enumerate(tokenized.offset_mapping):
+        if not(start == end):  # not a special or empty token
+            pos_token[idx] = pos_char[start]
+    return pos_token
+
+
+def _save_json(example: Dict, dest_file_path: str):
+    # saving line by line to json-line file
+    with Path(dest_file_path).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+        f.write(f"{json.dumps(example)}\n")
 
 
 class PreparatorLM:
@@ -32,14 +78,21 @@ class PreparatorLM:
         subsets: List[str] = ["train", "eval", "test"]
     ):
         self.source_dir_path = Path(source_dir_path)
-        self.dest_dir_path = Path(dest_dir_path)
-        self.max_length = max_length
+        self.dest_dir_path = dest_dir_path
         self.subsets = subsets
-        if not self.dest_dir_path.exists():
+        if not self.dest_dir_path:
+            basename = self.source_dir_path.name
+            self.dest_dir_path = Path("/data/json") / basename
+        else:
+            self.dest_dir_path = Path(self.dest_dir_path)
+        if self.dest_dir_path.exists():
+            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.dest_dir_path.parents[0].exists():
+            raise ValueError(f"{self.dest_dir_path.parents[0]} does not exist, cannot proceed")
+        else:
             self.dest_dir_path.mkdir()
             print(f"{self.dest_dir_path} created")
-        else:
-            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        self.max_length = max_length
 
     def run(self) -> List:
         """Runs the coding of the examples.
@@ -127,16 +180,23 @@ class PreparatorTOKCL:
         subsets: List[str] = ["train", "eval", "test"]
     ):
         self.source_dir_path = Path(source_dir_path)
-        self.dest_dir_path = Path(dest_dir_path)
         self.subsets = subsets
+        self.dest_dir_path = dest_dir_path
+        if not self.dest_dir_path:
+            basename = self.source_dir_path.name
+            self.dest_dir_path = Path("/data/json") / basename
+        else:
+            self.dest_dir_path = Path(self.dest_dir_path)
+        if self.dest_dir_path.exists():
+            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.dest_dir_path.parents[0].exists():
+            raise ValueError(f"{self.dest_dir_path.parents[0]} does not exist, cannot proceed")
+        else:
+            self.dest_dir_path.mkdir()
+            print(f"{self.dest_dir_path} created")
         self.code_maps = code_maps
         self.max_length = max_length
         self.tokenizer = tokenizer
-        if not self.dest_dir_path.exists():
-            self.dest_dir_path.mkdir()
-            print(f"{self.dest_dir_path} created")
-        else:
-            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
 
     def run(self):
         """Runs the coding and labeling of xml examples.

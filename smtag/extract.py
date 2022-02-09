@@ -1,10 +1,92 @@
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 from random import random
 import celery
 from tqdm import tqdm
-from .celery_tasks import examples_from_file_task, save_task
+from lxml.etree import Element, tostring, parse
+from nltk import PunktSentenceTokenizer
+from .celery import app
+from .utils import innertext, cleanup
 from .config import config
+
+
+# Celery tasks
+@app.task
+def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool, min_length: int = config.min_char_length) -> Dict:
+    """Generates text or xml examples from xml documents. 
+    Examples to be extracted are found using an XPath expression.
+    THe resulting text can be segmented in sentences if desired. 
+    Either the inner text is extracted or the xml of the extracted element is kept.
+
+    Args:
+        filepath (str): the path to the source file.
+        xpath (str): the XPath expression to identify the example(s) in the xml file.
+        punkt (bool): whether to split the text into individual sentences.
+        keep_xml (bool): whether to keep the xml of the element, otherwise the inner text is extracted.
+        remove_tail (bool): set this to False if the text after the element should be included.
+    """
+    examples = []
+    elements = _parse_xml_file(filepath, xpath, remove_tail)
+    text = _extract_text_from_elements(elements, punkt, keep_xml, min_length=min_length)
+    examples = _cleanup(text)
+    return examples
+
+
+def _parse_xml_file(filepath: str, xpath: str, remove_tail: bool) -> List[str]:
+    filepath = Path(filepath)
+    with filepath.open() as f:
+        xml = parse(f)
+        elements = xml.xpath(xpath)
+        if remove_tail:
+            for e in elements:
+                if e.tail is not None:
+                    e.tail = None
+    return elements
+
+
+def _extract_text_from_elements(elements: Element, punkt: bool, keep_xml: bool, min_length: int) -> List[str]:
+    examples = []
+    if keep_xml:
+        for e in elements:
+            xml_str = tostring(e).decode('utf-8')  # tostring returns bytes
+            text = innertext(e)
+            if _filter(text, min_length):
+                examples.append(xml_str)
+    else:
+        for e in elements:
+            text = innertext(e)
+            if punkt:
+                sentences = PunktSentenceTokenizer().tokenize(text=text)
+                filtered_sentences = [s for s in sentences if _filter(s, min_length)]
+                examples += filtered_sentences
+            else:
+                if _filter(text, min_length):
+                    examples.append(text)
+    return examples
+
+
+def _cleanup(examples: List[str]) -> List[str]:
+    examples = [cleanup(e) for e in examples]
+    return examples
+
+
+def _filter(example: str, min_length: int) -> str:
+    example = example if len(example) > min_length else ''
+    return example
+
+
+@app.task
+def save_task(text: str, filepath: str,):
+    """Writes each text on 1 line at the end of the file.
+    Strips text from newlines so that it can be written on a single line.
+
+    Args:
+        text (str): the text, will be stripped of newline
+        filepath (Path): the path to the file
+    """
+    with Path(filepath).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+        f.write(f"{text.strip()}\n")
+    return 1
 
 
 class ExtractorXML:
@@ -48,28 +130,31 @@ class ExtractorXML:
         subsets: List[str] = ["train", "eval", "test"]
     ):
         self.corpus = Path(corpus)
-        self.destination_dir = Path(destination_dir)
+        self.destination_dir = destination_dir
         self.sentence_level = sentence_level
         self.xpath = xpath
         self.keep_xml = keep_xml
         self.remove_tail = remove_tail
         self.inclusion_probability = inclusion_probability
         self.subsets = subsets
-        if self.destination_dir:
-            if not self.destination_dir.parents[0].exists():
-                raise ValueError(f"{self.destination_dir.parents[0]} does not exists, cannot proceed")
-            else:
-                Path.mkdir(self.destination_dir, exist_ok=True)
-                print(f"{self.destination_dir} created")
-        else:
+        if not self.destination_dir:
             basename = self.corpus.name
             self.destination_dir = Path("/data/text") / basename
+        else:
+            self.destination_dir = Path(self.destination_dir)
+        if self.destination_dir.exists():
+            raise ValueError(f"{self.destination_dir} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.destination_dir.parents[0].exists():
+            raise ValueError(f"{self.destination_dir.parents[0]} does not exist, cannot proceed")
+        else:
+            self.destination_dir.mkdir()
+            print(f"{self.destination_dir} created")
         self.source_dir_paths = [self.corpus / subset for subset in self.subsets]
         self.destination_file_paths = [self.destination_dir / f"{subset}.txt" for subset in subsets]
-        if any([True if p.exists() else False for p in self.destination_file_paths]):
+        if any([p.exists() for p in self.destination_file_paths]):
             raise ValueError(f"{', '.join([str(p) for p in self.destination_file_paths])} already exist. Cannot proceed.")
         else:
-            if not all([True if source.exists() else False for source in self.source_dir_paths]):
+            if not all([source.exists() for source in self.source_dir_paths]):
                 raise ValueError(f"The source {self.corpus} must include {' & '.join(subsets)} sub-directories. Cannot proceed.")
 
     def extract_from_corpus(self) -> int:

@@ -28,7 +28,7 @@ def main():
         inclusion_probability=inclusion_probability
     )
     saved = x.extract_from_corpus()
-    print(saved)
+    print("; ".join([f"{str(k)}: {v} examples" for k, v in saved.items()]))
 
 
 if __name__ == '__main__':
