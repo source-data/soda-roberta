@@ -16,7 +16,6 @@ services:
     volumes: &volumes
     - .:/app
     - ./data:/data
-    - ./tokenizer:${TOKENIZER_PATH}
     - ./lm_models:${LM_MODEL_PATH}
     - ./tokcl_models:${TOKCL_MODEL_PATH}
     - ./cache:${CACHE}
