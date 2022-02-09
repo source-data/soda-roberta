@@ -106,7 +106,7 @@ def train(
     model = AutoModelForTokenClassification.from_pretrained(
         from_pretrained,
         num_labels=num_labels,
-        max_position_embeddings=config.max_length  #+ 2  # max_length + 2 for start/end token
+        max_position_embeddings=config.max_length + 2  # max_length + 2 for start/end token
     )
 
     print("\nTraining arguments:")
