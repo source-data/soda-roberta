@@ -83,9 +83,6 @@ class DataCollatorForTargetedMasking(DataCollatorMixin):
                 "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
             }
 
-        # If special token mask has been preprocessed, pop it from the dict.
-        # special_tokens_mask = batch.pop("special_tokens_mask", None)
-
         # padding the mask (not handled by the tokenizer) to same uniform length as input_ids
         sequence_length = len(batch["input_ids"][0])
         padding_side = self.tokenizer.padding_side
@@ -277,12 +274,7 @@ class MyDataCollatorForSeq2Seq:
                 )
 
             if self.max_length is not None:
-                try:
-                    assert max_label_length <= self.max_length, f"{max_label_length} > {self.max_length}"
-                except AssertionError as e:
-                    print(e)
-                    import pdb; pdb.set_trace()
-                    # fuck!
+                assert max_label_length <= self.max_length, f"{max_label_length} > {self.max_length}"
 
 
             padding_side = self.tokenizer.padding_side

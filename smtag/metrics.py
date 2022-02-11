@@ -43,7 +43,6 @@ class MetricsTOKCL:
         """
         predictions, labels = eval_pred
         predictions = np.argmax(predictions, axis=-1)
-
         # Remove ignored index (special tokens)
         true_predictions = [
             [self.label_list[p] for (p, l) in zip(prediction, label) if l != -100]

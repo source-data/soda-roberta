@@ -15,13 +15,13 @@ from typing import Dict, Union
 @dataclass
 class Config:
     vocab_siz: int = 54_000
-    max_length: int = 512  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length: int = 64 # 512  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     truncation: bool = True
     min_char_length: int = 120  # characters!
     split_ratio: Dict = field(default_factory=dict)
     celery_batch_size: int = 1000
-    from_pretrained: str = "roberta-base" #"facebook/bart-base" # leave empty if training a language model from scratch
-    model_type: str = "Autoencoder" # "GraphRepresentation" # 
+    from_pretrained: str = "facebook/bart-base" # "roberta-base" #leave empty if training a language model from scratch
+    model_type: str = "GraphRepresentation" # "Autoencoder" # 
     tokenizer: str = None
     nlp: English = field(default=spacy.load("en_core_web_sm"))
     tokenizer: Union[RobertaTokenizerFast, BartTokenizerFast] = None

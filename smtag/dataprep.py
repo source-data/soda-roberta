@@ -1,4 +1,6 @@
 from pathlib import Path
+import pdb
+from tokenize import Special
 from typing import List, Tuple, Dict
 import json
 from lxml.etree import fromstring, Element
@@ -57,6 +59,19 @@ def _save_json(example: Dict, dest_file_path: str):
     # saving line by line to json-line file
     with Path(dest_file_path).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
         f.write(f"{json.dumps(example)}\n")
+
+
+def _special_tokens_mask(tokens, tokenizer):
+    bos_token = tokenizer.bos_token
+    eos_token = tokenizer.eos_token
+    unk_token = tokenizer.unk_token
+    sep_token = tokenizer.sep_token
+    pad_token = tokenizer.pad_token
+    cls_token = tokenizer.cls_token
+    mask_token = tokenizer.mask_token
+    special_tokens = set([bos_token, eos_token, unk_token, sep_token, pad_token, cls_token, mask_token])
+    special_tokens_mask = [1 if t in special_tokens else 0 for t in tokens]
+    return special_tokens_mask
 
 
 class PreparatorLM:
@@ -206,17 +221,20 @@ class PreparatorTOKCL:
             print(f"Preparing: {subset}")
             source_file_path = self.source_dir_path / f"{subset}.txt"
             dest_file_path = self.dest_dir_path / f"{subset}.jsonl"
-            labeled_examples = []
+            examples = []
             with source_file_path.open() as f:
                 lines = f.readlines()
                 for line in tqdm(lines):
                     xml_example: Element = fromstring(line)
                     tokenized, token_level_labels = self._encode_example(xml_example)
-                    labeled_examples.append({
-                        'tokenized': tokenized,
-                        'label_ids': token_level_labels
+                    # add special_tokens_mask "mannually" now that label_ids are aligned
+                    examples.append({
+                        'tokens': tokenized.tokens(),
+                        'input_ids': tokenized.input_ids,
+                        'label_ids': token_level_labels,
+                        'special_tokens_mask': _special_tokens_mask(tokenized.tokens(), self.tokenizer)
                     })
-            self._save_json(labeled_examples, dest_file_path)
+            self._save_json(examples, dest_file_path)
             self._verify(dest_file_path)
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
@@ -303,7 +321,7 @@ class PreparatorTOKCL:
         if inner_text[pos] == ' ':  # we are still in a run of space and at the end of the string!
             token_idx = len(tokenized.input_ids) - 1
         else:
-            # __.token    is tokenized into two single spaces plus one .token (dot is spacial character produced by RobertaTokenizer)
+            # __.token    is tokenized into two single spaces plus one .token (dot is special character produced by RobertaTokenizer)
             #    ^        need to scan until non space character
             # 5           element_start = 5
             # 5678        pos = 8 after scanning
@@ -326,12 +344,7 @@ class PreparatorTOKCL:
         with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
-                j = {
-                    'tokens': example['tokenized'].tokens(),
-                    'input_ids': example['tokenized'].input_ids,
-                    'label_ids':  example['label_ids']
-                }
-                f.write(f"{json.dumps(j)}\n")
+                f.write(f"{json.dumps(example)}\n")
 
     def _verify(self, dest_file_path):
         with dest_file_path.open() as f:

@@ -1,4 +1,5 @@
 import math
+import pdb
 from random import randrange
 
 import torch
@@ -144,17 +145,18 @@ class ShowExampleTOCKL(TrainerCallback):
             input_ids = inputs['input_ids'][0].cpu()
         labels_idx = [e.item() for e in labels_idx]
         input_ids = [e.item() for e in input_ids]
+        labels = [e.item() for e in labels]
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
             label_idx = labels_idx[i]
-            true_label = labels[i].item()
+            true_label = labels[i]
             if input_id != self.tokenizer.pad_token_id:  # don't display padding
                 decoded = self.tokenizer.decode(input_id)
                 # indicate the true label with underline
-                underscore = self.UNDERSCORE if true_label > 0 else ''
-                if label_idx > 0:
+                underscore = self.UNDERSCORE if label_idx == true_label else ''
+                if label_idx > 0:  # don't show default no_label
                     colored += f"{self.BOLD}{underscore}{self.COLOR.format(color_idx=label_idx)}{decoded}{self.CLOSE}"
                 else:
-                    colored += f"{underscore}{decoded}{self.CLOSE}"
+                    colored += f"{decoded}"
         print(f"\n\n{colored}\n\n")

@@ -26,14 +26,10 @@ from transformers import (
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from ..models.vae import Because, BecauseConfig
-from ..data_collator import (
-    DataCollatorForTargetedMasking,
-    MyDataCollatorForSeq2Seq
-)
+from ..models.vae import BecauseForMaskedLM, BecauseConfig
+from ..data_collator import DataCollatorForTargetedMasking
 
 from ..trainer import MyTrainer
-# from ..legacy.lm.trainer import MyTrainer
 from ..show import ShowExampleLM
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -98,7 +94,7 @@ def train(
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
                 mlm_probability=0.5,
-                pad_to_multiple_of=config.max_length
+                pad_to_multiple_of=config.max_length  
             )
         else:
             raise ValueError(f"unknown config.model_type: {model_type}")
@@ -141,7 +137,7 @@ def train(
             model = RobertaForMaskedLM(config=model_config)
     elif model_type == "GraphRepresentation":
         if config.from_pretrained:
-            seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # DOES IT NEED SPECIAL TOKENS?
+            seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
             model_config = BecauseConfig(
                 freeze_pretrained='encoder',
                 hidden_features=128,
@@ -157,7 +153,10 @@ def train(
                 seq_length=config.max_length,
                 residuals=False,
             )
-            model = Because(pretrained=seq2seq, config=model_config)
+            model = BecauseForMaskedLM(
+                pretrained=seq2seq,
+                config=model_config
+            )
         else:
             raise ValueError("Training GraphRepresentation from scratch is not implemented.")
 
@@ -186,6 +185,7 @@ def train(
             callbacks=[ShowExampleLM(tokenizer, detailed=True)],
         )
 
+    # switch the Tensorboard callback to plot losses on same plot
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
     trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 

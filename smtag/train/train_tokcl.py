@@ -1,18 +1,28 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
+from multiprocessing.sharedctypes import Value
+import pdb
 from typing import NamedTuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 import torch
 from transformers import (
-    AutoModelForTokenClassification, AutoTokenizer,
+    AutoModelForSeq2SeqLM, AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
-    Trainer, IntervalStrategy
+    Trainer, IntervalStrategy,
+    BartModel
 )
+from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
+from ..models.vae import (
+    BecauseTokenClassification,
+    BecauseConfigForTokenClassification,
+)
 from ..data_collator import DataCollatorForMaskedTokenClassification
+from ..trainer import MyTrainer
 from ..metrics import MetricsTOKCL
 from ..show import ShowExampleTOCKL
+from ..tb_callback import MyTensorBoardCallback
 from ..config import config
 from .. import LM_MODEL_PATH, TOKCL_MODEL_PATH, CACHE, RUNS_DIR
 
@@ -42,6 +52,7 @@ def train(
     data_dir: str,
     no_cache: bool,
     tokenizer: AutoTokenizer = config.tokenizer,
+    model_type: str = config.model_type,
     from_pretrained: str = LM_MODEL_PATH
 ):
 
@@ -54,8 +65,8 @@ def train(
         if training_args.replacement_probability is None:
             # introduce noise to scramble entities to reinforce role of context over entity identity
             training_args.replacement_probability = 0.2
-        if training_args.masking_probability is None:
-            training_args.masking_probability = .0
+        if training_args.masking_probability is None or training_args.masking_probability == 0:
+            training_args.masking_probability = .0  # make sure it is float even when zero!
     elif data_config_name == "ROLES":
         if training_args.masking_probability is None:
             # pure contextual learning, all entities are masked
@@ -103,28 +114,71 @@ def train(
 
     compute_metrics = MetricsTOKCL(label_list=label_list)
 
-    model = AutoModelForTokenClassification.from_pretrained(
-        from_pretrained,
-        num_labels=num_labels,
-        max_position_embeddings=config.max_length + 2  # max_length + 2 for start/end token
-    )
+    if model_type == 'Autoencoder':
+        model = AutoModelForTokenClassification.from_pretrained(
+            from_pretrained,
+            num_labels=num_labels,
+            max_position_embeddings=config.max_length + 2  # max_length + 2 for start/end token
+        )
+    elif model_type == "GraphRepresentation":
+        # "The bare BART Model outputting raw hidden-states without any specific head on top."
+        seq2seq = BartModel.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
+        model_config = BecauseConfigForTokenClassification(
+            freeze_pretrained='encoder',
+            hidden_features=128,
+            num_nodes=50,
+            num_edge_features=6,
+            num_node_features=10,
+            sample_num_entities=20, #5,
+            sample_num_interactions=20, #10,
+            sample_num_interaction_types=3,
+            sampling_iterations=100,
+            alpha=1E6,
+            beta=1E7,
+            seq_length=config.max_length,
+            residuals=True,
+            classifier_dropout=0.1,
+            num_labels=num_labels,
+        )
+        model = BecauseTokenClassification(
+            pretrained=seq2seq,
+            config=model_config
+        )
 
-    print("\nTraining arguments:")
+    print(f"\nTraining arguments for model type {model_type}:")
     print(training_args)
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
-        callbacks=[ShowExampleTOCKL(tokenizer)]
-    )
+    if model_type == "Autoencorder":
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=compute_metrics,
+            callbacks=[ShowExampleTOCKL(tokenizer)]
+        )
+    elif model_type == "GraphRepresentation":
+        trainer = MyTrainer(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=compute_metrics,
+            callbacks=[ShowExampleTOCKL(tokenizer)]
+        )
+    else:
+        raise ValueError(f"{model_type} is not implemented!")
 
+    # switch the Tensorboard callback to plot losses on same plot
+    trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
+    trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
+
+    print(f"training on {trainer.label_names}")
     print(f"CUDA available: {torch.cuda.is_available()}")
 
-    trainer.train()
+    trainer.train() #ignore_keys_for_eval=['supp_data', 'adjascency', 'node_embeddings'])
     trainer.save_model(training_args.output_dir)
 
     print(f"Testing on {len(test_dataset)}.")
