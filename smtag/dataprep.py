@@ -1,13 +1,12 @@
 from pathlib import Path
 import pdb
-from tokenize import Special
 from typing import List, Tuple, Dict
 import json
 from lxml.etree import fromstring, Element
 from random import shuffle
 import celery
 from tqdm import tqdm
-from transformers import AutoTokenizer, BatchEncoding
+from transformers import AutoTokenizer, BatchEncoding, ByT5Tokenizer
 from .xml2labels import CodeMap
 from .encoder import XMLEncoder
 from .celery import app
@@ -19,17 +18,35 @@ from .utils import innertext
 @app.task
 def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     labeled_example = {}
+    # character-level ByT5Tokenizer tokenizer converts string into bytes
+    # for unicode character several bytes will be used
+    # This leads to shifts as compared to spacy nlp part of speech tagging
+    # so we replace anything non ascii by ?
+    if isinstance(config.tokenizer, ByT5Tokenizer):
+        example = str(example.encode('ascii', 'replace'))
     # invoke Spacy's part-of-speech tagger
     # will assign universal POS tags https://universaldependencies.org/u/pos/
     # https://spacy.io/usage/linguistic-features#pos-tagging
     pos_words = config.nlp(example)
-    tokenized = config.tokenizer(
-        example,
-        max_length=max_length,
-        truncation=config.truncation,
-        return_offsets_mapping=True,
-        return_special_tokens_mask=True
-    )
+    if config.tokenizer.is_fast:
+        tokenized = config.tokenizer(
+            example,
+            max_length=max_length,
+            truncation=config.truncation,
+            return_offsets_mapping=True,
+            return_special_tokens_mask=True
+        )
+    else:
+        tokenized = config.tokenizer(
+            example,
+            max_length=max_length,
+            truncation=config.truncation,
+            # python tokenizers do not have return_offsets_mapping
+            return_special_tokens_mask=True
+        )
+        # calculate ourselves offsets mapping
+        offsets_mapping = _get_offset_mapping(tokenized, config.tokenizer)
+        tokenized['offset_mapping'] = offsets_mapping
     pos_labels = _align_labels(example, pos_words, tokenized)
     labeled_example = {
         'input_ids': tokenized.input_ids,
@@ -39,7 +56,22 @@ def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     _save_json(labeled_example, dest_file_path)
 
 
-def _align_labels(example, pos_words, tokenized) -> List[str]:
+def _get_offset_mapping(tokenized, tokenizer):
+    start = 0
+    offset_mapping = []
+    for input_id in tokenized.input_ids:
+        token = tokenizer.convert_ids_to_tokens([input_id], skip_special_tokens=True)  # the list [inputs_id] is a trick to allows skipping a special token and returning an empty list
+        # test if token is special token in which case offset is (0, 0) by convention
+        if token:
+            length = len(token[0])
+            offset_mapping.append((start, start+length))
+            start += length
+        else:
+            offset_mapping.append((0, 0))
+    return offset_mapping
+
+
+def _align_labels(example: str, pos_words, tokenized: BatchEncoding) -> List[str]:
     # since spacy and the pre-tokenizer may not split text the same way, we bridge both via a character-level POS tag list
     pos_char = [''] * len(example)  # pos for part-of-speech
     # make a character-level pos from pos_word
@@ -48,10 +80,14 @@ def _align_labels(example, pos_words, tokenized) -> List[str]:
         end = start + len(w)
         pos_char[start:end] = [w.pos_] * len(w)
     # convert the character-level POS tags into token-level POS labels
-    pos_token = ['X'] * len(tokenized.tokens())  # includes special tokens
+
+    pos_token = ['X'] * len(tokenized.input_ids)  # includes special tokens
     for idx, (start, end) in enumerate(tokenized.offset_mapping):
         if not(start == end):  # not a special or empty token
-            pos_token[idx] = pos_char[start]
+            try:
+                pos_token[idx] = pos_char[start]
+            except IndexError:
+                raise ValueError(f"{'|'.join([config.tokenizer.convert_ids_to_tokens(i) for i in tokenized.input_ids])}\n{str(pos_words)}")
     return pos_token
 
 
@@ -227,12 +263,16 @@ class PreparatorTOKCL:
                 for line in tqdm(lines):
                     xml_example: Element = fromstring(line)
                     tokenized, token_level_labels = self._encode_example(xml_example)
+                    if self.tokenizer.is_fast:
+                        tokens = tokenized.tokens()
+                    else:
+                        tokens = self.tokenizer.convert_ids_to_tokens(tokenized.input_ids)
                     # add special_tokens_mask "mannually" now that label_ids are aligned
                     examples.append({
-                        'tokens': tokenized.tokens(),
+                        'tokens': tokens,  # do we ever need this?
                         'input_ids': tokenized.input_ids,
                         'label_ids': token_level_labels,
-                        'special_tokens_mask': _special_tokens_mask(tokenized.tokens(), self.tokenizer)
+                        'special_tokens_mask': _special_tokens_mask(tokens, self.tokenizer)
                     })
             self._save_json(examples, dest_file_path)
             self._verify(dest_file_path)
@@ -240,6 +280,8 @@ class PreparatorTOKCL:
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         xml_encoder = XMLEncoder(xml)
         inner_text = innertext(xml_encoder.element)
+        # if isinstance(config.tokenizer, ByT5Tokenizer):
+        #     inner_text = str(inner_text.encode('ascii', 'replace'))
         tokenized: BatchEncoding = self.tokenizer(
             inner_text,
             max_length=self.max_length,

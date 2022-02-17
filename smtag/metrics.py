@@ -54,7 +54,11 @@ class MetricsTOKCL:
         ]
 
         print("\n"+" " * 80)
-        print(classification_report(true_labels, true_predictions))
+        try:
+            print(classification_report(true_labels, true_predictions))
+        except ValueError as e:
+            print(e)
+            import pdb; pdb.set_trace()
         return {
             "accuracy_score": accuracy_score(true_labels, true_predictions),
             "precision": precision_score(true_labels, true_predictions),

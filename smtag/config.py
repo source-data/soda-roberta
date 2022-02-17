@@ -1,11 +1,13 @@
 """
 Application-wide preferences.
 """
-from dataclasses import dataclass, field
+import pdb
+from dataclasses import dataclass, field, InitVar
 from transformers import (
     AutoTokenizer,
     BartTokenizerFast,
-    RobertaTokenizerFast
+    RobertaTokenizerFast,
+    ByT5Tokenizer
 )
 import spacy
 from spacy.lang.en import English
@@ -14,17 +16,15 @@ from typing import Dict, Union
 
 @dataclass
 class Config:
-    vocab_siz: int = 54_000
-    max_length: int = 64 # 512  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length: int = 512  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     truncation: bool = True
     min_char_length: int = 120  # characters!
-    split_ratio: Dict = field(default_factory=dict)
+    split_ratio: InitVar[Dict] = None
     celery_batch_size: int = 1000
-    from_pretrained: str = "facebook/bart-base" # "roberta-base" #leave empty if training a language model from scratch
-    model_type: str = "GraphRepresentation" # "Autoencoder" # 
-    tokenizer: str = None
+    from_pretrained: str = "roberta-base"  # "facebook/bart-base" # leave empty if training a language model from scratch
+    model_type: str = "Autoencoder"  # "GraphRepresentation" #
+    tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
     nlp: English = field(default=spacy.load("en_core_web_sm"))
-    tokenizer: Union[RobertaTokenizerFast, BartTokenizerFast] = None
 
     def __post_init__(
         self,
@@ -33,10 +33,14 @@ class Config:
             "eval": 0.2,
             "test": 0.1,
             "max_eval": 10_000,
-            "max_test": 10_000}):
+            "max_test": 10_000},
+        tokenizer: Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer] = None
+    ):
         self.split_ratio = split_ratio
-        # the tokenizer is provided in config since it should be the same application-wide
-        self.tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained)
+        # a specific tokenizer can be provided for example when training a model from scratch
+        self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(self.from_pretrained)
 
 
+# char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
+# config = Config(tokenizer=char_level_tokenizer)
 config = Config()

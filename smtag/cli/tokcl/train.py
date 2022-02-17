@@ -8,7 +8,7 @@ from ...config import config
 if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArgumentsTOKCL), description="Traing script.")
     parser.add_argument("loader_path", help="Path of the loader.")
-    parser.add_argument("data_config_name", choices=["NER", "ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", choices=["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
     parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cache.")
     parser.add_argument("--from_pretrained", default=LM_MODEL_PATH, help="The pretrained model to fine tune.")

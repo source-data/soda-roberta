@@ -128,8 +128,8 @@ def train(
             model = AutoModelForMaskedLM.from_pretrained(from_pretrained)
         else:
             model_config = RobertaConfig(
-                vocab_size=config.vocab_size,
-                max_position_embeddings=config.max_length, #+ 2,  # max_length + 2 for start/end token
+                vocab_size=tokenizer.vocab_size,
+                max_position_embeddings=config.max_length + 2,  # max_length + 2 for start/end token
                 num_attention_heads=12,
                 num_hidden_layers=6,
                 type_vocab_size=1,

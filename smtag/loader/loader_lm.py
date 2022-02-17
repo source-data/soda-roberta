@@ -44,7 +44,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     _LICENSE = "CC BY 4.0"
 
-    _URLs = {
+    _URLS = {
         "biolang": "https://huggingface.co/datasets/EMBO/biolang/resolve/main/oapmc_abstracts_figs.zip",
     }
 
@@ -92,7 +92,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
         if self.config.data_dir:
             data_dir = self.config.data_dir
         else:
-            url = _URLs["biolang"]
+            url = self._URLS["biolang"]
             data_dir = dl_manager.download_and_extract(url)
             data_dir += "/oapmc_abstracts_figs"
         return [

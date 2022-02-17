@@ -98,6 +98,7 @@ def sample_graph(max_num_nodes, num_entities, num_interactions, num_node_feature
 
 class BecauseConfig(BartConfig):
 
+    # inherited from BartConfig
     # vocab_size=50265,
     # max_position_embeddings=1024,
     # encoder_layers=12,
@@ -141,6 +142,7 @@ class BecauseConfig(BartConfig):
         seq_length: int = 512,
         alpha: float = 1E05,
         beta: float = 1E05,
+        gamma: float = 1E05,
         residuals: bool = True,
         **kwargs
     ):
@@ -157,6 +159,7 @@ class BecauseConfig(BartConfig):
         self.seq_length = seq_length
         self.alpha = alpha
         self.beta = beta
+        self.gamma = gamma
         self.residuals = residuals
 
 
@@ -196,7 +199,7 @@ class Because(nn.Module):
         elif self.freeze_pretrained == 'decoder':
             for param in self.decoder.parameters():
                 param.requires_grad_(False)
-        elif self.freeze_pretrained is None:
+        elif self.freeze_pretrained is None or self.freeze_pretrained=='':
             pass
         else:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
@@ -220,8 +223,10 @@ class Because(nn.Module):
         self.z_2_dim = self.num_nodes * self.num_node_features
         self.alpha = self.config.alpha
         self.beta = self.config.beta
+        self.gamma = self.config.gamma
         # own layers
         self.act_fct = nn.GELU()
+        self.vae_dropout = nn.Dropout(p=config.dropout)
 
         self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
@@ -247,15 +252,19 @@ class Because(nn.Module):
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         # compress
-        y = self.fc_compress(x)  # -> B x L x H (example: 32 x 512 x 100)
+        y = x  # keep x as residual
+        y = self.vae_dropout(y)
+        y = self.fc_compress(y)  # -> B x L x H (example: 32 x 512 x 100)
         y = self.norm_compress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
         # first latent var
+        y = self.vae_dropout(y)
         z_1 = self.fc_z_1_1(y)  # -> B x Z_1
         z_1 = self.norm_z_1(z_1)
         z_1 = self.act_fct(z_1)
         # second latent var
+        y = self.vae_dropout(y)
         # z_2 = self.fc_z_2_1(y.clone())  # -> B x Z_2  (example: 32 x (20*10)
         # z_2 = self.norm_z_2(z_2)
         # z_2 = self.act_fct(z_2)
@@ -267,6 +276,7 @@ class Because(nn.Module):
 
 
         # decompress
+        y = self.vae_dropout(y)
         y_1 = self.fc_z_1_2(z_1)  # -> B x (L * H)
         y_1 = self.norm_decompress_1(y_1)
         y_1 = self.act_fct(y_1)
@@ -337,7 +347,7 @@ class Because(nn.Module):
             I = I.cuda()
         mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
         trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
-        L_dag = (trace - d).mean()
+        L_dag = self.gamma * (trace - d).mean()
         #
         # Zheng et al 2018 DAG with NOTEARS
         # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
@@ -351,7 +361,7 @@ class Because(nn.Module):
         # M = np.eye(d) + W * W / d
         # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
         # h = (E.T * M).sum() - d
-        loss = adj_matrix_distro_loss  # L_dag + node_label_distro_loss + L_adj_sparse + L_node_sparse
+        loss = adj_matrix_distro_loss + L_dag #+ node_label_distro_loss + L_adj_sparse + L_node_sparse
         supp_data = {
             "adj_distro_loss": adj_matrix_distro_loss,
             "nodes_distro_loss": node_label_distro_loss,

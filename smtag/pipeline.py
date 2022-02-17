@@ -11,15 +11,28 @@ from .xml2labels import CodeMap, SourceDataCodes as sd
 
 class Entity:
 
-    def __init__(self, input_id: int, ner_label: str, role_label: str, ner_code_map: CodeMap, role_code_map: CodeMap):
+    def __init__(
+        self,
+        input_id: int,
+        ner_label: str,
+        role_geneprod_label: str,
+        role_small_mol_label: str,
+        ner_code_map: CodeMap,
+        geneprod_role_code_map: CodeMap,
+        small_mol_role_code_map: CodeMap
+    ):
         self.input_ids = [input_id]
         self.ner_label = ner_label
-        self.role_label = role_label
+        self.role_geneprod_label = role_geneprod_label
+        self.role_small_mol_label = role_small_mol_label
         ner_constraint = ner_code_map.from_label(ner_label)
         # keep only first value of attributes for serialization
         self.attrib = {attr: val[0] for attr, val in ner_constraint['attributes'].items()}
-        if role_label:
-            role_constraint = role_code_map.from_label(role_label)
+        if role_geneprod_label:
+            role_constraint = geneprod_role_code_map.from_label(role_geneprod_label)
+            self.attrib = {attr: val[0] for attr, val in role_constraint['attributes'].items()}
+        if role_small_mol_label:
+            role_constraint = small_mol_role_code_map.from_label(role_small_mol_label)
             self.attrib = {attr: val[0] for attr, val in role_constraint['attributes'].items()}
         self.text = ''
 
@@ -35,13 +48,15 @@ class Serializer:
 
     def __init__(
         self,
+        tokenizer: RobertaTokenizerFast,
         ner_code_map,
-        role_code_map,
-        tokenizer: RobertaTokenizerFast
+        geneprod_role_code_map,
+        small_mol_role_code_map
     ):
-        self.ner_code_map = ner_code_map
-        self.role_code_map = role_code_map
         self.tokenizer = tokenizer
+        self.ner_code_map = ner_code_map
+        self.geneprod_role_code_map = geneprod_role_code_map
+        self.small_mol_role_code_map = small_mol_role_code_map
 
     def __call__(self, *args, format: str = "json") -> str:
         if format == "json":
@@ -54,53 +69,63 @@ class Serializer:
         j = {'smtag': []}
         for panel_group in tagged_panel_groups:
             j_panel_group = {'panel_group': []}
-            ner_results, roles_results = panel_group
+            ner_results, geneprod_roles_results, small_mol_roles_results = panel_group
             num_panels = len(ner_results['input_ids'])
             for panel_idx in range(num_panels):
                 label_ids = ner_results['input_ids'][panel_idx]
                 entity_types = ner_results['labels'][panel_idx]
-                entity_roles = roles_results['labels'][panel_idx]
+                special_tokens_mask = ner_results['special_tokens_mask'][panel_idx]
+                entity_geneprod_roles = geneprod_roles_results['labels'][panel_idx]
+                entity_small_mol_roles = small_mol_roles_results['labels'][panel_idx]
                 entity_list = []
                 entity = None
                 for i in range(len(label_ids)):
-                    input_id_ner = label_ids[i]
-                    label_ner = entity_types[i]
-                    iob_ner = self.ner_code_map.iob2_labels[label_ner]  # convert label idx into IOB2 label
-                    label_role = entity_roles[i]
-                    iob_role = self.role_code_map.iob2_labels[label_role]
-                    if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
-                        prefix = iob_ner[0:2]  # for example B-
-                        label_ner = iob_ner[2:]  # for example GENEPROD
-                        if prefix == "B-":  # begining of a new entity
-                            if entity is not None:  # save current entity before creating new one
-                                entity_list.append(entity.to_dict(self.tokenizer))
-                            entity = Entity(
-                                input_id=input_id_ner,
-                                ner_label=label_ner,
-                                role_label=iob_role[2:] if iob_role != "O" else "",
-                                ner_code_map=self.ner_code_map,
-                                role_code_map=self.role_code_map
-                            )
-                        elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
-                            entity.input_ids.append(input_id_ner)
-                        # if currently I-nside and entity predicted but no prior B-eginging detected.
-                        # Would be an inference mistake.
-                        elif prefix == "I-" and entity is None:  # should not happen, but who knows...
-                            entity = Entity(
-                                input_id=input_id_ner,
-                                ner_label=label_ner,
-                                role_label=iob_role[2:] if iob_role != "O" else "",
-                                ner_code_map=self.ner_code_map,
-                                role_code_map=self.role_code_map
-                            )
-                        else:
-                            # something is wrong...
-                            print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
-                            print(j)
-                            raise Exception("serialization failed")
-                    elif entity is not None:
-                        entity_list.append(entity.to_dict(self.tokenizer))
-                        entity = None
+                    special_token = special_tokens_mask[i]
+                    # ignore positions that are special tokens
+                    if special_token == 0:
+                        input_id_ner = label_ids[i]
+                        label_ner = entity_types[i]
+                        iob_ner = self.ner_code_map.iob2_labels[label_ner]  # convert label idx into IOB2 label
+                        label_geneprod_role = entity_geneprod_roles[i]
+                        label_small_mol_role = entity_small_mol_roles[i]
+                        iob_geneprod_role = self.geneprod_role_code_map.iob2_labels[label_geneprod_role]
+                        iob_small_mol_role = self.small_mol_role_code_map.iob2_labels[label_small_mol_role]
+                        if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
+                            prefix = iob_ner[0:2]  # for example B-
+                            label_ner = iob_ner[2:]  # for example GENEPROD
+                            if prefix == "B-":  # begining of a new entity
+                                if entity is not None:  # save current entity before creating new one
+                                    entity_list.append(entity.to_dict(self.tokenizer))
+                                entity = Entity(
+                                    input_id=input_id_ner,
+                                    ner_label=label_ner,
+                                    role_geneprod_label=iob_geneprod_role[2:] if iob_geneprod_role != "O" else "",
+                                    role_small_mol_label=iob_small_mol_role[2:] if iob_small_mol_role != "O" else "",
+                                    ner_code_map=self.ner_code_map,
+                                    geneprod_role_code_map=self.geneprod_role_code_map,
+                                    small_mol_role_code_map=self.small_mol_role_code_map
+                                )
+                            elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
+                                entity.input_ids.append(input_id_ner)
+                            # if currently I-nside and entity predicted but no prior B-eginging detected.
+                            # Would be an inference mistake.
+                            elif prefix == "I-" and entity is None:  # should not happen, but who knows...
+                                entity = Entity(
+                                    input_id=input_id_ner,
+                                    ner_label=label_ner,
+                                    role_geneprod_label=iob_geneprod_role[2:] if iob_geneprod_role != "O" else "",
+                                    role_small_mol_label=iob_small_mol_role[2:] if iob_small_mol_role != "O" else "",
+                                    ner_code_map=self.ner_code_map,
+                                    role_code_map=self.role_code_map
+                                )
+                            else:
+                                # something is wrong...
+                                print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
+                                print(j)
+                                raise Exception("serialization failed")
+                        elif entity is not None:
+                            entity_list.append(entity.to_dict(self.tokenizer))
+                            entity = None
                 j_panel_group['panel_group'].append(entity_list)
             j['smtag'].append(j_panel_group)
         return json.dumps(j, indent=2)
@@ -113,19 +138,23 @@ class Tagger:
         tokenizer: RobertaTokenizerFast,
         panel_model: RobertaForTokenClassification,
         ner_model: RobertaForTokenClassification,
-        role_model: RobertaForTokenClassification
+        geneprod_role_model: RobertaForTokenClassification,
+        small_mol_role_model: RobertaForTokenClassification,
     ):
         self.tokenizer = tokenizer  # for encoding
         self.panel_model = panel_model
         self.ner_model = ner_model
-        self.role_model = role_model
+        self.geneprod_role_model = geneprod_role_model
+        self.small_mol_role_model = small_mol_role_model
         self.panel_code_map = sd.PANELIZATION
         self.ner_code_map = sd.ENTITY_TYPES
-        self.role_code_map = sd.GENEPROD_ROLES
+        self.geneprod_role_code_map = sd.GENEPROD_ROLES
+        self.small_mol_role_code_map = sd.SMALL_MOL_ROLES
         self.serializer = Serializer(
+            self.tokenizer,
             self.ner_code_map,
-            self.role_code_map,
-            self.tokenizer,  # for decoding
+            self.geneprod_role_code_map,
+            self.small_mol_role_code_map
         )
 
     def __call__(self, examples: Union[str, List[str]]) -> str:
@@ -140,8 +169,9 @@ class Tagger:
         panelized = self.panelize(tokenized)
         for panel_group in panelized:
             ner_results = self.ner(panel_group)
-            roles_results = self.roles(ner_results)
-            tagged.append((ner_results, roles_results))
+            geneprod_roles_results = self.roles(ner_results, ['B-GENEPROD', 'I-GENEPROD'], self.geneprod_role_model)
+            small_mol_roles_results = self.roles(ner_results, ['B-SMALL_MOLECULE', 'I-SMALL_MOLECULE'], self.small_mol_role_model)
+            tagged.append((ner_results, geneprod_roles_results, small_mol_roles_results))
         serialized = self.serializer(tagged, format='json')
         return serialized
 
@@ -169,18 +199,19 @@ class Tagger:
             }
             panel = []
             for input_id in input_ids:
-                # are we at the start of a new panel? 
-                if input_id == panel_start_label_code:
-                    # have we accumulated input_ids to make a panel?
-                    if panel:
-                        # it is time to add the panel to the current panel group
-                        encoded_panel = self._tokenize(self.tokenizer.decode(panel))  # nicely return tensors and special tokens
-                        # what happens to bos and eos special tokens?
-                        panel_group['input_ids'].append(encoded_panel['input_ids'])
-                        # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
-                        panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
-                        panel = []
-                panel.append(input_id)
+                # need to skip beginging and end of sentence tokens
+                if input_id not in [self.tokenizer.bos_token_id, self.tokenizer.eos_token_id]:
+                    # are we at the start of a new panel?
+                    if input_id == panel_start_label_code:
+                        # have we accumulated input_ids to make a panel?
+                        if panel:
+                            # it is time to add the panel to the current panel group
+                            encoded_panel = self._tokenize(self.tokenizer.decode(panel))  # nicely return tensors and special tokens
+                            panel_group['input_ids'].append(encoded_panel['input_ids'])
+                            # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
+                            panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
+                            panel = []
+                    panel.append(input_id)
             # don't forget to include last accumulated panel
             if panel:
                 encoded_panel = self._tokenize(self.tokenizer.decode(panel))
@@ -195,16 +226,23 @@ class Tagger:
         outputs = self.predict(inputs, self.ner_model)
         return outputs
 
-    def roles(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]:
+    def roles(
+        self,
+        inputs: Dict[str, List[int]],
+        labels_to_mask: List[str],
+        role_model: RobertaForTokenClassification
+    ) -> Dict[str, List[int]]:
         masked_inputs = {
             "input_ids": torch.tensor(inputs["input_ids"], dtype=torch.long),
             "special_tokens_mask": torch.tensor(inputs["special_tokens_mask"], dtype=torch.uint8)
         }
-        mask_begin_geneprod = inputs["labels"] == self.ner_code_map.iob2_labels.index('B-GENEPROD')
-        mask_inside_geneprod = inputs["labels"] == self.ner_code_map.iob2_labels.index('I-GENEPROD')
-        mask = mask_begin_geneprod | mask_inside_geneprod
-        masked_inputs['input_ids'][mask] = self.tokenizer.mask_token_id
-        outputs = self.predict(masked_inputs, self.role_model)
+        # tensorify labels
+        labels = torch.tensor(inputs["labels"])
+        for label in labels_to_mask:
+            masking_id = self.ner_code_map.iob2_labels.index(label)
+            mask = labels == masking_id
+            masked_inputs['input_ids'][mask] = self.tokenizer.mask_token_id
+        outputs = self.predict(masked_inputs, role_model)
         return outputs
 
     def predict(self, inputs: Dict[str, List[int]], model: RobertaForTokenClassification) -> Dict[str, List[int]]:
@@ -225,7 +263,6 @@ class Tagger:
             }
         # pop() to remove from examples but keep for later
         special_tokens_mask = examples.pop("special_tokens_mask")
-        # examples.pop("labels")
         with torch.no_grad():
             # tokens = self.ensure_tensor_on_device(**tokens)
             try:
@@ -237,7 +274,7 @@ class Tagger:
             proba = logits.softmax(-1)  # B x L x H
             input_ids = examples["input_ids"].cpu()
             labels = logits.argmax(-1)  # B x L
-            scores = proba.take_along_dim(labels.unsqueeze(-1), -1)
+            scores = proba.take_along_dim(labels.unsqueeze(-1), -1)  # pytorch v 1.10 !!
             scores.squeeze_(-1)
         predictions = {
             "input_ids": input_ids.tolist(),
@@ -250,10 +287,19 @@ class Tagger:
 
 class SmartTagger(Tagger):
 
-    def __init__(self):
+    def __init__(
+        self,
+        tokenizer_source: str = "roberta-base",
+        panelizer_source: str = "EMBO/sd-panels",
+        ner_source: str = "EMBO/sd-ner",
+        geneprod_roles_source: str = "EMBO/sd-geneprod-roles",
+        small_mol_roles_source: str = "EMBO/sd-small-mol-roles"
+
+    ):
         super().__init__(
-            RobertaTokenizerFast.from_pretrained("roberta-base"),
-            RobertaForTokenClassification.from_pretrained("EMBO/sd-panels"),
-            RobertaForTokenClassification.from_pretrained("EMBO/sd-ner"),
-            RobertaForTokenClassification.from_pretrained("EMBO/sd-roles"),
+            RobertaTokenizerFast.from_pretrained(tokenizer_source),
+            RobertaForTokenClassification.from_pretrained(panelizer_source),
+            RobertaForTokenClassification.from_pretrained(ner_source),
+            RobertaForTokenClassification.from_pretrained(geneprod_roles_source),
+            RobertaForTokenClassification.from_pretrained(small_mol_roles_source)
         )

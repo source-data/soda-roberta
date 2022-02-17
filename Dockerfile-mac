@@ -22,6 +22,7 @@ RUN pip install celery==5.0.5
 RUN pip install flower==0.9.7
 RUN pip install spacy==2.3.5
 RUN pip install lxml==4.6.2
+RUN pip install neo4j==4.1.1
 # download language models for spacy
 RUN python -m spacy download en_core_web_sm
 

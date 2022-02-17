@@ -45,7 +45,8 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
         "I-EXP_ASSAY",
         "B-EXP_ASSAY",
     ]
-    _SEMANTIC_ROLES_LABEL_NAMES = ["O", "I-CONTROLLED_VAR", "B-CONTROLLED_VAR", "I-MEASURED_VAR", "B-MEASURED_VAR"]
+    _SEMANTIC_GENEPROD_ROLES_LABEL_NAMES =  ["O", "I-CONTROLLED_VAR", "B-CONTROLLED_VAR", "I-MEASURED_VAR", "B-MEASURED_VAR"]
+    _SEMANTIC_SMALL_MOL_ROLES_LABEL_NAMES = ["O", "I-CONTROLLED_VAR", "B-CONTROLLED_VAR", "I-MEASURED_VAR", "B-MEASURED_VAR"]
     _BORING_LABEL_NAMES = ["O", "I-BORING", "B-BORING"]
     _PANEL_START_NAMES = ["O", "B-PANEL_START"]
 
@@ -77,7 +78,8 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
 
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="NER", version="0.0.1", description="Dataset for entity recognition"),
-        datasets.BuilderConfig(name="ROLES", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="GENEPROD_ROLES", version="0.0.1", description="Dataset for semantic roles."),
+        datasets.BuilderConfig(name="SMALL_MOL_ROLES", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(name="BORING", version="0.0.1", description="Dataset for semantic roles."),
         datasets.BuilderConfig(
             name="PANELIZATION",
@@ -99,13 +101,25 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
                 }
             )
-        elif self.config.name == "ROLES":
+        elif self.config.name == "GENEPROD_ROLES":
             features = datasets.Features(
                 {
                     "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                     "labels": datasets.Sequence(
                         feature=datasets.ClassLabel(
-                            num_classes=len(self._SEMANTIC_ROLES_LABEL_NAMES), names=self._SEMANTIC_ROLES_LABEL_NAMES
+                            num_classes=len(self._SEMANTIC_GENEPROD_ROLES_LABEL_NAMES), names=self._SEMANTIC_GENEPROD_ROLES_LABEL_NAMES
+                        )
+                    ),
+                    "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
+                }
+            )
+        elif self.config.name == "SMALL_MOL_ROLES":
+            features = datasets.Features(
+                {
+                    "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
+                    "labels": datasets.Sequence(
+                        feature=datasets.ClassLabel(
+                            num_classes=len(self._SEMANTIC_SMALL_MOL_ROLES_LABEL_NAMES), names=self._SEMANTIC_SMALL_MOL_ROLES_LABEL_NAMES
                         )
                     ),
                     "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -127,6 +141,7 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
                     "labels": datasets.Sequence(
                         feature=datasets.ClassLabel(num_classes=len(self._PANEL_START_NAMES), names=self._PANEL_START_NAMES)
                     ),
+                    "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
                 }
             )
 
@@ -145,9 +160,9 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
         if self.config.data_dir:
             data_dir = self.config.data_dir
         else:
-            url = _URLS[self.config.name]
+            url = self._URLS[self.config.name]
             data_dir = dl_manager.download_and_extract(url)
-            if self.config.name in ["NER", "ROLES", "BORING"]:
+            if self.config.name in ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING"]:
                 data_dir += "/sd_panels"
             elif self.config.name == "PANELIZATION":
                 data_dir += "/sd_figs"
@@ -186,26 +201,38 @@ class SourceDataNLP(datasets.GeneratorBasedBuilder):
             for id_, row in enumerate(f):
                 data = json.loads(row)
                 if self.config.name == "NER":
-                    labels_type = data["label_ids"]["entity_types"]
-                    tag_mask = [0 if tag == "O" else 1 for tag in labels_type]
+                    labels = data["label_ids"]["entity_types"]
+                    tag_mask = [0 if tag == "O" else 1 for tag in labels]
                     yield id_, {
                         "input_ids": data["input_ids"],
-                        "labels": labels_type,
+                        "labels": labels,
                         "tag_mask": tag_mask,
                     }
-                elif self.config.name == "ROLES":
-                    labels_type = data["label_ids"]["entity_types"]
+                elif self.config.name == "GENEPROD_ROLES":
+                    labels = data["label_ids"]["entity_types"]
                     geneprod = ["B-GENEPROD", "I-GENEPROD", "B-PROTEIN", "I-PROTEIN", "B-GENE", "I-GENE"]
-                    tag_mask = [1 if t in geneprod else 0 for t in labels_type]
+                    tag_mask = [1 if t in geneprod else 0 for t in labels]
                     yield id_, {
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["geneprod_roles"],
                         "tag_mask": tag_mask,
                     }
+                elif self.config.name == "SMALL_MOL_ROLES":
+                    labels = data["label_ids"]["entity_types"]
+                    small_mol = ["B-SMALL_MOLECULE", "I-SMALL_MOLECULE"]
+                    tag_mask = [1 if t in small_mol else 0 for t in labels]
+                    yield id_, {
+                        "input_ids": data["input_ids"],
+                        "labels": data["label_ids"]["small_mol_roles"],
+                        "tag_mask": tag_mask,
+                    }
                 elif self.config.name == "BORING":
                     yield id_, {"input_ids": data["input_ids"], "labels": data["label_ids"]["boring"]}
                 elif self.config.name == "PANELIZATION":
+                    labels = data["label_ids"]["panel_start"]
+                    tag_mask = [1 if t == "B-PANEL_START" else 0 for t in labels]
                     yield id_, {
                         "input_ids": data["input_ids"],
                         "labels": data["label_ids"]["panel_start"],
+                        "tag_mask": tag_mask,
                     }
