@@ -19,7 +19,7 @@ SmartTag uses a 3-step pipeline:
 
 1. Segmentation of the text of figure legends into sub-panel legends.
 2. Named Entity Recognition of bioentities and experimental methods.
-3. Semantic tagging of the experimental role of generoducts as measured variable or controlled variable.
+3. Semantic tagging of the experimental role of gene products and small molecules as measured variable or controlled variable.
 
 Accordingly, a specialized language model for scientific biological language is fine tuned into 3 models for the respective tasks: PANELIZATION, NER, ROLES. These models are based on the find-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
 
