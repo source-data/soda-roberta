@@ -6,7 +6,6 @@ tokcl_models/
 tokenizer/
 cache/
 runs/
-docs/
 .Trash*
 ~*
 
