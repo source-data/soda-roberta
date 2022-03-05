@@ -14,7 +14,7 @@ class CodeMap:
     - AND the attribute have a value IN the provided list.
     Each code as a label (str) that can be used when encoding the features of the dataset.
 
-    For example, with the constraints held in EntityTypeCodeMap, the element <sd-tag type='protein'>...</sd-tag> will be labeled with code 2.
+    For example, with the constraints held in ENTITY_TYPES, the element <sd-tag entity_type='protein'>...</sd-tag> will be labeled with code 2.
     With PanelBoundaryCodeMap any element <sd-panel>...</sd-panel> will be labeled with code 1, without any furter constraints on attributes and their values.
     Usage: call `python -m tokcl.encoder` for a demo.
 
@@ -107,7 +107,7 @@ class SourceDataCodes(Enum):
                 'label': 'CONTROLLED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['geneprod', 'gene', 'protein'],
+                    'entity_type': ['geneprod', 'gene', 'protein'],
                     'role': ['intervention'],
                 }
             },
@@ -115,7 +115,7 @@ class SourceDataCodes(Enum):
                 'label': 'MEASURED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['geneprod', 'gene', 'protein'],
+                    'entity_type': ['geneprod', 'gene', 'protein'],
                     'role': ['assayed'],
                 }
             }
@@ -130,7 +130,7 @@ class SourceDataCodes(Enum):
                 'label': 'CONTROLLED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['molecule'],
+                    'entity_type': ['molecule'],
                     'role': ['intervention'],
                 }
             },
@@ -138,7 +138,7 @@ class SourceDataCodes(Enum):
                 'label': 'MEASURED_VAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['molecule'],
+                    'entity_type': ['molecule'],
                     'role': ['assayed'],
                 }
             }
@@ -153,42 +153,42 @@ class SourceDataCodes(Enum):
                 'label': 'SMALL_MOLECULE',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['molecule'],
+                    'entity_type': ['molecule'],
                 }
             },
             2: {
                 'label': 'GENEPROD',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['geneprod', 'gene', 'protein'],
+                    'entity_type': ['geneprod', 'gene', 'protein'],
                 }
             },
             3: {
                 'label': 'SUBCELLULAR',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['subcellular'],
+                    'entity_type': ['subcellular'],
                 }
             },
             4: {
                 'label': 'CELL',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['cell'],
+                    'entity_type': ['cell'],
                 }
             },
             5: {
                 'label': 'TISSUE',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['tissue'],
+                    'entity_type': ['tissue'],
                 }
             },
             6: {
                 'label': 'ORGANISM',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'type': ['organism'],
+                    'entity_type': ['organism'],
                 }
             },
             7: {

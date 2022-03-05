@@ -1,13 +1,18 @@
 from enum import auto
 import os
+import pdb
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, List, Union
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from lxml.etree import Element, ElementTree, XMLParser, XMLSyntaxError, fromstring
+from lxml.etree import (
+    Element, ElementTree,
+    XMLParser, parse, XMLSyntaxError,
+    fromstring, tostring
+)
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from tqdm.autonotebook import tqdm
@@ -81,8 +86,15 @@ class ResilientRequests:
             return data
 
 
-def doi2filename(doi: str):
+def doi2filename(doi: str) -> str:
     return doi.replace("/", "_").replace(".", "-")
+
+
+def inner_text(xml_element: Element) -> str:
+    if xml_element is not None:
+        return "".join([t for t in xml_element.itertext()])
+    else:
+        return ""
 
 
 @dataclass
@@ -258,14 +270,7 @@ class SourceDataAPIParser:
     def panel_props(response: Dict) -> PanelProperties:
         def cleanup(panel_caption: str):
             # need protection agains missing spaces after parenthesis, typically in figure or panel labels
-            try:
-                parenthesis = re.search(r'(\(.*?\))(\w)', panel_caption)
-            except TypeError as e:
-                print("#"*25)
-                print(type(panel_caption))
-                print(panel_caption)
-                raise e
-
+            parenthesis = re.search(r'(\(.*?\))(\w)', panel_caption)
             if parenthesis:
                 logger.debug("adding space after closing parenthesis {}".format(re.findall(r'(\(.*?\))(\w)', panel_caption)))
                 panel_caption = re.sub(r'(\(.*?\))(\w)',r'\1 \2', panel_caption)
@@ -278,13 +283,16 @@ class SourceDataAPIParser:
             # protection against badly formed link elements
             panel_caption = re.sub(r'<link href="(.*)">', r'<link href="\1"/>', panel_caption)
             panel_caption = re.sub(r'<link href="(.*)"/>(\n|.)*</link>', r'<link href="\1">\2</link>', panel_caption)
+            # protection against spurious xml declarations
+            # needs to be removed before next steps
+            panel_caption = re.sub(r'<\?xml.*?\?>', '', panel_caption)
             # protection against missing <sd-panel> tags
             if re.search(r'^<sd-panel>(\n|.)*</sd-panel>$', panel_caption) is None:
                 logger.debug(f"correcting missing <sd-panel> </sd-panel> tags in {panel_caption}")
                 panel_caption = '<sd-panel>' + panel_caption + '</sd-panel>'
             # protection against nested or empty sd-panel
-            panel_caption = re.sub(r'<sd-panel><sd-panel>', r'<sd-panel>', panel_caption)
-            panel_caption = re.sub(r'</sd-panel></sd-panel>', r'</sd-panel>', panel_caption)
+            panel_caption = re.sub(r'<sd-panel> *(<p>)* *<sd-panel>', r'<sd-panel>', panel_caption)
+            panel_caption = re.sub(r'</sd-panel> *(</p>)* *</sd-panel>', r'</sd-panel>', panel_caption)
             panel_caption = re.sub(r'<sd-panel/>', '', panel_caption)
             # We may loose a space that separates panels in the actual figure legend...
             panel_caption = re.sub(r'</sd-panel>$', r' </sd-panel>', panel_caption)
@@ -292,35 +300,26 @@ class SourceDataAPIParser:
             panel_caption = re.sub(r' +', r' ', panel_caption)
             return panel_caption
 
-        panel_id = response.get("current_panel_id", "")
+        panel_id = response.get("current_panel_id", "") or ""
         # the SD API panel method includes "reverse" info on source paper, figures, and all the other panels
         # take the portion of the data returned by the REST API that concerns panels
-        paper_info = response.get("paper", {})
-        figure_info = response.get("figure", {})
-        panels = figure_info.get("panels", [])
+        paper_info = response.get("paper") or {}
+        figure_info = response.get("figure") or {}
+        panels = figure_info.get("panels") or []
         # transform into dict
         panels = {p["panel_id"]: p for p in panels}
-        panel_info = panels.get(panel_id, {})
-        paper_doi = paper_info.get("doi", "")
-        figure_label = figure_info.get("label", "")
-        figure_id = figure_info.get("figure_id")
-        panel_id = panel_info.get("panel_id", "")  # "panel_id":"72258",
-        panel_label = panel_info.get("label", "")  # "label":"Figure 1-B",
-        panel_number = panel_info.get("panel_number", "")  # "panel_number":"1-B",
-        caption = panel_info.get("caption", "")
-        try:
-            caption = cleanup(caption)
-        except TypeError as e:
-            print("#"*50)
-            print(type(caption))
-            print(caption)
-            print(f"\n\n\n\n{response}\n\n\n\n")
-            print("#"*50)
-            import pdb; pdb.set_trace()
-            raise e
+        panel_info = panels.get(panel_id) or {}
+        paper_doi = paper_info.get("doi") or ""
+        figure_label = figure_info.get("label") or ""
+        figure_id = figure_info.get("figure_id") or ""
+        panel_id = panel_info.get("panel_id") or ""  # "panel_id":"72258",
+        panel_label = panel_info.get("label") or ""  # "label":"Figure 1-B",
+        panel_number = panel_info.get("panel_number") or ""  # "panel_number":"1-B",
+        caption = panel_info.get("caption") or ""
+        caption = cleanup(caption)
         formatted_caption = panel_info.get("formatted_caption", "")
-        href = panel_info.get("href", "")  # "href":"https:\/\/api.sourcedata.io\/file.php?panel_id=72258",
-        coords = panel_info.get("coords", {})  # "coords":{"topleft_x":346,"topleft_y":95,"bottomright_x":632,"bottomright_y":478}
+        href = panel_info.get("href") or ""  # "href":"https:\/\/api.sourcedata.io\/file.php?panel_id=72258",
+        coords = panel_info.get("coords", {}) or {}  # "coords":{"topleft_x":346,"topleft_y":95,"bottomright_x":632,"bottomright_y":478}
         coords = ", ".join([f"{k}={v}" for k, v in coords.items()])
         props = {
             "paper_doi": paper_doi,
@@ -389,10 +388,10 @@ class XMLSerializer:
 
     def generate_article(self, article: "Article") -> Element:
         xml_article = Element('article', doi=article.props.doi)
-        xml_article = self.append_children_of_article(xml_article, article)
+        xml_article = self.add_children_of_article(xml_article, article)
         return xml_article
 
-    def append_children_of_article(self, xml_article: Element, article: "Article") -> Element:
+    def add_children_of_article(self, xml_article: Element, article: "Article") -> Element:
         figures = [rel.target for rel in article.relationships if rel.rel_type == "has_figure"]
         xml_figures = [self.generate_figure(fig) for fig in figures]
         # do this here since there might be cases where several types of relationships have to be combined
@@ -410,10 +409,10 @@ class XMLSerializer:
         xml_fig.append(xml_fig_label)
         graphic_element = Element('graphic', href=figure.props.href)
         xml_fig.append(graphic_element)
-        xml_fig = self.append_children_of_figure(xml_fig, figure)
+        xml_fig = self.add_children_of_figure(xml_fig, figure)
         return xml_fig
 
-    def append_children_of_figure(self, xml_fig: Element, figure: "Figure") -> Element:
+    def add_children_of_figure(self, xml_fig: Element, figure: "Figure") -> Element:
         panels = [rel.target for rel in figure.relationships if rel.rel_type == "has_panel"]
         xml_panels = [self.generate_panel(panel) for panel in panels]
         for xml_panel in xml_panels:
@@ -421,20 +420,74 @@ class XMLSerializer:
         return xml_fig
 
     def generate_panel(self, panel: "Panel") -> Element:
+        # TODO test for None Should relationships inclue None?
         caption = panel.props.caption
         try:
             if caption:
                 xml_panel = fromstring(caption, parser=self.XML_Parser)
+                # does this include a declaration?? check with 107853
             else:
                 xml_panel = Element("sd-panel")
             xml_panel.attrib['panel_id'] = str(panel.props.panel_id)
             if panel.props.href:
                 graphic_element = Element('graphic', href=panel.props.href)
                 xml_panel.append(graphic_element)
+            xml_panel = self.add_children_of_panels(xml_panel, panel)
         except XMLSyntaxError as err:
             n = int(re.search(r'column (\d+)', str(err)).group(1))
-            logger.error(f"XMLSyntaxError: ```{caption[n-10:n]+'!!!'+caption[n]+'!!!'+caption[n+1:n+10]}```")
+            start = max(0, n - 20)
+            logger.error(f"XMLSyntaxError: ```{caption[start:n]+'!!!'+caption[n]+'!!!'}```")
             xml_panel = None
+        return xml_panel
+
+    def add_children_of_panels(self, xml_panel: Element, panel: "Panel") -> Element:
+        # smart_tags are TaggedEntity 
+        smart_tags = [rel.target for rel in panel.relationships if rel.rel_type == "has_entity"]
+        # in principle all of that can be removed if using panel's formatted_caption, but unsure how reliabe it is
+        # tags_xml are the elements extracted from the panel caption xml
+        # tags_xml have only a tag_id attribute
+        # we need to update them to add the attributes based on the props of the corresponding TagdgedEntity
+        # remove tags that are not in the caption, they will not be serialized
+        smart_tags = [t for t in smart_tags if t.props.in_caption]
+        tags_xml = xml_panel.xpath('.//sd-tag')# smarttags_dict is a dict by tag_id
+        smarttags_dict = {}
+        for t in smart_tags:
+            # in the xml, the tag id have the format sdTag<nnn>
+            tag_id = "sdTag" + t.props.tag_id
+            smarttags_dict[tag_id] = t
+        # warn about fantom tags: tags that are returned by sd api but are NOT in the xml
+        smarttags_dict_id = set(smarttags_dict.keys())
+        tags_xml_id = set([t.attrib['id'] for t in tags_xml])
+        tags_not_found_in_xml = smarttags_dict_id - tags_xml_id
+        if tags_not_found_in_xml:
+            logger.warning(f"tag(s) not found: {tags_not_found_in_xml} in {tostring(xml_panel)}")
+        # protection against nasty nested tags
+        for tag in tags_xml:
+            nested_tags = tag.xpath('.//sd-tag')
+            if nested_tags:
+                nested_tag = nested_tags[0]  # only 1?
+                logger.warning(f"removing nested tags {tostring(tag)}")
+                text_from_parent = tag.text or ''
+                innertext = inner_text(nested_tag)
+                tail = nested_tag.tail or ''
+                text_to_recover = text_from_parent + innertext + tail
+                for k in nested_tag.attrib:  # in fact, sometimes more levels of nesting... :-(
+                    if k not in tag.attrib:
+                        tag.attrib[k] = nested_tag.attrib[k]
+                tag.text = text_to_recover
+                for e in tag:  # tag.remove(nested_tag) would not always work if some <i> are flanking it for example
+                    tag.remove(e)
+                logger.info(f"cleaned tag: {tostring(tag)}")
+        # transfer attributes from smarttags_dict into the panel_xml Element
+        for tag in tags_xml:
+            tag_id = tag.get('id', '')
+            smarttag = smarttags_dict.get(tag_id)
+            if smarttag is not None:
+                # SmartNode.props is a Properties dataclass, hence asdict()
+                for attr, val in asdict(smarttag.props).items():
+                    if attr != 'tag_id':
+                        tag.attrib[attr] = str(val)
+        # xml_panel has been modified in place but nevertheless return it for consistency
         return xml_panel
 
 
@@ -452,81 +505,73 @@ class SmartNode:
         self._relationships: List[Relationship] = []
         self.ephemeral = ephemeral
 
-    # def from_db(self, id: str, overwire: bool = True):
-    #     """Instantiates self from the database """
-    #     raise NotImplementedError
-
-    # def to_db(self, mode: str = "MERGE"):
-    #     """Updates or create node and its descendents in the database"""
-    #     raise NotImplementedError
-
-    # def from_xml(self, xml_source: str):
-    #     """Loads and parses a jats file to instantiate properties and children"""
-    #     raise NotImplementedError
-
-    def to_xml(self, sub_dir: str) -> Element:
+    def to_xml(self, *args) -> Element:
         """Serializes the object and its descendents as xml file"""
         raise NotImplementedError
 
-    def from_sd_REST_API(self, id: str):
+    def from_sd_REST_API(self, *args) -> "SmartNode":
         """Instantiates properties and children from the SourceData REST API"""
         raise NotImplementedError
+
+    @property
+    def relationships(self) -> List[Relationship]:
+        return self._relationships
+
+    @relationships.setter
+    def relationships(self, rel: List[Relationship]):
+        self._relationships = rel
 
     @staticmethod
     def _request(url: str) -> Dict:
         response = ResilientRequests(SD_API_USERNAME, SD_API_PASSWORD).request(url)
         return response
 
-    def _save_xml(self, xml_element: Element, sub_dir: str, basename: str) -> str:
+    def _filepath(self, sub_dir: str, basename: str) -> Path:
         dest_dir = Path(self.DEST_XML_DIR)
-        dest_dir.mkdir(exist_ok=True)
         dest_dir = dest_dir / sub_dir if sub_dir else dest_dir
+        dest_dir.mkdir(exist_ok=True, parents=True)
         filename = basename + ".xml"
         filepath = dest_dir / filename
+        return filepath
+
+    def _save_xml(self, xml_element: Element, filepath: Path) -> str:
         if self.ephemeral and self.auto_save and not self.relationships:
             logger.warning(f"There are no relationships left in an ephermeral auto-saved object. Attempt to save to {str(filepath)} is likely to be a mistake.")
         if filepath.exists():
             logger.error(f"{filepath} already exists, not overwriting.")
         else:
-            filepath = str(filepath)
-            logger.info(f"writing to {filepath}")
-            ElementTree(xml_element).write(filepath, encoding='utf-8', xml_declaration=True)
+            try:
+                # xml validation before written file.
+                fromstring(tostring(xml_element))
+                filepath = str(filepath)
+                logger.info(f"writing to {filepath}")
+                ElementTree(xml_element).write(filepath, encoding='utf-8', xml_declaration=True)
+            except XMLSyntaxError as err:
+                logger.error(f"XMLSyntaxError in {filepath}: {str(err)}. File was NOT written.")
         return str(filepath)
 
-    def _sync(self):
-        pass
-        """Synchronizes with database, whatever it means in terms of filling gaps and overwriting properties"""
-        # first MERGE node with neo4j node
-        # self.to_db()
-        # then update properties of python object
-        # self.from_db()
-
-    @property
-    def relationships(self) -> List[Relationship]:
-        return self._relationships
-
-    def _set_relationships(self, rel_type: str, targets: List["SmartNode"]):
+    def _add_relationships(self, rel_type: str, targets: List["SmartNode"]):
+        targets = filter(None, targets)
         # keep _relationships as a list rather than a Dict[rel_type, nodes] in case staggered order is important
-        self._relationships += [Relationship(rel_type=rel_type, target=target) for target in targets]
+        self.relationships = self.relationships + [Relationship(rel_type=rel_type, target=target) for target in targets]
 
     def _finish(self) -> "SmartNode":
-        self._sync()  # synchronize with the database
         if self.ephemeral:
             # reset relationships to free memory from descendants
-            self._relationships = []
+            self.relationships = []
         return self
 
-    def to_str(self, level=0):
+    def _to_str(self, level=0):
         indentation = "  " * level
         s = ""
         s += indentation + f"{self.__class__.__name__} {self.props}\n"
         for rel in self.relationships:
             s += indentation + f"-[{rel.rel_type}]->\n"
-            s += rel.target.to_str(level + 1) + "\n"
+            s += rel.target._to_str(level + 1) + "\n"
         return s
 
     def __str__(self):
-        return self.to_str()
+        return self._to_str()
 
 
 class Collection(SmartNode):
@@ -534,10 +579,11 @@ class Collection(SmartNode):
     GET_COLLECTION = "collection/"
     GET_LIST = "/papers"
 
-    def __init__(self, *args, auto_save: bool = True, sub_dir: str = None, **kwargs):
+    def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.sub_dir = sub_dir
         self.auto_save = auto_save
+        self.overwrite = overwrite
         self.props = CollectionProperties()
 
     def from_sd_REST_API(self, collection_name: str) -> SmartNode:
@@ -553,9 +599,15 @@ class Collection(SmartNode):
             for article_id in tqdm(article_ids, desc="articles"):
                 # if collection auto save is on, each article is saved as we go
                 # if the collection is ephemeral, no point in keeping relationships in article after saving and article are ephemeral too
-                article = Article(auto_save=self.auto_save, ephemeral=self.auto_save).from_sd_REST_API(self.props.collection_id, article_id)
+                article = Article(
+                    auto_save=self.auto_save,
+                    ephemeral=self.auto_save,
+                    overwrite=self.overwrite,
+                    sub_dir=self.sub_dir
+                )
+                article.from_sd_REST_API(self.props.collection_id, article_id)
                 articles.append(article)
-            self._set_relationships("has_article", articles)
+            self._add_relationships("has_article", articles)
         return self._finish()
 
     def to_xml(self, sub_dir: str = None) -> List[str]:
@@ -578,24 +630,37 @@ class Article(SmartNode):
     GET_COLLECTION = "collection/"
     GET_ARTICLE = "paper/"
 
-    def __init__(self, *args, auto_save: bool = True, **kwargs):
+    def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.auto_save = auto_save
+        self.overwrite = overwrite
+        self.sub_dir = sub_dir
         self.props = ArticleProperties()
 
     def from_sd_REST_API(self, collection_id: str, doi: str) -> SmartNode:
-        logger.debug(f"  from sd API article {doi}")
-        url = self.SD_REST_API + self.GET_COLLECTION + collection_id + "/" + self.GET_ARTICLE + doi
-        response = self._request(url)
-        if response:
-            self.props = self.REST_API_PARSER.article_props(response)
-            fig_indices = self.REST_API_PARSER.children_of_article(response, collection_id, doi)
-            figures = []
-            for idx in tqdm(fig_indices, desc="figures ", leave=False):
-                fig = Figure().from_sd_REST_API(collection_id, doi, idx)
-                figures.append(fig)
-            self._set_relationships("has_figure", figures)
-        return self._finish()
+        if collection_id and doi:
+            logger.debug(f"  from sd API article {doi}")
+            filepath = self._filepath(self.sub_dir, self._basename(doi))
+            if self.auto_save and not self.overwrite and filepath.exists():
+                logger.warning(f"{filepath} already exists, not overwriting.")
+                return None
+            else:
+                url = self.SD_REST_API + self.GET_COLLECTION + collection_id + "/" + self.GET_ARTICLE + doi
+                response = self._request(url)
+                if response:
+                    self.props = self.REST_API_PARSER.article_props(response)
+                    fig_indices = self.REST_API_PARSER.children_of_article(response, collection_id, doi)
+                    figures = []
+                    for idx in tqdm(fig_indices, desc="figures ", leave=False):
+                        fig = Figure().from_sd_REST_API(collection_id, doi, idx)
+                        figures.append(fig)
+                    self._add_relationships("has_figure", figures)
+                else:
+                    logger.warning(f"API response was empty, no props set for doi='{doi}'.")
+                return self._finish()
+        else:
+            logger.error(f"Cannot create Article with empty params supplied: ('{collection_id}, {doi}')!")
+            return None
 
     def _finish(self) -> "SmartNode":
         if self.auto_save:
@@ -603,10 +668,19 @@ class Article(SmartNode):
             self.to_xml()
         return super()._finish()
 
+    @staticmethod
+    def _basename(doi: str) -> str:
+        return doi.replace("/", "_").replace(".", "-")
+
     def to_xml(self, sub_dir: str = None) -> str:
-        xml = self.XML_SERIALIZER.generate_article(self)
-        basename = self.props.doi.replace("/", "_").replace(".", "-")
-        filepath = self._save_xml(xml, sub_dir, basename)
+        sub_dir = sub_dir if sub_dir is not None else self.sub_dir
+        basename = self._basename(self.props.doi)
+        filepath = self._filepath(sub_dir, basename)
+        if filepath.exists() and not self.overwrite:
+            logger.warning(f"{filepath} already exists, not overwriting.")
+        else:
+            xml = self.XML_SERIALIZER.generate_article(self)
+            self._save_xml(xml, filepath)
         return filepath
 
 
@@ -621,30 +695,22 @@ class Figure(SmartNode):
         self.props = FigureProperties()
 
     def from_sd_REST_API(self, collection_id: str, doi: str, figure_index: str) -> SmartNode:
-        logger.debug(f"    from sd API figure {figure_index}")
-        url = self.SD_REST_API + self.GET_COLLECTION + collection_id + "/" + self.GET_ARTICLE + doi + "/" + self.GET_FIGURE + str(figure_index)
-        response = self._request(url)
-        if response:
-            self.props = self.REST_API_PARSER.figure_props(response, doi)
-            panel_ids = self.REST_API_PARSER.children_of_figures(response)
-            panels = []
-            for panel_id in tqdm(panel_ids, desc="panels  ", leave=False):
-                panel = Panel().from_sd_REST_API(panel_id)
-                panels.append(panel)
-            self._set_relationships("has_panel", panels)
-        return self._finish()
-
-    def to_xml(self, sub_dir: str = None) -> str:
-        xml = self.XML_SERIALIZER.generate_figure(self)
-        doi = doi2filename(self.props.paper_doi)
-        basename = "_".join([
-            doi,
-            "fig",
-            self.props.figure_label,
-            self.props.figure_id
-        ])
-        filepath = self._save_xml(xml, sub_dir, basename)
-        return filepath
+        if collection_id and doi and figure_index:
+            logger.debug(f"    from sd API figure {figure_index}")
+            url = self.SD_REST_API + self.GET_COLLECTION + collection_id + "/" + self.GET_ARTICLE + doi + "/" + self.GET_FIGURE + str(figure_index)
+            response = self._request(url)
+            if response:
+                self.props = self.REST_API_PARSER.figure_props(response, doi)
+                panel_ids = self.REST_API_PARSER.children_of_figures(response)
+                panels = []
+                for panel_id in tqdm(panel_ids, desc="panels  ", leave=False):
+                    panel = Panel().from_sd_REST_API(panel_id)
+                    panels.append(panel)
+                self._add_relationships("has_panel", panels)
+            return self._finish()
+        else:
+            logger.error(f"Cannot create Figure with empty params supplied: ('{collection_id}, {doi}')!")
+            return None
 
 
 class Panel(SmartNode):
@@ -656,29 +722,19 @@ class Panel(SmartNode):
         self.props = PanelProperties()
 
     def from_sd_REST_API(self, panel_id: str) -> SmartNode:
-        logger.debug(f"      from sd API panel {panel_id}")
-        url = self.SD_REST_API + self.GET_PANEL + panel_id
-        response = self._request(url)
-        if response:
-            self.props = self.REST_API_PARSER.panel_props(response)
-            tags_data = self.REST_API_PARSER.children_of_panels(response)
-            tagged_entities = [TaggedEntity().from_sd_REST_API(tag)for tag in tags_data]
-            self._set_relationships("has_entity", tagged_entities)
-            self._sync()
-        return self._finish()
-
-    def to_xml(self, sub_dir: str = None) -> str:
-        xml = self.XML_SERIALIZER.generate_panel(self)
-        doi = doi2filename(self.props.paper_doi)
-        basename = "_".join([
-            doi,
-            "fig",
-            self.props.figure_label,
-            self.props.panel_number,
-            self.props.panel_id
-        ])
-        filepath = self._save_xml(xml, sub_dir, basename)
-        return filepath
+        if panel_id:
+            logger.debug(f"      from sd API panel {panel_id}")
+            url = self.SD_REST_API + self.GET_PANEL + panel_id
+            response = self._request(url)
+            if response:
+                self.props = self.REST_API_PARSER.panel_props(response)
+                tags_data = self.REST_API_PARSER.children_of_panels(response)
+                tagged_entities = [TaggedEntity().from_sd_REST_API(tag)for tag in tags_data]
+                self._add_relationships("has_entity", tagged_entities)
+            return self._finish()
+        else:
+            logger.error(f"Cannot create Panel with empty params supplied: ('{panel_id}')!")
+            return None
 
 
 class TaggedEntity(SmartNode):

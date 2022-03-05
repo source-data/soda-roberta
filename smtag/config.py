@@ -1,8 +1,8 @@
 """
 Application-wide preferences.
 """
-import pdb
 from dataclasses import dataclass, field, InitVar
+from pydantic import NoneIsNotAllowedError
 from transformers import (
     AutoTokenizer,
     BartTokenizerFast,
@@ -23,20 +23,22 @@ class Config:
     celery_batch_size: int = 1000
     from_pretrained: str = "roberta-base"  # "facebook/bart-base" # leave empty if training a language model from scratch
     model_type: str = "Autoencoder"  # "GraphRepresentation" #
-    tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
     nlp: English = field(default=spacy.load("en_core_web_sm"))
+    tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
+    split_ratio: InitVar[Dict[str, float]] = None
 
     def __post_init__(
         self,
-        split_ratio: Dict = {
+        split_ratio,
+        tokenizer
+    ):
+        self.split_ratio = {
             "train": 0.7,
             "eval": 0.2,
             "test": 0.1,
             "max_eval": 10_000,
-            "max_test": 10_000},
-        tokenizer: Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer] = None
-    ):
-        self.split_ratio = split_ratio
+            "max_test": 10_000
+        } if split_ratio is None else split_ratio
         # a specific tokenizer can be provided for example when training a model from scratch
         self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(self.from_pretrained)
 
