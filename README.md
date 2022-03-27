@@ -23,9 +23,9 @@ SmartTag uses a 3-step pipeline:
 
 Accordingly, a specialized language model for scientific biological language is fine tuned into 4 models for the respective tasks: PANELIZATION, NER, GENEPROD_ROLES and SMALL_MOL_ROLES. These models are based on the find-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
 
-The datasetse and trained models are available as such at https://huggingface.co/EMBO.
+The datasetse and trained models are available at https://huggingface.co/EMBO.
 
-We provide in the doc instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 4 specific token classification models using the SourceData datset. Training can be done useing the command line using the modules in `smtag.cli` or in jupyter notebooks (see `training_protocol_*.ipynb` notebooks).
+We provide in `docs/` instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 4 specific token classification models using the SourceData datset. Training can be done useing the command line using the modules in `smtag.cli` or in jupyter notebooks (see [`training_protocol_LM.ipynb`](./training_protocol_LM.ipynb) and [`training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) notebook).
 
 The training raw data is in the form of XML files. SODA-ROBERTA provides tools to convert XML into tagged datasets that can be used for training transormers models. At inference stage, the tagged text is serialized back into json.
 
@@ -49,7 +49,7 @@ SmartTag can used with this command:
 
 This will pull automatically the docker image `tlemberger/smarttag:latest` from [dockerhub](https://hub.docker.com/).
 
-The first time the image is run, the models and tokenizers will be downloaded automatically and cached in the Docker-managed volume `cache`.
+The first time the image is run, the models and tokenizers will be downloaded automatically from https://huggingface.co/EMBO and cached in the Docker-managed volume `/cache`.
 
 SmarTag can be included in separate projects via its Docker image:
 
