@@ -78,7 +78,7 @@ Push to dockerhub:
 
 # Training
 
-See the [`./training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) Jupyter notebook or `./docs/training.md` on training the models.
+See the [`./training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) Jupyter notebook or [`./docs/training.md`](/docs/training.md) on training the models.
 
 To start the notebook
 
@@ -89,4 +89,4 @@ To start the notebook
 
 # Posting dataset and models
 
-See `./docs/dataset_sharing.md` on post dataset and models.
+See [`./docs/dataset_sharing.md`](./docs/dataset_sharing.md) on post dataset and models.
