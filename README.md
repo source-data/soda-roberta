@@ -78,7 +78,7 @@ Push to dockerhub:
 
 # Training
 
-See the `./training_protocol_TOKCL.ipynb` Jupyter notebook or docs/training.md on training the models.
+See the (`./training_protocol_TOKCL.ipynb`)[./training_protocol_TOKCL.ipynb] Jupyter notebook or `./docs/training.md` on training the models.
 
 To start the notebook
 
