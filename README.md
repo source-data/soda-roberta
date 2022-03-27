@@ -53,7 +53,7 @@ The first time the image is run, the models and tokenizers will be downloaded au
 
 SmarTag can be included in separate projects via its Docker image:
 
-    FROM tlemberger/smtag:latest
+    FROM tlemberger/smarttag:latest
     # rest of the project's Dockerfile
 
 The tagger can be importer in python:
@@ -69,12 +69,12 @@ Or via the command line:
 
 To build a new image for smarttag for dockerhub user `anotheruser`:
 
-    docker build -t anotheruser/smtag:tagname -f src/predict/Dockerfile src
+    docker build -t anotheruser/smarttag:tagname -f DockerfileSmartTag  smtag
 
 Push to dockerhub:
 
     docker login --username=anotheruser
-    docker push anotheruser/smtag:tagname 
+    docker push anotheruser/smarttag:tagname 
 
 # Training
 
