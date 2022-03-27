@@ -78,8 +78,15 @@ Push to dockerhub:
 
 # Training
 
-See doc on training the models.
+See the `./training_protocol_TOKCL.ipynb` Jupyter notebook or docs/training.md on training the models.
+
+To start the notebook
+
+    tmux  # optional but practical
+    docker-compose up -d
+    docker-compose exec nlp bash
+    jupyter notebook list  # -> Currently running servers: http://0.0.0.0:8888/?token=<tokenid>
 
 # Posting dataset and models
 
-See doc on post dataset and models.
+See `./docs/dataset_sharing.md` on post dataset and models.
