@@ -290,10 +290,10 @@ class SmartTagger(Tagger):
     def __init__(
         self,
         tokenizer_source: str = "roberta-base",
-        panelizer_source: str = "EMBO/sd-panels",
+        panelizer_source: str = "EMBO/sd-panelization",
         ner_source: str = "EMBO/sd-ner",
         geneprod_roles_source: str = "EMBO/sd-geneprod-roles",
-        small_mol_roles_source: str = "EMBO/sd-small-mol-roles"
+        small_mol_roles_source: str = "EMBO/sd-smallmol-roles"
 
     ):
         super().__init__(
