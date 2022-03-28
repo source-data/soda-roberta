@@ -89,4 +89,4 @@ To start the notebook
 
 # Posting dataset and models
 
-See [`./docs/dataset_sharing.md`](./docs/dataset_sharing.md) on post dataset and models.
+See [`./docs/dataset_sharing.md`](./docs/dataset_sharing.md) on posting dataset and models.

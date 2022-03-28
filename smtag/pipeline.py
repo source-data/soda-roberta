@@ -1,4 +1,3 @@
-import pdb
 from transformers import (
     RobertaForTokenClassification, RobertaTokenizerFast
 )
