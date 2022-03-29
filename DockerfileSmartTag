@@ -1,21 +1,28 @@
-FROM python:3.7-slim-buster
+FROM python:3.7-slim
+ARG TARGETPLATFORM
 
 WORKDIR /app
 
 RUN apt-get update
 RUN pip install --upgrade pip
-RUN pip install torch==1.10
-RUN pip install tensorflow==2.4.0
-RUN pip install transformers==4.15.0
-RUN pip install python-dotenv==0.15.0
+COPY ./requirements ./requirements
+
+# Install a rust compiler, which is required to build the tokenizers package from source.
+# tokenizers is a dependency of transformers, which we're installing below.
+RUN apt-get install curl build-essential -y
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install -r ./requirements/base.txt
+RUN pip install -r ./requirements/${TARGETPLATFORM}.txt
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*1
 
 RUN mkdir /app/smtag
-COPY ./pipeline.py /app/smtag/pipeline.py
-COPY ./xml2labels.py /app/smtag/xml2labels.py
-COPY ./cli/inference/tag.py /app/smtag/cli/inference/tag.py
-COPY ./__init__.py /app/smtag/__init__.py
-COPY ./cli/__init__.py /app/smtag/cli/__init__.py
-COPY ./cli/inference/__init__.py /app/smtag/cli/inference/__init__.py
+COPY ./smtag/pipeline.py /app/smtag/pipeline.py
+COPY ./smtag/xml2labels.py /app/smtag/xml2labels.py
+COPY ./smtag/cli/inference/tag.py /app/smtag/cli/inference/tag.py
+COPY ./smtag/__init__.py /app/smtag/__init__.py
+COPY ./smtag/cli/__init__.py /app/smtag/cli/__init__.py
+COPY ./smtag/cli/inference/__init__.py /app/smtag/cli/inference/__init__.py
