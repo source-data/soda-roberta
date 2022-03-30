@@ -69,7 +69,7 @@ Or via the command line:
 
 To build a new image for smarttag for dockerhub user `anotheruser`:
 
-    docker buildx build --platform "linux/amd64" -t anotheruser/smarttag:latest -f DockerfileSmartTag .
+    docker buildx build --platform "linux/amd64" -t anotheruser/smarttag:latest -f DockerfileSmartTag smtag
 
 Supported platforms are "linux/amd64" and "linux/arm64".
 
