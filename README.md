@@ -76,9 +76,23 @@ Push to dockerhub:
     docker login --username=anotheruser
     docker push anotheruser/smarttag:tagname 
 
+# Quick overview
+
+In a nutshell the following modules are involved in training and inference:
+
+- `config` specifies application-wide preferences such as the type of model and tokenizer, exmaple lengths, etc...
+- the sourcedata datasets is downloaded with `smartnode`
+- examples are parsed from the xml with `extract`
+- `dataprep` tokenizes examples and encodes (`encoder`) xml elements as labels with `xml2labels` maps
+- `trainer` uses `loader` to load the dataset in the form expected by transformers and uses `datacollator` to generate batches and masks according to the task selected for training the model
+- `tb_callback` customizes display of training and validation losses during traiing and `metrics` is run on the test set at the end of the training 
+- `pipeline` integrates all the models in a single inference pipeline
+
+
 # Training
 
 See the [`./training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) Jupyter notebook or [`./docs/training.md`](/docs/training.md) on training the models.
+
 
 To start the notebook
 
