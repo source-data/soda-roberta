@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Union
 from random import random
 import celery
 from tqdm import tqdm
@@ -12,7 +12,7 @@ from .config import config
 
 # Celery tasks
 @app.task
-def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bool, remove_tail: bool, min_length: int = config.min_char_length) -> Dict:
+def examples_from_file_task(filepath: str, xpath: Union[str, List[str]], punkt: bool, keep_xml: bool, remove_tail: bool, min_length: int = config.min_char_length) -> Dict:
     """Generates text or xml examples from xml documents. 
     Examples to be extracted are found using an XPath expression.
     THe resulting text can be segmented in sentences if desired. 
@@ -20,15 +20,24 @@ def examples_from_file_task(filepath: str, xpath: str, punkt: bool, keep_xml: bo
 
     Args:
         filepath (str): the path to the source file.
-        xpath (str): the XPath expression to identify the example(s) in the xml file.
+        xpath (Union[str, List[str]]): the XPath expression to identify the example(s) in the xml file.
         punkt (bool): whether to split the text into individual sentences.
         keep_xml (bool): whether to keep the xml of the element, otherwise the inner text is extracted.
         remove_tail (bool): set this to False if the text after the element should be included.
     """
     examples = []
-    elements = _parse_xml_file(filepath, xpath, remove_tail)
-    text = _extract_text_from_elements(elements, punkt, keep_xml, min_length=min_length)
-    examples = _cleanup(text)
+    if isinstance(xpath, str):
+        elements = _parse_xml_file(filepath, xpath, remove_tail)
+        text = _extract_text_from_elements(elements, punkt, keep_xml, min_length=min_length)
+        examples = _cleanup(text)
+    elif isinstance(xpath, list):
+        if len(xpath) != 2:
+            raise ValueError(f"xpath pair has to have exactly 2 elements (len is {len(xpath_pair)}")
+        for xp in xpath:
+            elements = _parse_xml_file(filepath, xp, remove_tail)
+            element = elements[0]  # take only the first match as element of the pair
+            text = _extract_text_from_elements([element], punkt, keep_xml, min_length=min_length)
+            examples.append(_cleanup(text))
     return examples
 
 
@@ -123,7 +132,7 @@ class ExtractorXML:
         corpus: str,
         destination_dir: str = '',
         sentence_level: bool = False,
-        xpath: str = ".//abstract",
+        xpath: Union[str, List[str]] = ".//abstract",
         keep_xml: bool = False,
         remove_tail: bool = True,
         inclusion_probability: float = 1.0,
@@ -182,7 +191,7 @@ class ExtractorXML:
         self,
         source_dir_path: Path,  # many files in the source dir
         dest_file_path: Path,  # one file as output with one line per example
-        selector: str,
+        xpath: Union[str, List[str]],
         sentence_level: bool = False,
         keep_xml: bool = False,
         remove_tail: bool = True,
@@ -197,7 +206,7 @@ class ExtractorXML:
         for start in tqdm(range(0, N, batch_size)):
             end = min(start + batch_size, N)
             task_list = [
-                examples_from_file_task.s(str(filepath), selector, sentence_level, keep_xml, remove_tail, min_length)
+                examples_from_file_task.s(str(filepath), xpath, sentence_level, keep_xml, remove_tail, min_length)
                 for filepath in filepaths[start:end]
             ]
             job = celery.group(task_list)
