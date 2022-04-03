@@ -1,5 +1,4 @@
 from pathlib import Path
-import pdb
 from typing import List, Tuple, Dict
 import json
 from lxml.etree import fromstring, Element

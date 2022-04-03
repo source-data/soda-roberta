@@ -2,7 +2,6 @@
 Application-wide preferences.
 """
 from dataclasses import dataclass, field, InitVar
-from pydantic import NoneIsNotAllowedError
 from transformers import (
     AutoTokenizer,
     BartTokenizerFast,
