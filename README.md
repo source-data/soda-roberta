@@ -91,9 +91,10 @@ In a nutshell the following modules are involved in training and inference:
 Language modeling and token classification have their speclized training (`train_lm` vs `train_tokcl`) and loading (`loader_lm` vs `loader_tokcl`) modules.
 
 Language modeling uses a task we call 'targeted masked language modeling', whereby specific part-of-speech tokens are masked probabilitically. The current configurations allow the following masking:
-    - DET: determinant
-    - VERBS: verbs
-    - SMALL: any determinants, conjunctions, prepositions or pronouns
+
+- DET: determinant
+- VERBS: verbs
+- SMALL: any determinants, conjunctions, prepositions or pronouns
 
 
 # Training
