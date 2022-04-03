@@ -84,9 +84,16 @@ In a nutshell the following modules are involved in training and inference:
 - the sourcedata datasets is downloaded with `smartnode`
 - examples are parsed from the xml with `extract`
 - `dataprep` tokenizes examples and encodes (`encoder`) xml elements as labels with `xml2labels` maps
-- `trainer` uses `loader` to load the dataset in the form expected by transformers and uses `datacollator` to generate batches and masks according to the task selected for training the model
+- `train` uses `loader` to load the dataset in the form expected by transformers and uses `datacollator` to generate batches and masks according to the task selected for training the model
 - `tb_callback` customizes display of training and validation losses during traiing and `metrics` is run on the test set at the end of the training 
 - `pipeline` integrates all the models in a single inference pipeline
+
+Language modeling and token classification have their speclized training (`train_lm` vs `train_tokcl`) and loading (`loader_lm` vs `loader_tokcl`) modules.
+
+Language modeling uses a task we call 'targeted masked language modeling', whereby specific part-of-speech tokens are masked probabilitically. The current configurations allow the following masking:
+    - DET: determinant
+    - VERBS: verbs
+    - SMALL: any determinants, conjunctions, prepositions or pronouns
 
 
 # Training
