@@ -11,23 +11,23 @@ RoBERTa transformer is a BERT derivative: https://huggingface.co/transformers/mo
 
 SODA-RoBERTa uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
 
-The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends. 
+The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends.
 
-Tagging biological entities and classifying their role as measured vs controlled variables (i.e. target of controoled experimental interventions) allows to  derive a knowledge graph representing causal scientific hypotheses that are tested in specific experiments.
+Tagging biological entities and classifying their role as measured vs controlled variables (i.e. target of controlled experimental interventions) allows to  derive a knowledge graph representing causal scientific hypotheses that are tested in specific experiments.
 
-SmartTag uses a 3-step pipeline: 
+SmartTag uses a 3-step pipeline:
 
 1. Segmentation of the text of figure legends into sub-panel legends.
 2. Named Entity Recognition of bioentities and experimental methods.
 3. Semantic tagging of the experimental role of gene products and small molecules as measured variable or controlled variable.
 
-Accordingly, a specialized language model for scientific biological language is fine tuned into 4 models for the respective tasks: PANELIZATION, NER, GENEPROD_ROLES and SMALL_MOL_ROLES. These models are based on the find-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
+Accordingly, a specialized language model for scientific biological language is fine tuned into 4 models for the respective tasks: PANELIZATION, NER, GENEPROD_ROLES and SMALL_MOL_ROLES. These models are based on the fine-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
 
-The datasetse and trained models are available at https://huggingface.co/EMBO.
+The datasets and trained models are available at https://huggingface.co/EMBO.
 
-We provide in `docs/` instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 4 specific token classification models using the SourceData datset. Training can be done useing the command line using the modules in `smtag.cli` or in jupyter notebooks (see [`training_protocol_LM.ipynb`](./training_protocol_LM.ipynb) and [`training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) notebook).
+We provide in `docs/` instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 4 specific token classification models using the SourceData datset. Training can be done using the command line available at the `smtag.cli` module or in jupyter notebooks (see [`training_protocol_LM.ipynb`](./training_protocol_LM.ipynb) and [`training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) notebook).
 
-The training raw data is in the form of XML files. SODA-ROBERTA provides tools to convert XML into tagged datasets that can be used for training transormers models. At inference stage, the tagged text is serialized back into json.
+The training raw data is in the form of XML files. SODA-ROBERTA provides tools to convert XML into tagged datasets that can be used for training transformer models. At inference stage, the tagged text is serialized back into json.
 
 
 # Quick access to the pretrained SmartTag pipeline
@@ -38,7 +38,7 @@ Setup a Python virtual environment:
     source .venv/bin/activate
     pip install --upgrade pip
 
-Install `docker` (https://docs.docker.com/engine/install/). 
+Install `docker` (https://docs.docker.com/engine/install/).
 Install`docker-compose` (https://docs.docker.com/compose/install/).
 
     pip install docker-compose==1.28.5
@@ -74,7 +74,7 @@ To build a new image for smarttag for dockerhub user `anotheruser`:
 Push to dockerhub:
 
     docker login --username=anotheruser
-    docker push anotheruser/smarttag:tagname 
+    docker push anotheruser/smarttag:tagname
 
 # Quick overview
 
