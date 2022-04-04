@@ -15,7 +15,7 @@ from transformers import (
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from ..models.vae import (
+from ..models.experimental import (
     BecauseTokenClassification,
     BecauseConfigForTokenClassification,
 )

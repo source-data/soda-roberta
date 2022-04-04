@@ -26,7 +26,10 @@ from transformers import (
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from ..models.vae import BecauseForMaskedLM, BecauseConfig
+from ..models.vae import (
+    VAEForMaskedLM, VAEConfig,
+    TwinVAEForMaskedLM, TwinVAEConfig
+)
 from ..data_collator import DataCollatorForTargetedMasking
 
 from ..trainer import MyTrainer
@@ -90,11 +93,11 @@ def train(
                 tokenizer=tokenizer,
                 mlm_probability=1.0
             )
-        elif config.model_type == "GraphRepresentation":
+        elif config.model_type in ["VAE", "Twin"]:
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
                 mlm_probability=0.5,
-                pad_to_multiple_of=config.max_length  
+                pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
             )
         else:
             raise ValueError(f"unknown config.model_type: {model_type}")
@@ -104,7 +107,7 @@ def train(
                 tokenizer=tokenizer,
                 mlm=True
             )
-        elif config.model_type == "GraphRepresentation":
+        elif config.model_type in ["VAE", "Twin"]:
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
                 mlm=True,
@@ -135,36 +138,47 @@ def train(
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
-    elif model_type == "GraphRepresentation":
+    elif model_type == "VAE":
         if config.from_pretrained:
             seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
-            model_config = BecauseConfig(
+            model_config = VAEConfig(
                 freeze_pretrained='encoder',
                 hidden_features=128,
-                num_nodes=50,
-                num_edge_features=6,
-                num_node_features=100,
-                sample_num_entities=20, #5,
-                sample_num_interactions=20, #10,
-                sample_num_interaction_types=3,
                 sampling_iterations=1000,
-                alpha=1E6,
-                beta=1E7,
                 seq_length=config.max_length,
                 residuals=False,
             )
-            model = BecauseForMaskedLM(
+            model = VAEForMaskedLM(
                 pretrained=seq2seq,
                 config=model_config
             )
         else:
-            raise ValueError("Training GraphRepresentation from scratch is not implemented.")
+            raise ValueError("Training VAE from scratch is not implemented.")
+    elif model_type == "Twin":
+        if config.from_pretrained:
+            seq2seq = []
+            seq2seq[1] = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
+            seq2seq[2] = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
+            model_config = TwinVAEConfig(
+                freeze_pretrained='encoder',
+                hidden_features=128,
+                sampling_iterations=1000,
+                seq_length=config.max_length,
+                residuals=False,
+                llamdda=1E-3
+            )
+            model = TwinVAEForMaskedLM(
+                pretrained=seq2seq,
+                config=model_config
+            )
+        else:
+            raise ValueError("Training TwinVAE from scratch is not implemented.")
 
     training_args.remove_unused_columns = False  # we need pos_mask and special_tokens_mask in collator
 
     print("\nTraining arguments:")
     print(training_args)
-    if model_type == "GraphRepresentation":
+    if model_type == "VAE":
         trainer = MyTrainer(
             model=model,
             args=training_args,

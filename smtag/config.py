@@ -21,7 +21,7 @@ class Config:
     split_ratio: InitVar[Dict] = None
     celery_batch_size: int = 1000
     from_pretrained: str = "roberta-base"  # "facebook/bart-base" # leave empty if training a language model from scratch
-    model_type: str = "Autoencoder"  # "GraphRepresentation" #
+    model_type: str = "Autoencoder"  # "VAE" #  "Twin"
     nlp: English = field(default=spacy.load("en_core_web_sm"))
     tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
     split_ratio: InitVar[Dict[str, float]] = None

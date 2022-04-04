@@ -1,5 +1,4 @@
 from itertools import product
-import pdb
 from random import sample, gauss
 from dataclasses import dataclass
 from typing import List, Dict
@@ -20,7 +19,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
-def compute_kernel(x, y):
+def compute_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     x_size = x.size(0)
     y_size = y.size(0)
     dim = x.size(1)
@@ -37,7 +36,7 @@ def compute_kernel(x, y):
     return torch.exp(-kernel_input)  # (x_size, y_size)
 
 
-def mmd(x, y):
+def mmd(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     if torch.cuda.is_available():
         x = x.cuda()
         y = y.cuda()
@@ -52,51 +51,11 @@ def mmd(x, y):
     return mmd
 
 
-def sample_node_subset(max_num_nodes: int, avg_num_nodes: float = 3.0, sigma: float = 0) -> List[int]:
-    num_nodes = min(max_num_nodes, round(gauss(avg_num_nodes, sigma)))
-    node_subset = sample(list(range(max_num_nodes)), k=num_nodes)
-    return node_subset
+def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
+    return torch.randn(200, z_dim)
 
 
-def sample_edges(max_num_nodes, node_subset, avg_num_interactions, sigma: float = 0):
-    all_pairwise_interactions = list(product(node_subset, node_subset))
-    adj_matrix = torch.zeros(max_num_nodes, max_num_nodes)
-    max_num_interactions = len(node_subset) ** 2
-    num_interactions = min(round(gauss(mu=avg_num_interactions, sigma=sigma)), max_num_interactions)
-    try:
-        pairwise_interactions = sample(all_pairwise_interactions, k=num_interactions)
-    except ValueError as e:
-        print(e)
-        print(f"k={num_interactions}, entity_subset={node_subset}")
-        return
-    adj_matrix[list(zip(*pairwise_interactions))] = 1.0
-    return adj_matrix
-
-
-def sample_node_labels(max_num_nodes, node_subset, node_features=10):
-    v = torch.zeros(max_num_nodes, node_features)
-    p = torch.full_like(v[node_subset], 0.5)
-    sample = torch.bernoulli(p)
-    v[node_subset] = sample
-    return v
-
-
-def sample_graph(max_num_nodes, num_entities, num_interactions, num_node_features, iterations=10):
-    # TODO: plot distribution of mmd distance bewteen random pairs
-    edges = []
-    node_embeddings = []
-    for i in range(iterations):
-        node_subset = sample_node_subset(max_num_nodes, avg_num_nodes=num_entities)
-        adj_matrix = sample_edges(max_num_nodes, node_subset, num_interactions)
-        edges.append(adj_matrix.unsqueeze(0))
-        labeled_nodes = sample_node_labels(max_num_nodes, node_subset, num_node_features)
-        node_embeddings.append(labeled_nodes.unsqueeze(0))
-    edges = torch.cat(edges, 0)
-    node_embeddings = torch.cat(node_embeddings, 0)
-    return edges, node_embeddings
-
-
-class BecauseConfig(BartConfig):
+class VAEConfig(BartConfig):
 
     # inherited from BartConfig
     # vocab_size=50265,
@@ -126,44 +85,28 @@ class BecauseConfig(BartConfig):
     # decoder_start_token_id=2,
     # forced_eos_token_id=2,
 
-    keys_to_ignore_at_inference = ['adjascency', 'node_embeddings', 'supp_data']
+    keys_to_ignore_at_inference = ['supp_data']
 
     def __init__(
         self,
         freeze_pretrained: str = 'both',
         hidden_features: int = 100,
-        num_nodes: int = 10,
-        num_node_features: int = 10,
-        num_edge_features:int = 10,
-        sample_num_entities: int = 10,
-        sample_num_interactions: int = 10,
-        sample_num_interaction_types = 3,
+        z_dim: int = 128,
         sampling_iterations: int = 100,
         seq_length: int = 512,
-        alpha: float = 1E05,
-        beta: float = 1E05,
-        gamma: float = 1E05,
         residuals: bool = True,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.num_nodes = num_nodes
-        self.num_node_features = num_node_features
-        self.num_edge_features = num_edge_features
         self.freeze_pretrained = freeze_pretrained
         self.hidden_features = hidden_features
-        self.sample_num_entities = sample_num_entities
-        self.sample_num_interactions = sample_num_interactions
-        self.sample_num_interaction_types = sample_num_interaction_types
+        self.z_dim = z_dim
         self.sampling_iterations = sampling_iterations
         self.seq_length = seq_length
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
         self.residuals = residuals
 
 
-class BecauseConfigForTokenClassification(BecauseConfig):
+class VAEConfigForTokenClassification(VAEConfig):
 
     def __init__(self, classifier_dropout: float = None, **kwargs):
         super().__init__(**kwargs)
@@ -171,15 +114,32 @@ class BecauseConfigForTokenClassification(BecauseConfig):
 
 
 @dataclass
-class BecauseOutput(MaskedLMOutput):
+class TwinVAEConfig(VAEConfigForTokenClassification):
+
+    def __init__(self, llamdda: float = None, **kwargs):
+        super().__init__(**kwargs)
+        self.llambda = lambda  # not a typo; weight on off diagnonal temrs of twin loss
+
+
+@dataclass
+class VAEOutput(MaskedLMOutput):
     supp_data: Dict[str, torch.Tensor] = None
-    adjascency: torch.Tensor = None
-    node_embeddings: torch.Tensor = None
+    z: torch.Tensor = None
 
 
-class Because(nn.Module):
+@dataclass
+class TwinOutput(MaskedLMOutput):
+    supp_data: Dict[str, torch.Tensor] = None
+    outputs: List[VAEOutput] = None
 
-    def __init__(self, pretrained: BartForConditionalGeneration, config: BecauseConfig):
+
+class VAE(nn.Module):
+
+    def __init__(
+        self,
+        pretrained: BartForConditionalGeneration,
+        config: VAEConfig
+    ):
         super().__init__()
         self.config = config
         # from the pretrained model
@@ -199,7 +159,7 @@ class Because(nn.Module):
         elif self.freeze_pretrained == 'decoder':
             for param in self.decoder.parameters():
                 param.requires_grad_(False)
-        elif self.freeze_pretrained is None or self.freeze_pretrained=='':
+        elif self.freeze_pretrained is None or self.freeze_pretrained == '':
             pass
         else:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
@@ -211,40 +171,20 @@ class Because(nn.Module):
         self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
         self.residuals = self.config.residuals
         # latent vars
-        self.num_nodes = self.config.num_nodes
-        self.num_node_features = self.config.num_node_features
-        self.num_edge_features = self.config.num_edge_features
-        self.sample_num_entities = self.config.sample_num_entities
-        self.sample_num_interactions = self.config.sample_num_interactions
-        self.sample_num_interaction_types = self.config.sample_num_interaction_types
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
-        self.z_1_dim = (self.num_nodes ** 2)  # * self.num_edge_features
-        self.z_2_dim = self.num_nodes * self.num_node_features
-        self.alpha = self.config.alpha
-        self.beta = self.config.beta
-        self.gamma = self.config.gamma
+        self.z_dim = self.config.z_dim
         # own layers
         self.act_fct = nn.GELU()
         self.vae_dropout = nn.Dropout(p=config.dropout)
-
         self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
-
-        self.fc_z_1_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_1_dim)
-        self.norm_z_1 = nn.LayerNorm(self.z_1_dim, elementwise_affine=False)
-        self.fc_z_1_2 = nn.Linear(self.z_1_dim, self.seq_length * self.hidden_features)
-        self.norm_decompress_1 = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
-
-        # self.fc_z_2_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_2_dim)
-        # self.norm_z_2 = nn.LayerNorm(self.z_2_dim, elementwise_affine=False)
-        # self.fc_z_2_2 = nn.Linear(self.z_2_dim, self.seq_length * self.hidden_features)
-        # self.norm_decompress_2 = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
-
-        # self.fc_decompress = nn.Linear(2 * self.hidden_features, self.d_decoder)
+        self.fc_z = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+        self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
+        self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
         self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
 
-    def forward(self, input_ids=None, labels=None, **kwargs) -> BecauseOutput:
+    def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
         # encoder
         encoder_outputs: BaseModelOutput = self.encoder(input_ids=input_ids, **kwargs)
         x = encoder_outputs[0]  # B x L x H_enc
@@ -260,44 +200,17 @@ class Because(nn.Module):
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
         # first latent var
         y = self.vae_dropout(y)
-        z_1 = self.fc_z_1_1(y)  # -> B x Z_1
-        z_1 = self.norm_z_1(z_1)
-        z_1 = self.act_fct(z_1)
-        # second latent var
-        y = self.vae_dropout(y)
-        # z_2 = self.fc_z_2_1(y.clone())  # -> B x Z_2  (example: 32 x (20*10)
-        # z_2 = self.norm_z_2(z_2)
-        # z_2 = self.act_fct(z_2)
-
-
-        ###########
-        z_2 = z_1 #
-        ###########
-
-
+        z = self.fc_z_1_1(y)  # -> B x Z_1
+        z = self.norm_z_1(z)
+        z = self.act_fct(z)
         # decompress
-        y = self.vae_dropout(y)
-        y_1 = self.fc_z_1_2(z_1)  # -> B x (L * H)
-        y_1 = self.norm_decompress_1(y_1)
-        y_1 = self.act_fct(y_1)
-
-        # y_2 = self.fc_z_2_2(z_2)  # -> B x (L * H)
-        # y_2 = self.norm_decompress_2(y_2)
-        # y_2 = self.act_fct(y_2)
-        # combine
-        y_1 = y_1.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
-        # y_2 = y_2.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
-        # y = torch.cat([y_1, y_2], -1)  # -> B x L x 2*H
-
-        #########
-        y = y_1 #
-        #########
-
-        # decompress
+        y = self.fc_z_1_2(z)  # -> B x (L * H)
+        y = self.norm_decompress(y)
+        y = self.act_fct(y)
+        y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y = self.fc_decompress(y)  # -> B x L x H_dec
         if self.residuals:
             y = x + y  # resnet style
-
         # decoder
         decoder_input_ids = shift_tokens_right(
             input_ids,
@@ -312,74 +225,29 @@ class Because(nn.Module):
 
         logits = decoder_outputs[0]
 
-        loss, supp_data = self.compute_loss_on_latent_var(z_1, z_2)
+        loss = self.compute_loss_on_latent_var(z)
 
-        return BecauseOutput(
+        return VAEOutput(
             loss=loss,
             logits=logits,
-            supp_data=supp_data,
-            adjascency=z_1.view(-1, self.num_nodes, self.num_nodes),
-            node_embeddings=z_2.view(-1, self.num_nodes, self.num_node_features),
+            z=z
         )
 
-    def compute_loss_on_latent_var(self, z_1, z_2):
-        batch_size = z_1.size(0)
+    def compute_loss_on_latent_var(self, z) -> torch.Tensor:
         with torch.no_grad():
-            edges, node_embeddings = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_node_features, self.sampling_iterations)
-        adj_matrix_distro_loss = self.alpha * mmd(edges.view(self.sampling_iterations, self.num_nodes ** 2), z_1)
-        # adj_matrix_distro_loss = torch.zeros(batch_size) # 
-        # adj_matrix_distro_loss.requires_grad = True
-        # adj_matrix_distro_loss = adj_matrix_distro_loss.cuda()
-        ############
-        node_label_distro_loss = adj_matrix_distro_loss  # self.beta * mmd(node_embeddings.view(self.sampling_iterations, self.num_nodes * self.num_node_features), z_2)
-        ############
-
-        L_adj_sparse = z_1.abs().mean()
-        L_node_sparse = z_2.abs().mean()
-        # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
-        # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
-        # naive (me...):
-        d = self.num_nodes  # cosmetic
-        W = z_1.view(batch_size, d, d)
-        I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
-        if torch.cuda.is_available():
-            W = W.cuda()
-            I = I.cuda()
-        mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
-        trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
-        L_dag = self.gamma * (trace - d).mean()
-        #
-        # Zheng et al 2018 DAG with NOTEARS
-        # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
-        # Section 3.2 The general case: Weighted adjacency matrices
-        # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
-        # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
-        # L_dag = h.mean()
-        # in NOTEARS github code:
-        # A different formulation, slightly faster at the cost odf numerical stability
-        # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
-        # M = np.eye(d) + W * W / d
-        # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
-        # h = (E.T * M).sum() - d
-        loss = adj_matrix_distro_loss + L_dag #+ node_label_distro_loss + L_adj_sparse + L_node_sparse
-        supp_data = {
-            "adj_distro_loss": adj_matrix_distro_loss,
-            "nodes_distro_loss": node_label_distro_loss,
-            "L_adj_sparse": L_adj_sparse,
-            "L_dag": L_dag,
-            "L_node_sparse": L_node_sparse,
-        }
-        return loss, supp_data
+            z_samples = sample_z(self.z_dim, self.sampling_iterations)
+            z_loss = mmd(z_samples, z)
+        return z_loss
 
 
-class BecauseForMaskedLM(Because):
+class VAEForMaskedLM(VAE):
 
-    def __init__(self, pretrained, config: BecauseConfig, **kwargs):
+    def __init__(self, pretrained, config: VAEConfig, **kwargs):
         super().__init__(pretrained, config)
-        self.model = Because(pretrained, config)
+        self.model = VAE(pretrained, config)
         self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.model.shared.num_embeddings, bias=False)
 
-    def forward(self, input_ids, labels,  **kwargs) -> BecauseOutput:
+    def forward(self, input_ids, labels,  **kwargs) -> VAEOutput:
         outputs = self.model(input_ids, labels, **kwargs)
         # outputs = super().forward(input_ids, labels, **kwargs)
 
@@ -396,47 +264,55 @@ class BecauseForMaskedLM(Because):
         else:
             loss = None
             supp_data['loss_lm'] = loss_lm = None
-        return BecauseOutput(
+        return VAEOutput(
             loss=loss,
             logits=logits,
-            supp_data=supp_data,
-            adjascency=outputs.adjascency,
-            node_embeddings=outputs.node_embeddings
+            supp_data=supp_data
         )
 
 
-class BecauseTokenClassification(Because):
+class TwinVAEForMaskedLM(nn.Module):
 
-    def __init__(self, pretrained, config: BecauseConfigForTokenClassification):
-        super().__init__(pretrained, config)
-        self.num_labels = config.num_labels
-        self.model = Because(pretrained, config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(self.d_decoder, config.num_labels)
+    def __init__(
+        self,
+        models: List[VAEForMaskedLM],
+        config: TwinVAEConfig
+    ):
+        self.models = models
+        self.config = config
 
-    def forward(self, input_ids, labels, **kwargs) -> BecauseOutput:
-        outputs = self.model(input_ids, labels, **kwargs)
-        supp_data = outputs.supp_data
-        sequence_output = outputs.logits
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-         # calculate composite loss
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss_tokcl = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            loss = outputs.loss + loss_tokcl
-            supp_data['loss_tokcl'] = loss_tokcl
-        else:
-            loss = None
-            supp_data['loss_tokcl'] = None
+    def forward(
+        self,
+        input_ids_list: List[torch.Tensor],
+        labels_list: List[List],
+        **kwargs
+    ):
+        outputs = []
+        for i, model in enumerate(self.models):
+            outputs[i] = model(input_ids_list[i], labels_list[i], **kwargs)
 
-        return BecauseOutput(
+        loss_twin_z = self.compute_loss_on_twin_latent_vars([out.z for out in outputs])
+        losses = [out.loss for out in outputs]
+        loss = losses.sum() + loss_twin_z
+
+        return TwinOutput(
             loss=loss,
-            logits=logits,
-            supp_data=supp_data,
-            adjascency=outputs.adjascency,
-            node_embeddings=outputs.node_embeddings
+            outputs=outputs,
+            supp_data={
+                "loss_twin_z": loss_twin_z
+            }
         )
+
+    def compute_loss_on_twin_latent_vars(self, z_list: List[torch.Tensor]) -> torch.Tensor:
+        assert len(z_list) == 2  # for the moment, this works only on twin pairs, not for higher order
+        batch_size = z_1[0]
+        assert batch_size == z_2[0]
+        z_1 = z_list[0]
+        z_2 = z_list[1]
+        c = (z_1.T @ z_2) / batch_size
+        diag = c.diagonal()
+        off_diag = c - torch.diag_embed(diag)
+        loss_diag = (diag - 1) ** 2
+        loss_off_diag = off_diag ** 2
+        loss = loss_diag.sum() + self.config.llambda * loss_off_diag.sum()
+        return loss
