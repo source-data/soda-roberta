@@ -12,7 +12,13 @@ from .config import config
 
 # Celery tasks
 @app.task
-def examples_from_file_task(filepath: str, xpath: Union[str, List[str]], punkt: bool, keep_xml: bool, remove_tail: bool, min_length: int = config.min_char_length) -> Dict:
+def examples_from_file_task(
+    filepath: str,
+    xpath: Union[str, List[str]],
+    punkt: bool, keep_xml: bool,
+    remove_tail: bool,
+    min_length: int = config.min_char_length
+) -> List[str]:
     """Generates text or xml examples from xml documents. 
     Examples to be extracted are found using an XPath expression.
     THe resulting text can be segmented in sentences if desired. 
@@ -32,12 +38,21 @@ def examples_from_file_task(filepath: str, xpath: Union[str, List[str]], punkt: 
         examples = _cleanup(text)
     elif isinstance(xpath, list):
         if len(xpath) != 2:
-            raise ValueError(f"xpath pair has to have exactly 2 elements (len is {len(xpath_pair)}")
+            raise ValueError(f"xpath pair has to have exactly 2 elements (len is {len(xpath)}")
         for xp in xpath:
             elements = _parse_xml_file(filepath, xp, remove_tail)
-            element = elements[0]  # take only the first match as element of the pair
+            if elements:
+                element = elements[0]  # take only the first match as element of the pair
+            else:
+                # if one of the twin examples cannot be found, skip it altogether rather than having incomplete twin examples
+                return []
             text = _extract_text_from_elements([element], punkt, keep_xml, min_length=min_length)
-            examples.append(_cleanup(text))
+            text = _cleanup(text)
+            if text:
+                text = text[0]  # _cleanup returns a list!
+                examples.append(text)
+            else:
+                return []
     return examples
 
 
@@ -212,6 +227,8 @@ class ExtractorXML:
             job = celery.group(task_list)
             results = job.apply_async()
             results = results.get()
+            # remove empty sublists of examples
+            results = [r for r in results if r]
             # save to disk as we go
             saving_tasks = []
             for new_examples in results:
