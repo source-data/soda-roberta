@@ -30,10 +30,14 @@ from ..models.vae import (
     VAEForMaskedLM, VAEConfig,
     TwinVAEForMaskedLM, TwinVAEConfig
 )
-from ..data_collator import DataCollatorForTargetedMasking
+from ..data_collator import (
+    DataCollatorForTargetedMasking,
+    MyDataCollatorForSeq2Seq,
+    MyDataCollatorForTwinSeq2Seq
+)
 
 from ..trainer import MyTrainer
-from ..show import ShowExampleLM
+from ..show import ShowExampleLM, ShowExampleTwinLM
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
 
@@ -116,10 +120,21 @@ def train(
         else:
             raise ValueError(f"unknon config.model_type: {model_type}")
     elif data_config_name == "SEQ2SEQ":
-        data_collator = DataCollatorForSeq2Seq(
-            tokenizer=tokenizer,
-            pad_to_multiple_of=config.max_length
-        )
+        if model_type == "Autoencoder":
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=config.max_length
+            )
+        elif model_type == "Twin":
+            data_collator = MyDataCollatorForTwinSeq2Seq(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=config.max_length
+            )
+        elif model_type == "VAE":  # for debuging, maybe not necessary
+            data_collator = MyDataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=config.max_length
+            )
     else:
         raise NotImplementedError(f"{data_config_name} is not implemented")
 
@@ -156,19 +171,23 @@ def train(
             raise ValueError("Training VAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
-            seq2seq = []
-            seq2seq[1] = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
-            seq2seq[2] = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
-            model_config = TwinVAEConfig(
+            seq2seq_pair = [
+                AutoModelForMaskedLM.from_pretrained(from_pretrained),  # use AutoModel instead? since LM head is provided by VAEforLM; does not matter since we extract encoder and decoder, lm head of pretrained not used
+                AutoModelForMaskedLM.from_pretrained(from_pretrained)
+            ]
+            internal_vae_config = VAEConfig(
                 freeze_pretrained='encoder',
                 hidden_features=128,
                 sampling_iterations=1000,
                 seq_length=config.max_length,
                 residuals=False,
-                llamdda=1E-3
+            )
+            vae_pair = [VAEForMaskedLM(pretrained=seq2seq, config=internal_vae_config) for seq2seq in seq2seq_pair]
+            model_config = TwinVAEConfig(
+                lambd_a=1E-3
             )
             model = TwinVAEForMaskedLM(
-                pretrained=seq2seq,
+                models=vae_pair,
                 config=model_config
             )
         else:
@@ -178,7 +197,13 @@ def train(
 
     print("\nTraining arguments:")
     print(training_args)
-    if model_type == "VAE":
+    if model_type in ["VAE", "Twin"]:
+        if model_type == "VAE":
+            show_callback = ShowExampleLM(tokenizer)  # probably should have ShowExxampleSEQ2SEQ
+        elif model_type == "Twin":
+            show_callback = ShowExampleTwinLM(tokenizer)
+        else:
+            raise ValueError(f"not console dispaly available for {model_type}")
         trainer = MyTrainer(
             model=model,
             args=training_args,
@@ -186,7 +211,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleLM(tokenizer, detailed=True)],
+            callbacks=[show_callback]
         )
     else:
         trainer = Trainer(
@@ -196,7 +221,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleLM(tokenizer, detailed=True)],
+            callbacks=[ShowExampleLM(tokenizer)],
         )
 
     # switch the Tensorboard callback to plot losses on same plot

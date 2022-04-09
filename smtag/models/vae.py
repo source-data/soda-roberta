@@ -1,4 +1,5 @@
 from itertools import product
+import pdb
 from random import sample, gauss
 from dataclasses import dataclass
 from typing import List, Dict
@@ -116,9 +117,9 @@ class VAEConfigForTokenClassification(VAEConfig):
 @dataclass
 class TwinVAEConfig(VAEConfigForTokenClassification):
 
-    def __init__(self, llamdda: float = None, **kwargs):
+    def __init__(self, lambd_a: float = None, **kwargs):
         super().__init__(**kwargs)
-        self.llambda = lambda  # not a typo; weight on off diagnonal temrs of twin loss
+        self.lambd_a = lambd_a  # not a typo; weight on off diagnonal temrs of twin loss
 
 
 @dataclass
@@ -130,7 +131,7 @@ class VAEOutput(MaskedLMOutput):
 @dataclass
 class TwinOutput(MaskedLMOutput):
     supp_data: Dict[str, torch.Tensor] = None
-    outputs: List[VAEOutput] = None
+    # outputs: List[VAEOutput] = None
 
 
 class VAE(nn.Module):
@@ -179,8 +180,9 @@ class VAE(nn.Module):
         self.vae_dropout = nn.Dropout(p=config.dropout)
         self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
-        self.fc_z = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+        self.fc_z_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
         self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
+        self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
         self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
         self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
 
@@ -200,11 +202,11 @@ class VAE(nn.Module):
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
         # first latent var
         y = self.vae_dropout(y)
-        z = self.fc_z_1_1(y)  # -> B x Z_1
-        z = self.norm_z_1(z)
+        z = self.fc_z_1(y)  # -> B x Z_1
+        z = self.norm_z(z)
         z = self.act_fct(z)
         # decompress
-        y = self.fc_z_1_2(z)  # -> B x (L * H)
+        y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
@@ -230,7 +232,8 @@ class VAE(nn.Module):
         return VAEOutput(
             loss=loss,
             logits=logits,
-            z=z
+            z=z,
+            supp_data={}
         )
 
     def compute_loss_on_latent_var(self, z) -> torch.Tensor:
@@ -243,12 +246,12 @@ class VAE(nn.Module):
 class VAEForMaskedLM(VAE):
 
     def __init__(self, pretrained, config: VAEConfig, **kwargs):
-        super().__init__(pretrained, config)
+        super().__init__(pretrained, config, **kwargs)
         self.model = VAE(pretrained, config)
         self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.model.shared.num_embeddings, bias=False)
 
-    def forward(self, input_ids, labels,  **kwargs) -> VAEOutput:
-        outputs = self.model(input_ids, labels, **kwargs)
+    def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
+        outputs = self.model(input_ids, **kwargs)
         # outputs = super().forward(input_ids, labels, **kwargs)
 
         # trainable language model head
@@ -267,6 +270,7 @@ class VAEForMaskedLM(VAE):
         return VAEOutput(
             loss=loss,
             logits=logits,
+            z=outputs.z,
             supp_data=supp_data
         )
 
@@ -276,43 +280,51 @@ class TwinVAEForMaskedLM(nn.Module):
     def __init__(
         self,
         models: List[VAEForMaskedLM],
-        config: TwinVAEConfig
+        config: TwinVAEConfig,
+        **kwargs
     ):
-        self.models = models
+        super().__init__()
+        # TODO: check PyTorch mechanics how to register properly arbitrary list of models
+        self.model_1 = models[0]
+        self.model_2 = models[1]
         self.config = config
 
     def forward(
         self,
-        input_ids_list: List[torch.Tensor],
-        labels_list: List[List],
+        input_ids: List[torch.Tensor] = None,
+        labels: List[torch.Tensor] = None,
+        attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        outputs = []
-        for i, model in enumerate(self.models):
-            outputs[i] = model(input_ids_list[i], labels_list[i], **kwargs)
+        # outputs = [
+        #     model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
+        #     for i, model in enumerate([self.model_1, self.model_2])
+        # ]
+        outputs = [
+            self.model_1(input_ids=input_ids[:, :, 0], labels=labels[:, :, 0], attention_mask=attention_mask[:, :, 0], **kwargs),
+            self.model_2(input_ids=input_ids[:, :, 1], labels=labels[:, :, 1], attention_mask=attention_mask[:, :, 1], **kwargs)
+        ]
 
         loss_twin_z = self.compute_loss_on_twin_latent_vars([out.z for out in outputs])
-        losses = [out.loss for out in outputs]
+        losses = torch.stack([out.loss for out in outputs])
         loss = losses.sum() + loss_twin_z
 
         return TwinOutput(
+            logits=[out.logits for out in outputs],
             loss=loss,
-            outputs=outputs,
             supp_data={
                 "loss_twin_z": loss_twin_z
             }
         )
 
-    def compute_loss_on_twin_latent_vars(self, z_list: List[torch.Tensor]) -> torch.Tensor:
-        assert len(z_list) == 2  # for the moment, this works only on twin pairs, not for higher order
-        batch_size = z_1[0]
-        assert batch_size == z_2[0]
-        z_1 = z_list[0]
-        z_2 = z_list[1]
-        c = (z_1.T @ z_2) / batch_size
+    def compute_loss_on_twin_latent_vars(self, z: List[torch.Tensor]) -> torch.Tensor:
+        assert len(z) == 2  # for the moment, this works only on twin pairs, not for higher order
+        assert len(z[0]) == len(z[1])  # square
+        batch_size = len(z[0])
+        c = (z[0].T @ z[1]) / batch_size
         diag = c.diagonal()
         off_diag = c - torch.diag_embed(diag)
         loss_diag = (diag - 1) ** 2
         loss_off_diag = off_diag ** 2
-        loss = loss_diag.sum() + self.config.llambda * loss_off_diag.sum()
+        loss = loss_diag.sum() + self.config.lambd_a * loss_off_diag.sum()
         return loss

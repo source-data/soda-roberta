@@ -1,6 +1,4 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
-from multiprocessing.sharedctypes import Value
-import pdb
 from typing import NamedTuple
 from datetime import datetime
 from pathlib import Path

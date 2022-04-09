@@ -21,6 +21,7 @@
 from __future__ import absolute_import, division, print_function
 
 import json
+import pdb
 import datasets
 from sklearn.metrics import consensus_score
 
@@ -65,18 +66,42 @@ class BioLang(datasets.GeneratorBasedBuilder):
     def _info(self):
         if self.config.name == "MLM":
             features = datasets.Features({
-                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
-                "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
+                "input_ids": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int32")
+                    )
+                ),
+                "special_tokens_mask": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int8")
+                    )
+                ),
             })
         elif self.config.name in ["DET", "VERB", "SMALL", "NOUN", "NULL"]:
             features = datasets.Features({
-                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
-                "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
+                "input_ids": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int32")
+                    )
+                ),
+                "tag_mask": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int8")
+                    )
+                ),
             })
         elif self.config.name == "SEQ2SEQ":
             features = datasets.Features({
-                "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
-                "labels": datasets.Sequence(feature=datasets.Value("int32"))
+                "input_ids": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int32")
+                    )
+                ),
+                "labels": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int32")
+                    )
+                )
             })
 
         return datasets.DatasetInfo(
@@ -127,7 +152,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
             id_ = 0
             while True:
                 # read pairs of lines
-                rows = [f.readline for i in range(N)]
+                rows = [f.readline() for i in range(N)]
                 if not rows[-1]:
                     break  # EOF
                 consecutive_data = [json.loads(row) for row in rows]
