@@ -50,7 +50,7 @@ class ShowExample(TrainerCallback):
         """
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred = model(inputs_ids=inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
+            pred = model(inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
         self.to_console(inputs, pred_idx)
 
@@ -103,8 +103,9 @@ class ShowExampleLM(ShowExample):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"])
+            pred = model(inputs["input_ids"], attention_mask=inputs["attention_mask"])
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
+        inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
     # def _view_matrix(self, x):
@@ -171,7 +172,7 @@ class ShowExampleTwinLM(ShowExampleLM):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred = model(input_ids=inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
+            pred = model(inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
             # pred.logits is an array with predictions for twin examples
             for i, pred_logits in enumerate(pred['logits']):
                 pred_idx = pred_logits.argmax(-1)[0].cpu()

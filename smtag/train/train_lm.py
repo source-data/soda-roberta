@@ -27,8 +27,8 @@ from transformers import (
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    VAEForMaskedLM, VAEConfig,
-    TwinVAEForMaskedLM, TwinVAEConfig
+    VAEForLM, TwinVAEForLM,
+    VAEConfig, VAEConfigLM, TwinVAEConfig
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -37,7 +37,10 @@ from ..data_collator import (
 )
 
 from ..trainer import MyTrainer
-from ..show import ShowExampleLM, ShowExampleTwinLM
+from ..show import (
+    ShowExampleLM, ShowExampleTwinLM,
+    ShowExampleSEQ2SEQ
+)
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
 
@@ -156,14 +159,16 @@ def train(
     elif model_type == "VAE":
         if config.from_pretrained:
             seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
-            model_config = VAEConfig(
-                freeze_pretrained='encoder',
-                hidden_features=128,
+            model_config = VAEConfigLM(
+                freeze_pretrained=None,  #'encoder',
+                hidden_features=256,
+                z_dim=2048,
+                gamma=1E-4,  # weight of lm loss as compared to z_loss
                 sampling_iterations=1000,
                 seq_length=config.max_length,
                 residuals=False,
             )
-            model = VAEForMaskedLM(
+            model = VAEForLM(
                 pretrained=seq2seq,
                 config=model_config
             )
@@ -175,18 +180,20 @@ def train(
                 AutoModelForMaskedLM.from_pretrained(from_pretrained),  # use AutoModel instead? since LM head is provided by VAEforLM; does not matter since we extract encoder and decoder, lm head of pretrained not used
                 AutoModelForMaskedLM.from_pretrained(from_pretrained)
             ]
-            internal_vae_config = VAEConfig(
-                freeze_pretrained='encoder',
-                hidden_features=128,
+            internal_vae_config = VAEConfigLM(
+                freeze_pretrained=None, #'encoder',
+                hidden_features=256,
+                z_dim=2048,
+                gamma=1E-4,  # weight of lm loss as compared to z_loss
                 sampling_iterations=1000,
                 seq_length=config.max_length,
                 residuals=False,
             )
-            vae_pair = [VAEForMaskedLM(pretrained=seq2seq, config=internal_vae_config) for seq2seq in seq2seq_pair]
+            vae_pair = [VAEForLM(pretrained=seq2seq, config=internal_vae_config) for seq2seq in seq2seq_pair]
             model_config = TwinVAEConfig(
                 lambd_a=1E-3
             )
-            model = TwinVAEForMaskedLM(
+            model = TwinVAEForLM(
                 models=vae_pair,
                 config=model_config
             )
@@ -199,7 +206,7 @@ def train(
     print(training_args)
     if model_type in ["VAE", "Twin"]:
         if model_type == "VAE":
-            show_callback = ShowExampleLM(tokenizer)  # probably should have ShowExxampleSEQ2SEQ
+            show_callback = ShowExampleSEQ2SEQ(tokenizer)  # probably should have ShowExxampleSEQ2SEQ
         elif model_type == "Twin":
             show_callback = ShowExampleTwinLM(tokenizer)
         else:

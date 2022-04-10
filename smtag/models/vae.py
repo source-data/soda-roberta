@@ -1,6 +1,3 @@
-from itertools import product
-import pdb
-from random import sample, gauss
 from dataclasses import dataclass
 from typing import List, Dict
 import torch
@@ -107,6 +104,13 @@ class VAEConfig(BartConfig):
         self.residuals = residuals
 
 
+class VAEConfigLM(VAEConfig):
+
+    def __init__(self, gamma: float = 1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.gamma = gamma  # weights of lm loss when composed with loss on latent var z
+
+
 class VAEConfigForTokenClassification(VAEConfig):
 
     def __init__(self, classifier_dropout: float = None, **kwargs):
@@ -115,11 +119,11 @@ class VAEConfigForTokenClassification(VAEConfig):
 
 
 @dataclass
-class TwinVAEConfig(VAEConfigForTokenClassification):
+class TwinVAEConfig(VAEConfigLM):
 
     def __init__(self, lambd_a: float = None, **kwargs):
         super().__init__(**kwargs)
-        self.lambd_a = lambd_a  # not a typo; weight on off diagnonal temrs of twin loss
+        self.lambd_a = lambd_a  # not a typo; weight on off diagonal terms of twin loss
 
 
 @dataclass
@@ -233,7 +237,7 @@ class VAE(nn.Module):
             loss=loss,
             logits=logits,
             z=z,
-            supp_data={}
+            supp_data={"loss_z": loss}
         )
 
     def compute_loss_on_latent_var(self, z) -> torch.Tensor:
@@ -243,10 +247,11 @@ class VAE(nn.Module):
         return z_loss
 
 
-class VAEForMaskedLM(VAE):
+class VAEForLM(VAE):
 
-    def __init__(self, pretrained, config: VAEConfig, **kwargs):
+    def __init__(self, pretrained, config: VAEConfigLM, **kwargs):
         super().__init__(pretrained, config, **kwargs)
+        self.gamma = config.gamma
         self.model = VAE(pretrained, config)
         self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.model.shared.num_embeddings, bias=False)
 
@@ -261,7 +266,7 @@ class VAEForMaskedLM(VAE):
         # calculate composite loss
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            loss_lm = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             loss = outputs.loss + loss_lm
             supp_data['loss_lm'] = loss_lm
         else:
@@ -275,11 +280,11 @@ class VAEForMaskedLM(VAE):
         )
 
 
-class TwinVAEForMaskedLM(nn.Module):
+class TwinVAEForLM(nn.Module):
 
     def __init__(
         self,
-        models: List[VAEForMaskedLM],
+        models: List[VAEForLM],
         config: TwinVAEConfig,
         **kwargs
     ):
