@@ -319,7 +319,11 @@ class TwinVAEForLM(nn.Module):
             logits=[out.logits for out in outputs],
             loss=loss,
             supp_data={
-                "loss_twin_z": loss_twin_z
+                "loss_twin_z": loss_twin_z,
+                "loss_z_1": outputs[0].supp_data["loss_z"],
+                "loss_z_2": outputs[1].supp_data["loss_z"],
+                "loss_lm_1": outputs[0].supp_data["loss_lm"],
+                "loss_lm_2": outputs[1].supp_data["loss_lm"],
             }
         )
 
