@@ -177,8 +177,27 @@ class ShowExampleTwinLM(ShowExampleLM):
             for i, pred_logits in enumerate(pred['logits']):
                 pred_idx = pred_logits.argmax(-1)[0].cpu()
                 # extract input from specific twin example
-                inputs_i = {k: v[0, :, i] for k, v in inputs.items()}
+                inputs_i = {k: v[i][0] for k, v in inputs.items()}
                 self.to_console(inputs_i, pred_idx)
+
+    def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
+        batch = next(iter(dataloader))
+        # batch[_][_] is a list of twin example
+        rand_example = randrange(batch['input_ids'][0].size(0))
+        input_ids = [twin[rand_example] for twin in batch['input_ids']]
+        attention_mask = [twin[rand_example] for twin in batch['attention_mask']]
+        labels = [twin[rand_example] for twin in batch['labels']]
+        inputs = {
+            'input_ids': input_ids,
+            'labels': labels,
+            'attention_mask': attention_mask
+        }
+        for k, v in inputs.items():
+            for i, v_i in enumerate(v):
+                inputs[k][i] = v_i.clone().unsqueeze(0)  # single example
+                if torch.cuda.is_available():
+                    inputs[k][i] = inputs[k][i].cuda()
+        return inputs
 
 
 class ShowExampleTOKCL(ShowExample):

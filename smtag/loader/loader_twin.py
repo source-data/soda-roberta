@@ -147,26 +147,20 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath, split):
         """ Yields examples. """
-        N = 2  # reading N consecutive lines as related examples; here reading pairs of lines
         with open(filepath, encoding="utf-8") as f:
-            id_ = 0
-            while True:
-                # read pairs of lines
-                rows = [f.readline() for i in range(N)]
-                if not rows[-1]:
-                    break  # EOF
-                consecutive_data = [json.loads(row) for row in rows]
+            for id_, row in enumerate(f):
+                data = json.loads(row)
                 if self.config.name == "SEQ2SEQ":
                     "Seq2seq training needs the input_ids as labels, no masking"
                     example = {
-                        "input_ids": [data["input_ids"] for data in consecutive_data],
-                        "labels": [data['input_ids'] for data in consecutive_data]
+                        "input_ids": data["input_ids"],
+                        "labels": data['input_ids'],
                     }
                 elif self.config.name == "MLM":
                     # masked language modeling
                     example = {
-                        "input_ids": [data["input_ids"] for data in consecutive_data],
-                        "tag_mask": [data['special_tokens_mask'] for data in consecutive_data]
+                        "input_ids": data["input_ids"],
+                        "tag_mask": data['special_tokens_mask']
                     }
                 else:
                     example = {
@@ -183,9 +177,10 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         selected_labels = ['DET', 'CCONJ', 'SCONJ', 'ADP', 'PRON']
                     elif self.config.name == "NOUN":
                         selected_labels = ['NOUN']
-                    for data in consecutive_data:
-                        pos_mask = [1 if label in selected_labels else 0 for label in data['label_ids']]
-                        example["input_ids"].append(data['input_ids'])
-                        example["tag_mask"].append(pos_mask)
+                    pos_masks = []
+                    for label_ids in data['label_ids']:
+                        pos_mask = [1 if label in selected_labels else 0 for label in label_ids]
+                        pos_masks.append(pos_mask)
+                    example["input_ids"] = data['input_ids']
+                    example["tag_mask"] = pos_masks
                 yield id_, example
-                id_ += 1

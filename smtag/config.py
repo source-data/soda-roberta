@@ -17,7 +17,7 @@ from typing import Dict, Union
 class Config:
     max_length: int = 512  # in tokens!
     truncation: bool = True
-    min_char_length: int = 120  # characters!
+    min_char_length: int = 80  # characters!
     split_ratio: InitVar[Dict] = None
     celery_batch_size: int = 1000
     from_pretrained: str = "roberta-base"  # "facebook/bart-base" # leave empty if training a language model from scratch
@@ -25,6 +25,8 @@ class Config:
     nlp: English = field(default=spacy.load("en_core_web_sm"))
     tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
     split_ratio: InitVar[Dict[str, float]] = None
+    asynchr: bool = True
+    twin_delimiter: str = "###tt9HHSlkWoUM###"  # to split concatenated twin examples
 
     def __post_init__(
         self,
@@ -45,7 +47,8 @@ class Config:
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
 # config = Config(tokenizer=char_level_tokenizer)
 config = Config(
-    max_length=64,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length=[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-    model_type="VAE"  # "VAE" #  "Twin"  # "Autoencoder"
+    model_type="Twin",  # "VAE" #  "Twin"  # "Autoencoder"
+    asynchr=True  # we need ordered examples while async returns results in non deterministic way
 )

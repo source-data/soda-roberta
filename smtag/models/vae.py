@@ -197,6 +197,7 @@ class VAE(nn.Module):
         if self.freeze_pretrained in ['encoder', 'both']:
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
+        assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
         # compress
         y = x  # keep x as residual
         y = self.vae_dropout(y)
@@ -301,14 +302,14 @@ class TwinVAEForLM(nn.Module):
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        # outputs = [
-        #     model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
-        #     for i, model in enumerate([self.model_1, self.model_2])
-        # ]
         outputs = [
-            self.model_1(input_ids=input_ids[:, :, 0], labels=labels[:, :, 0], attention_mask=attention_mask[:, :, 0], **kwargs),
-            self.model_2(input_ids=input_ids[:, :, 1], labels=labels[:, :, 1], attention_mask=attention_mask[:, :, 1], **kwargs)
+            model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
+            for i, model in enumerate([self.model_1, self.model_2])
         ]
+        # outputs = [
+        #     self.model_1(input_ids=input_ids[:, :, 0], labels=labels[:, :, 0], attention_mask=attention_mask[:, :, 0], **kwargs),
+        #     self.model_2(input_ids=input_ids[:, :, 1], labels=labels[:, :, 1], attention_mask=attention_mask[:, :, 1], **kwargs)
+        # ]
 
         loss_twin_z = self.compute_loss_on_twin_latent_vars([out.z for out in outputs])
         losses = torch.stack([out.loss for out in outputs])

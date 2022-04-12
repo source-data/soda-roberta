@@ -345,7 +345,8 @@ class MyDataCollatorForTwinSeq2Seq(MyDataCollatorForSeq2Seq):
     tokenizer: PreTrainedTokenizerBase
     model: Optional[Any] = None
     padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
+    max_length: Optional[int] = None 
+    max_length_list: List[int] = None # each twin example has its max length!
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
@@ -361,6 +362,7 @@ class MyDataCollatorForTwinSeq2Seq(MyDataCollatorForSeq2Seq):
                 }
                 for feature in features
             ]
+            self.pad_to_multiple_of = self.max_length_list[twin_idx]
             appended_features.append(super().__call__(features_this_twin, return_tensors))
         # from list of dict to dict of list
         new_features = {k: [] for k in appended_features[0].keys()}
@@ -368,6 +370,6 @@ class MyDataCollatorForTwinSeq2Seq(MyDataCollatorForSeq2Seq):
             for k, v in f.items():
                 new_features[k].append(v)
         # stack list into tensor
-        for k, v in new_features.items():
-            new_features[k] = torch.stack(v, dim=-1)
+        # for k, v in new_features.items():
+        #     new_features[k] = torch.stack(v, dim=-1)
         return new_features

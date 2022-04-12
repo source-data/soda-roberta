@@ -1,4 +1,5 @@
 from pathlib import Path
+import token
 from typing import List, Tuple, Dict
 import json
 from lxml.etree import fromstring, Element
@@ -14,8 +15,8 @@ from .utils import innertext
 
 
 # Celery tasks
-@app.task
-def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
+# @app.task
+def aligned_tokenization_task(example: str, dest_file_path: str, max_length: List[int]):
     labeled_example = {}
     # character-level ByT5Tokenizer tokenizer converts string into bytes
     # for unicode character several bytes will be used
@@ -27,32 +28,51 @@ def aligned_tokenization_task(example: str, dest_file_path: str, max_length):
     # will assign universal POS tags https://universaldependencies.org/u/pos/
     # https://spacy.io/usage/linguistic-features#pos-tagging
     pos_words = config.nlp(example)
-    if config.tokenizer.is_fast:
-        tokenized = config.tokenizer(
-            example,
-            max_length=max_length,
-            truncation=config.truncation,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True
-        )
+    examples = example.split(config.twin_delimiter)
+    tokenized_examples = []
+    pos_labels = []
+    for ex, max_l in zip(examples, max_length):
+        if config.tokenizer.is_fast:
+            tokenized = config.tokenizer(
+                ex,
+                max_length=max_l,
+                truncation=config.truncation,
+                return_offsets_mapping=True,
+                return_special_tokens_mask=True
+            )
+        else:
+            tokenized = config.tokenizer(
+                ex,
+                max_length=max_l,
+                truncation=config.truncation,
+                # python tokenizers do not have return_offsets_mapping
+                return_special_tokens_mask=True
+            )
+            # calculate ourselves offsets mapping
+            offsets_mapping = _get_offset_mapping(tokenized, config.tokenizer)
+            tokenized['offset_mapping'] = offsets_mapping
+        tokenized_examples.append(tokenized)
+        pos_labels.append(_align_labels(ex, pos_words, tokenized))
+    if len(tokenized_examples) == 1:
+        assert len(pos_labels) == 1
+        tokenized_examples = tokenized_examples[0]
+        input_ids = tokenized_examples[0]["input_ids"]
+        special_tokens_mask = tokenized_examples[0]["special_tokens_mask"]
+        pos_labels = pos_labels[0]
     else:
-        tokenized = config.tokenizer(
-            example,
-            max_length=max_length,
-            truncation=config.truncation,
-            # python tokenizers do not have return_offsets_mapping
-            return_special_tokens_mask=True
-        )
-        # calculate ourselves offsets mapping
-        offsets_mapping = _get_offset_mapping(tokenized, config.tokenizer)
-        tokenized['offset_mapping'] = offsets_mapping
-    pos_labels = _align_labels(example, pos_words, tokenized)
+        input_ids = [t["input_ids"] for t in tokenized_examples]
+        special_tokens_mask = [t["special_tokens_mask"] for t in tokenized_examples]
     labeled_example = {
-        'input_ids': tokenized.input_ids,
+        'max_length': max_length,
+        'input_ids': input_ids,
         'label_ids': pos_labels,
-        'special_tokens_mask': tokenized.special_tokens_mask
+        'special_tokens_mask': special_tokens_mask
     }
     _save_json(labeled_example, dest_file_path)
+
+
+if config.asynchr:
+    aligned_tokenization_task = app.task(aligned_tokenization_task)
 
 
 def _get_offset_mapping(tokenized, tokenizer):
@@ -153,24 +173,38 @@ class PreparatorLM:
             source_file_path = self.source_dir_path / f"{subset}.txt"
             dest_file_path = self.dest_dir_path / f"{subset}.jsonl"
             batch_size = config.celery_batch_size
+            max_length = config.max_length
+            if isinstance(max_length, int):
+                max_length = [max_length]
+            # n = len(max_length)
             with source_file_path.open() as f:
                 task_list = []
                 lines = f.readlines()
                 i = 0
                 for line in tqdm(lines):
                     line = line.strip()
+                    # cycling across max length
+                    # necessary to truncate appropriately twin examples datasets
+                    # for example titles are shorter than abstracts
+                    # max_l = max_length[i % n]
                     if line:
-                        task_list.append(aligned_tokenization_task.s(line, str(dest_file_path), self.max_length))
-                    if i % batch_size == 0:
-                        job = celery.group(task_list)
-                        results = job.apply_async()
-                        results.get()
-                        task_list = []
+                        if config.asynchr:
+                            task_list.append(aligned_tokenization_task.s(line, str(dest_file_path), max_length))
+                        else:
+                            aligned_tokenization_task(line, str(dest_file_path), max_length)
+                    if config.asynchr:
+                        if i % batch_size == 0:
+                            job = celery.group(task_list)
+                            results = job.apply_async()
+                            results.get()
+                            task_list = []
                     i += 1
-                job = celery.group(task_list)
-                results = job.apply_async()
-                results.get()
-            self._verify(dest_file_path)
+                if config.asynchr:
+                    job = celery.group(task_list)
+                    results = job.apply_async()
+                    results.get()
+                    # ORDER OF RESULTS IS NOT GUARANTEED!
+            # self._verify(dest_file_path)
 
     def _verify(self, dest_file_path: Path):
         with dest_file_path.open() as f:
@@ -179,12 +213,17 @@ class PreparatorLM:
             longest_example = ''
             min_len = 1E3
             shortest_example = ''
-            for n, line in enumerate(f):
+            max_length = config.max_length
+            if isinstance(max_length, int):
+                max_length = [max_length]
+            n = len(max_length)
+            for i, line in enumerate(f):
                 j = json.loads(line)
                 L = len(j['input_ids'])
-                assert L <= self.max_length + 2, f"Length verification: error line {n} in {p} with num_tokens: {len(j['input_ids'])} > {self.max_length + 2}."
-                assert L == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {n} in {p}"
-                assert L == len(j['special_tokens_mask']), f"mismatch in number of input_ids and special_tokens_mask: error line {n} in {p}"
+                max_l = max_length[i % n]  # cycle across max length, necessary for twin examples datasets
+                assert L <= max_l + 2, f"Length verification: error line {i} in {str(dest_file_path)} with num_tokens: {len(j['input_ids'])} > {max_l + 2}."
+                assert L == len(j['input_ids']), f"mismatch in number of input_ids and label_ids: error line {i} in {str(dest_file_path)}"
+                assert L == len(j['special_tokens_mask']), f"mismatch in number of input_ids and special_tokens_mask: error line {i} in {str(dest_file_path)}"
                 cumul_len += L
                 if L > max_len:
                     max_len = L
@@ -192,9 +231,9 @@ class PreparatorLM:
                 if L < min_len:
                     min_len = L
                     shortest_example = j['input_ids']
-        n += 1
+        i += 1
         print("\nLength verification: OK!")
-        print(f"\naverage input_ids length = {round(cumul_len / n)} (min={min_len}, max={max_len}) tokens")
+        print(f"\naverage input_ids length = {round(cumul_len / i)} (min={min_len}, max={max_len}) tokens")
         print(f"longest example: {config.tokenizer.decode(longest_example)}")
         print(f"shortest example: {config.tokenizer.decode(shortest_example)}")
         return True

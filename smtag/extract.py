@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import List, Dict, Union
+import pdb
+from typing import List, Dict, Tuple, Union
 from random import random
 import celery
 from tqdm import tqdm
@@ -11,20 +12,22 @@ from .config import config
 
 
 # Celery tasks
-@app.task
 def examples_from_file_task(
     filepath: str,
+    dest_file_path: str,
     xpath: Union[str, List[str]],
-    punkt: bool, keep_xml: bool,
+    punkt: bool,
+    keep_xml: bool,
     remove_tail: bool,
     min_length: int = config.min_char_length
-) -> List[str]:
+) -> int:
     """Generates text or xml examples from xml documents. 
     Examples to be extracted are found using an XPath expression.
     THe resulting text can be segmented in sentences if desired. 
     Either the inner text is extracted or the xml of the extracted element is kept.
 
     Args:
+        indx (int): the index position of the file, useful to keep track of order when asynchonous processing is used
         filepath (str): the path to the source file.
         xpath (Union[str, List[str]]): the XPath expression to identify the example(s) in the xml file.
         punkt (bool): whether to split the text into individual sentences.
@@ -36,7 +39,8 @@ def examples_from_file_task(
         elements = _parse_xml_file(filepath, xpath, remove_tail)
         text = _extract_text_from_elements(elements, punkt, keep_xml, min_length=min_length)
         examples = _cleanup(text)
-    elif isinstance(xpath, list):
+    elif isinstance(xpath, list):  # twin examples extracted
+        twin_examples = []
         if len(xpath) != 2:
             raise ValueError(f"xpath pair has to have exactly 2 elements (len is {len(xpath)}")
         for xp in xpath:
@@ -50,10 +54,23 @@ def examples_from_file_task(
             text = _cleanup(text)
             if text:
                 text = text[0]  # _cleanup returns a list!
-                examples.append(text)
+                # text = f"{xp}_{text}"  # debug!
+                twin_examples.append(text)
             else:
                 return []
-    return examples
+        # from the multiple twin examples, generate a single concatenated with config.twin_delimiter as delimiter
+        examples = [config.twin_delimiter.join(twin_examples)]
+    # we could save the examples right here... might be faster with async
+    n = 0
+    for ex in examples:
+        if ex:
+            n += _save_task(ex, str(dest_file_path))
+    return n
+
+
+# switchable celery async task
+if config.asynchr:
+    examples_from_file_task = app.task(examples_from_file_task)
 
 
 def _parse_xml_file(filepath: str, xpath: str, remove_tail: bool) -> List[str]:
@@ -99,8 +116,8 @@ def _filter(example: str, min_length: int) -> str:
     return example
 
 
-@app.task
-def save_task(text: str, filepath: str,):
+# @app.task
+def _save_task(text: str, filepath: str,):
     """Writes each text on 1 line at the end of the file.
     Strips text from newlines so that it can be written on a single line.
 
@@ -111,6 +128,10 @@ def save_task(text: str, filepath: str,):
     with Path(filepath).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
         f.write(f"{text.strip()}\n")
     return 1
+
+
+# if config.asynchr:
+#     save_task = app.task(save_task)
 
 
 class ExtractorXML:
@@ -220,24 +241,22 @@ class ExtractorXML:
         N = len(filepaths)
         for start in tqdm(range(0, N, batch_size)):
             end = min(start + batch_size, N)
-            task_list = [
-                examples_from_file_task.s(str(filepath), xpath, sentence_level, keep_xml, remove_tail, min_length)
-                for filepath in filepaths[start:end]
-            ]
-            job = celery.group(task_list)
-            results = job.apply_async()
-            results = results.get()
-            # remove empty sublists of examples
-            results = [r for r in results if r]
-            # save to disk as we go
-            saving_tasks = []
-            for new_examples in results:
-                for j, example in enumerate(new_examples):
-                    proba = random()
-                    if proba <= inclusion_probability:
-                        saving_tasks.append(save_task.s(example, str(dest_file_path)))
-            job = celery.group(saving_tasks)
-            saving_results = job.apply_async()
-            saving_results.get()
-            num_saved_examples += len(saving_results)
+            if config.asynchr:  # non deterministic results order!
+                task_list = [
+                    examples_from_file_task.s(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length)
+                    for indx, filepath in enumerate(filepaths[start:end])
+                ]
+                job = celery.group(task_list)
+                results = job.apply()
+                results = results.get()
+                # remove empty sublists of examples
+                results = [r for r in results if r]
+                n = sum(results)
+                num_saved_examples += n
+            else:  # deterministic
+                results = []
+                for indx, filepath in enumerate(filepaths[start:end]):
+                    n = examples_from_file_task(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length)
+                    num_saved_examples += n
         return num_saved_examples
+
