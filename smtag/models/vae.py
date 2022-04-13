@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Dict
+from sklearn.multiclass import OutputCodeClassifier
 import torch
 from torch import nn
 from transformers import (
@@ -50,7 +51,7 @@ def mmd(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
-    return torch.randn(200, z_dim)
+    return torch.randn(iterations, z_dim)
 
 
 class VAEConfig(BartConfig):
@@ -121,9 +122,10 @@ class VAEConfigForTokenClassification(VAEConfig):
 @dataclass
 class TwinVAEConfig(VAEConfigLM):
 
-    def __init__(self, lambd_a: float = None, **kwargs):
+    def __init__(self, lambd_a: float = None, mu: float = 1.0, **kwargs):
         super().__init__(**kwargs)
         self.lambd_a = lambd_a  # not a typo; weight on off diagonal terms of twin loss
+        self.mu = mu  # weight twin z loss vs the other losses
 
 
 @dataclass
@@ -152,7 +154,7 @@ class VAE(nn.Module):
         self.freeze_pretrained = self.config.freeze_pretrained
         self.encoder = self.pretrained.get_encoder()
         self.decoder = self.pretrained.get_decoder()
-        # freeze the pretrained encoder and decoder
+        # freeze the pretrained encoder and/or decoder
         if self.freeze_pretrained == 'both':
             for param in self.encoder.parameters():
                 param.requires_grad_(False)
@@ -205,13 +207,20 @@ class VAE(nn.Module):
         y = self.norm_compress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
-        # first latent var
+        # latent var
         y = self.vae_dropout(y)
         z = self.fc_z_1(y)  # -> B x Z_1
         z = self.norm_z(z)
-        z = self.act_fct(z)
+        # z = self.act_fct(z)  # should this be done at all or after z???
         # decompress
-        y = self.fc_z_2(z)  # -> B x (L * H)
+
+        # y = self.fc_z_2(z)  # -> B x (L * H)
+
+        #### TRY(ING  ###)
+        y = self.act_fct(z)
+        y = self.fc_z_2(y)  # -> B x (L * H)
+        ##################
+
         y = self.norm_decompress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
@@ -268,7 +277,7 @@ class VAEForLM(VAE):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
-            loss = outputs.loss + loss_lm
+            loss = loss_lm  # + outputs.loss  # on latent var
             supp_data['loss_lm'] = loss_lm
         else:
             loss = None
@@ -285,15 +294,27 @@ class TwinVAEForLM(nn.Module):
 
     def __init__(
         self,
-        models: List[VAEForLM],
-        config: TwinVAEConfig,
-        **kwargs
+        model: VAEForLM,
+        config: TwinVAEConfig
     ):
         super().__init__()
-        # TODO: check PyTorch mechanics how to register properly arbitrary list of models
-        self.model_1 = models[0]
-        self.model_2 = models[1]
+        self.model = model
         self.config = config
+        self.lambd_a = self.config.lambd_a
+        self.mu = self.config.mu
+        # from https://github.com/facebookresearch/barlowtwins/blob/main/main.py
+        # does not seem to help much when tested on trvial same-same control dataset
+        # z_dim = self.model.z_dim
+        # projectors = []
+        # for i in range(2):
+        #     projectors.append(nn.Sequential(
+        #         nn.Linear(z_dim, z_dim, bias=False),
+        #         nn.BatchNorm1d(z_dim, affine=False),
+        #         nn.ReLU(inplace=True),
+        #         nn.Linear(z_dim, z_dim, bias=False),
+        #         nn.BatchNorm1d(z_dim, affine=False))
+        #     )
+        # self.projectors = nn.ModuleList(projectors)
 
     def forward(
         self,
@@ -303,22 +324,21 @@ class TwinVAEForLM(nn.Module):
         **kwargs
     ):
         outputs = [
-            model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
-            for i, model in enumerate([self.model_1, self.model_2])
+            self.model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
+            for i in range(len(input_ids))
         ]
-        # outputs = [
-        #     self.model_1(input_ids=input_ids[:, :, 0], labels=labels[:, :, 0], attention_mask=attention_mask[:, :, 0], **kwargs),
-        #     self.model_2(input_ids=input_ids[:, :, 1], labels=labels[:, :, 1], attention_mask=attention_mask[:, :, 1], **kwargs)
-        # ]
-
-        loss_twin_z = self.compute_loss_on_twin_latent_vars([out.z for out in outputs])
+        z = [out.z for out in outputs]  # [self.projectors[i](out.z) for i, out in enumerate(outputs)]
+        loss_diag, loss_off_diag = self.compute_loss_on_twin_latent_vars(z)
         losses = torch.stack([out.loss for out in outputs])
-        loss = losses.sum() + loss_twin_z
+        loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
+        loss = loss_twin_z + losses.sum()
 
         return TwinOutput(
-            logits=[out.logits for out in outputs],
             loss=loss,
+            logits=[out.logits for out in outputs],
             supp_data={
+                "loss_diag": loss_diag,
+                "loss_off_diag": loss_off_diag,
                 "loss_twin_z": loss_twin_z,
                 "loss_z_1": outputs[0].supp_data["loss_z"],
                 "loss_z_2": outputs[1].supp_data["loss_z"],
@@ -336,5 +356,5 @@ class TwinVAEForLM(nn.Module):
         off_diag = c - torch.diag_embed(diag)
         loss_diag = (diag - 1) ** 2
         loss_off_diag = off_diag ** 2
-        loss = loss_diag.sum() + self.config.lambd_a * loss_off_diag.sum()
-        return loss
+        # observation: loss_diag is easier to minimize than loss_off_diag
+        return loss_diag.sum(), loss_off_diag.sum()
