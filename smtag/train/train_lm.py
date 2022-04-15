@@ -19,7 +19,7 @@ from transformers import (
     Trainer,
     IntervalStrategy,
     RobertaForMaskedLM, RobertaConfig,
-    AutoModelForMaskedLM, AutoTokenizer,
+    AutoModel, AutoModelForMaskedLM, AutoTokenizer,
     TrainingArguments,
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
@@ -158,13 +158,13 @@ def train(
             model = RobertaForMaskedLM(config=model_config)
     elif model_type == "VAE":
         if config.from_pretrained:
-            seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)  # use AutoModel instead? since LM head is provided by BecauseLM
+            seq2seq = AutoModel.from_pretrained(from_pretrained)
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  #'encoder',
                 hidden_features=256,
-                z_dim=2048,
+                z_dim=1024,
                 gamma=1E-4,  # weight of lm loss as compared to z_loss
-                sampling_iterations=200,
+                sampling_iterations=1000,
                 seq_length=config.max_length,
                 residuals=False,
             )
@@ -176,23 +176,36 @@ def train(
             raise ValueError("Training VAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
-            seq2seq = AutoModelForMaskedLM.from_pretrained(from_pretrained)
-            vae_config = VAEConfigLM(
-                freeze_pretrained=None, #'encoder',
-                hidden_features=256,
-                z_dim=1024,
-                gamma=1E-4,  # weight of lm loss as compared to z_loss
-                sampling_iterations=200,
-                seq_length=config.max_length[0],
-                residuals=False,
+            num_models = 2
+            seq2seqs = [
+                AutoModel.from_pretrained(from_pretrained)
+                for i in range(num_models)
+            ]
+            vae_configs = [
+                VAEConfigLM(
+                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder'
+                    hidden_features=256,
+                    z_dim=1024,
+                    gamma=1E-4,  # weight of lm loss as compared to z_loss
+                    sampling_iterations=200,
+                    seq_length=config.max_length[i],
+                    residuals=False,
                 )
-            vae = VAEForLM(pretrained=seq2seq, config=vae_config)
+                for i in range(num_models)
+            ]
+            models = [
+                VAEForLM(
+                    pretrained=seq2seqs[i],
+                    config=vae_configs[i]
+                )
+                for i in range(num_models)
+            ]
             model_config = TwinVAEConfig(
-                lambd_a=0.0,  #1E-5,  # weight off-diagonal vs diagonal 
-                mu=1E-5  # weight of twin_z_losss over other losses
+                lambd_a=1E-6, # weight off-diagonal vs diagonal
+                mu=1E-3  # weight of twin_z_losss over other losses
             )
             model = TwinVAEForLM(
-                model=vae,
+                models=models,
                 config=model_config
             )
         else:

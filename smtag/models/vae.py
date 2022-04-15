@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Union
 from sklearn.multiclass import OutputCodeClassifier
 import torch
 from torch import nn
 from transformers import (
     BartConfig,
     BartForConditionalGeneration,
+    BartModel,
 )
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.modeling_outputs import (
@@ -251,19 +252,18 @@ class VAE(nn.Module):
         )
 
     def compute_loss_on_latent_var(self, z) -> torch.Tensor:
-        with torch.no_grad():
-            z_samples = sample_z(self.z_dim, self.sampling_iterations)
-            z_loss = mmd(z_samples, z)
+        z_samples = sample_z(self.z_dim, self.sampling_iterations)
+        z_loss = mmd(z_samples, z)
         return z_loss
 
 
 class VAEForLM(VAE):
 
-    def __init__(self, pretrained, config: VAEConfigLM, **kwargs):
+    def __init__(self, pretrained: BartModel, config: VAEConfigLM, **kwargs):
         super().__init__(pretrained, config, **kwargs)
         self.gamma = config.gamma
         self.model = VAE(pretrained, config)
-        self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.model.shared.num_embeddings, bias=False)
+        self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.shared.num_embeddings, bias=False)
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
         outputs = self.model(input_ids, **kwargs)
@@ -277,7 +277,8 @@ class VAEForLM(VAE):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
-            loss = loss_lm  # + outputs.loss  # on latent var
+            loss_z = outputs.loss  # loss on latent var
+            loss = loss_z + loss_lm  # combnie with language modelling loss
             supp_data['loss_lm'] = loss_lm
         else:
             loss = None
@@ -294,11 +295,11 @@ class TwinVAEForLM(nn.Module):
 
     def __init__(
         self,
-        model: VAEForLM,
+        models: Union[VAEForLM, List[VAEForLM]],
         config: TwinVAEConfig
     ):
         super().__init__()
-        self.model = model
+        self.models = nn.ModuleList(models) if isinstance(models, list) else nn.ModuleList([models])
         self.config = config
         self.lambd_a = self.config.lambd_a
         self.mu = self.config.mu
@@ -323,10 +324,16 @@ class TwinVAEForLM(nn.Module):
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        outputs = [
-            self.model(input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
-            for i in range(len(input_ids))
-        ]
+        if len(self.models) == 1:  # single model for all twin examples
+            outputs = [
+                self.models[0](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
+                for i in range(len(input_ids))
+            ]
+        else:  # one model trained for each type fo twin example
+            outputs = [
+                self.models[i](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
+                for i in range(len(input_ids))
+            ]
         z = [out.z for out in outputs]  # [self.projectors[i](out.z) for i, out in enumerate(outputs)]
         loss_diag, loss_off_diag = self.compute_loss_on_twin_latent_vars(z)
         losses = torch.stack([out.loss for out in outputs])
