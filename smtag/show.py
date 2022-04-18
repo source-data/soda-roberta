@@ -1,4 +1,3 @@
-import pdb
 from random import randrange
 from typing import Dict
 
@@ -56,19 +55,13 @@ class ShowExample(TrainerCallback):
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
         batch = next(iter(dataloader))
-        rand_example = randrange(batch['input_ids'].size(0))
-        input_ids = batch['input_ids'][rand_example]
-        attention_mask = batch['attention_mask'][rand_example]
-        labels = batch['labels'][rand_example]
-        inputs = {
-            'input_ids': input_ids,
-            'labels': labels,
-            'attention_mask': attention_mask
-        }
-        for k, v in inputs.items():
-            inputs[k] = v.clone().unsqueeze(0)  # single example
+        rand_example_idx = randrange(batch['input_ids'].size(0))
+        inputs = {}
+        for k, v in batch.items():
+            ex = v[rand_example_idx].clone().unsqueeze(0)   # single example
             if torch.cuda.is_available():
-                inputs[k] = inputs[k].cuda()
+                ex = ex.cuda()
+            inputs[k] = ex
         return inputs
 
     def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
@@ -81,8 +74,8 @@ class ShowExample(TrainerCallback):
             input_id = input_ids[i]
             label_idx = pred_idx[i]
             true_label = labels[i]
-            attention_mask = inputs
-            colored += self._correct_incorrect(input_id, label_idx, true_label, attention_mask)
+            attn_mask = attention_mask[i]
+            colored += self._correct_incorrect(input_id, label_idx, true_label, attn_mask)
         print(f"\n\n{colored}\n\n")
 
     def _correct_incorrect(self, input_id: int, label_idx: int, true_label: int) -> str:
@@ -108,47 +101,6 @@ class ShowExampleLM(ShowExample):
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
-    # def _view_matrix(self, x):
-    #     if x.dim() == 2:
-    #         x = torch.sigmoid(x)
-    #         mu = x.mean()
-    #         sigma = x.std()
-    #         x = x > (mu + 2*sigma)
-    #         x = x.int()
-    #         for r in x:
-    #             # ○○○○○○●●●●●●
-    #             # ■■■■■■□□□□□□
-    #             # ∙
-    #             # •
-    #             # ◦
-    #             print(''.join([f"{'•' if e.item() == 1 else '◦'}" for e in r]))
-
-    def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask=None) -> str:
-        colored = ""
-        is_prediction = true_label != -100
-        if is_prediction:
-            decoded_pred = self.tokenizer.decode(label_idx)
-            decoded_label = self.tokenizer.decode(true_label)
-            correct = (label_idx == true_label)
-            color = "blue" if correct else "red"
-            insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
-            colored = f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
-        elif attention_mask == 1:
-            colored += self.tokenizer.decode(input_id)
-        return colored
-
-
-class ShowExampleSEQ2SEQ(ShowExampleLM):
-
-    COLOR_CHAR = {
-        "blue": '\033[32;1m',
-        "red": '\033[31;1m',
-        "close": '\033[0m'
-    }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask=None) -> str:
         colored = ""
         is_prediction = true_label != -100
@@ -172,7 +124,7 @@ class ShowExampleTwinLM(ShowExampleLM):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred = model(inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
+            pred = model(**inputs)
             # pred.logits is an array with predictions for twin examples
             for i, pred_logits in enumerate(pred['logits']):
                 pred_idx = pred_logits.argmax(-1)[0].cpu()
@@ -183,20 +135,15 @@ class ShowExampleTwinLM(ShowExampleLM):
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
         batch = next(iter(dataloader))
         # batch[_][_] is a list of twin example
-        rand_example = randrange(batch['input_ids'][0].size(0))
-        input_ids = [twin[rand_example] for twin in batch['input_ids']]
-        attention_mask = [twin[rand_example] for twin in batch['attention_mask']]
-        labels = [twin[rand_example] for twin in batch['labels']]
-        inputs = {
-            'input_ids': input_ids,
-            'labels': labels,
-            'attention_mask': attention_mask
-        }
-        for k, v in inputs.items():
-            for i, v_i in enumerate(v):
-                inputs[k][i] = v_i.clone().unsqueeze(0)  # single example
+        rand_example_idx = randrange(batch['input_ids'][0].size(0))
+        inputs = {}
+        for k, v in batch.items():
+            inputs[k] = []
+            for twin in batch[k]:
+                ex = twin[rand_example_idx].clone().unsqueeze(0)
                 if torch.cuda.is_available():
-                    inputs[k][i] = inputs[k][i].cuda()
+                    ex = ex.cuda()
+                inputs[k].append(ex)
         return inputs
 
 

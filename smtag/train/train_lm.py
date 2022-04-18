@@ -33,13 +33,13 @@ from ..models.vae import (
 from ..data_collator import (
     DataCollatorForTargetedMasking,
     MyDataCollatorForSeq2Seq,
+    MyDataCollatorForTwinLanguageModeling,
     MyDataCollatorForTwinSeq2Seq
 )
 
 from ..trainer import MyTrainer
 from ..show import (
     ShowExampleLM, ShowExampleTwinLM,
-    ShowExampleSEQ2SEQ
 )
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -100,28 +100,35 @@ def train(
                 tokenizer=tokenizer,
                 mlm_probability=1.0
             )
-        elif config.model_type in ["VAE", "Twin"]:
-            data_collator = DataCollatorForTargetedMasking(
-                tokenizer=tokenizer,
-                mlm_probability=0.5,
-                pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
-            )
+        # elif config.model_type in ["VAE", "Twin"]:
+        #     data_collator = DataCollatorForTargetedMasking(
+        #         tokenizer=tokenizer,
+        #         mlm_probability=0.5,
+        #         pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
+        #     )
         else:
-            raise ValueError(f"unknown config.model_type: {model_type}")
+            raise ValueError(f"unsupported config.model_type: {model_type} for targeted language modeling")
     elif data_config_name == "MLM":
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
                 mlm=True
             )
-        elif config.model_type in ["VAE", "Twin"]:
+        elif config.model_type in ["VAE"]:
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer=tokenizer,
                 mlm=True,
                 pad_to_multiple_of=config.max_length
             )
+        elif config.model_type in ["Twin"]:
+            data_collator = MyDataCollatorForTwinLanguageModeling(
+                tokenizer=tokenizer,
+                mlm=True,
+                pad_to_multiple_of=config.max_length,
+                max_length_list=config.max_length
+            )
         else:
-            raise ValueError(f"unknon config.model_type: {model_type}")
+            raise ValueError(f"unsupported config.model_type: {model_type} for MLM")
     elif data_config_name == "SEQ2SEQ":
         if model_type == "Autoencoder":
             data_collator = DataCollatorForSeq2Seq(
@@ -158,50 +165,54 @@ def train(
             model = RobertaForMaskedLM(config=model_config)
     elif model_type == "VAE":
         if config.from_pretrained:
-            seq2seq = AutoModel.from_pretrained(from_pretrained)
+            pretrained = AutoModel.from_pretrained(from_pretrained)
+            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  #'encoder',
                 hidden_features=256,
                 z_dim=1024,
-                gamma=1E-4,  # weight of lm loss as compared to z_loss
-                sampling_iterations=1000,
+                gamma=1E-1,  # 1E-4 for mmd 1E-1 for kl # weight of lm loss as compared to z_loss
+                sampling_iterations=200,
                 seq_length=config.max_length,
-                residuals=False,
+                residuals=residuals,
+                latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(
-                pretrained=seq2seq,
+                pretrained=pretrained,
                 config=model_config
             )
         else:
             raise ValueError("Training VAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
-            num_models = 2
-            seq2seqs = [
+            num_models = 1
+            pretrained = [
                 AutoModel.from_pretrained(from_pretrained)
                 for i in range(num_models)
             ]
+            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
             vae_configs = [
                 VAEConfigLM(
-                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder'
+                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                     hidden_features=256,
                     z_dim=1024,
-                    gamma=1E-4,  # weight of lm loss as compared to z_loss
+                    gamma=1E-3,  # 1E-4 for mmd 1E-1 for kl #  # weight of lm loss as compared to z_loss
                     sampling_iterations=200,
                     seq_length=config.max_length[i],
-                    residuals=False,
+                    residuals=residuals,
+                    latent_var_loss=None  # "kl" or "mmd" or None
                 )
                 for i in range(num_models)
             ]
             models = [
                 VAEForLM(
-                    pretrained=seq2seqs[i],
+                    pretrained=pretrained[i],
                     config=vae_configs[i]
                 )
                 for i in range(num_models)
             ]
             model_config = TwinVAEConfig(
-                lambd_a=1E-6, # weight off-diagonal vs diagonal
+                lambd_a=1E-6,  # weight off-diagonal vs diagonal
                 mu=1E-3  # weight of twin_z_losss over other losses
             )
             model = TwinVAEForLM(
@@ -215,13 +226,7 @@ def train(
 
     print("\nTraining arguments:")
     print(training_args)
-    if model_type in ["VAE", "Twin"]:
-        if model_type == "VAE":
-            show_callback = ShowExampleSEQ2SEQ(tokenizer)  # probably should have ShowExxampleSEQ2SEQ
-        elif model_type == "Twin":
-            show_callback = ShowExampleTwinLM(tokenizer)
-        else:
-            raise ValueError(f"not console dispaly available for {model_type}")
+    if model_type in ["Twin"]:
         trainer = MyTrainer(
             model=model,
             args=training_args,
@@ -229,10 +234,10 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[show_callback]
+            callbacks=[ShowExampleTwinLM(tokenizer)]
         )
     else:
-        trainer = Trainer(
+        trainer = MyTrainer(
             model=model,
             args=training_args,
             data_collator=data_collator,

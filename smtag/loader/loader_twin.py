@@ -160,7 +160,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     # masked language modeling
                     example = {
                         "input_ids": data["input_ids"],
-                        "tag_mask": data['special_tokens_mask']
+                        "special_tokens_mask": data['special_tokens_mask']
                     }
                 else:
                     example = {

@@ -37,22 +37,18 @@ def compute_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 def mmd(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    if torch.cuda.is_available():
-        x = x.cuda()
-        y = y.cuda()
-    # x = x.cpu()
-    # y = y.cpu()
     x_kernel = compute_kernel(x, x)
     y_kernel = compute_kernel(y, y)
     xy_kernel = compute_kernel(x, y)
     mmd = x_kernel.mean() + y_kernel.mean() - 2*xy_kernel.mean()
-    # if torch.cuda.is_available():
-    #     mmd = mmd.cuda()
     return mmd
 
 
 def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
-    return torch.randn(iterations, z_dim)
+    x = torch.randn(iterations, z_dim)
+    if torch.cuda.is_available():
+        x = x.cuda()
+    return x
 
 
 class VAEConfig(BartConfig):
@@ -95,6 +91,7 @@ class VAEConfig(BartConfig):
         sampling_iterations: int = 100,
         seq_length: int = 512,
         residuals: bool = True,
+        latent_var_loss: str = 'mmd',
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -104,6 +101,7 @@ class VAEConfig(BartConfig):
         self.sampling_iterations = sampling_iterations
         self.seq_length = seq_length
         self.residuals = residuals
+        self.latent_var_loss = latent_var_loss
 
 
 class VAEConfigLM(VAEConfig):
@@ -133,6 +131,7 @@ class TwinVAEConfig(VAEConfigLM):
 class VAEOutput(MaskedLMOutput):
     supp_data: Dict[str, torch.Tensor] = None
     z: torch.Tensor = None
+    representation: torch.Tensor = None
 
 
 @dataclass
@@ -182,12 +181,19 @@ class VAE(nn.Module):
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
         self.z_dim = self.config.z_dim
+        self.latent_var_loss = self.config.latent_var_loss
         # own layers
         self.act_fct = nn.GELU()
         self.vae_dropout = nn.Dropout(p=config.dropout)
         self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
-        self.fc_z_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+        if self.latent_var_loss == "mmd" or self.latent_var_loss is None:   # infoVAE
+            self.fc_z_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+        elif self.latent_var_loss == "kl":   # classical VAE
+            self.fc_z_mean = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+            self.fc_z_logvar = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
+        else:
+            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
         self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
         self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
@@ -196,7 +202,7 @@ class VAE(nn.Module):
     def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
         # encoder
         encoder_outputs: BaseModelOutput = self.encoder(input_ids=input_ids, **kwargs)
-        x = encoder_outputs[0]  # B x L x H_enc
+        x = encoder_outputs[0]  # -> B x L x H_enc
         if self.freeze_pretrained in ['encoder', 'both']:
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
@@ -210,18 +216,22 @@ class VAE(nn.Module):
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
         # latent var
         y = self.vae_dropout(y)
-        z = self.fc_z_1(y)  # -> B x Z_1
-        z = self.norm_z(z)
-        # z = self.act_fct(z)  # should this be done at all or after z???
+        if self.latent_var_loss == "mmd" or self.latent_var_loss is None:
+            z = self.fc_z_1(y)  # -> B x Z
+            z = self.norm_z(z)
+            representation = z
+        elif self.latent_var_loss == "kl":
+            z_mean = self.fc_z_mean(y)  # -> B x Z
+            z_logvar = self.fc_z_logvar(y)  # -> B x Z
+            z_std = torch.exp(0.5 * z_logvar)
+            z = sample_z(self.z_dim, batch_size)
+            z = z + z_mean + z_std
+            representation = self.norm_z(z_mean)  # for twin cross correlation: take latent before sampling
+        else:
+            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         # decompress
-
-        # y = self.fc_z_2(z)  # -> B x (L * H)
-
-        #### TRY(ING  ###)
-        y = self.act_fct(z)
+        y = self.act_fct(z)  # beneficial?
         y = self.fc_z_2(y)  # -> B x (L * H)
-        ##################
-
         y = self.norm_decompress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
@@ -242,19 +252,36 @@ class VAE(nn.Module):
 
         logits = decoder_outputs[0]
 
-        loss = self.compute_loss_on_latent_var(z)
+        if self.latent_var_loss == "mmd": 
+            loss = self.compute_mmd_loss_on_latent_var(z)
+        elif self.latent_var_loss == "kl":
+            loss = self.compute_kl_loss_on_latent_var(z_mean, z_logvar)
+            # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
+        elif self.latent_var_loss is None:
+            loss = torch.tensor(0)
+            if torch.cuda.is_available():
+                loss = loss.cuda()
+        else:
+            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
         return VAEOutput(
             loss=loss,
             logits=logits,
             z=z,
+            representation=representation,
             supp_data={"loss_z": loss}
         )
 
-    def compute_loss_on_latent_var(self, z) -> torch.Tensor:
+    def compute_mmd_loss_on_latent_var(self, z) -> torch.Tensor:
+        # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
         z_samples = sample_z(self.z_dim, self.sampling_iterations)
         z_loss = mmd(z_samples, z)
         return z_loss
+
+    def compute_kl_loss_on_latent_var(self, mean, logvar) -> torch.Tensor:
+        # https://github.com/timbmg/Sentence-VAE/blob/master/train.py
+        kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
+        return kl.sum()
 
 
 class VAEForLM(VAE):
@@ -278,8 +305,8 @@ class VAEForLM(VAE):
             loss_fct = nn.CrossEntropyLoss()
             loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             loss_z = outputs.loss  # loss on latent var
-            loss = loss_z + loss_lm  # combnie with language modelling loss
-            supp_data['loss_lm'] = loss_lm
+            loss = loss_lm + loss_z  # combine with language modelling loss
+            supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
         else:
             loss = None
             supp_data['loss_lm'] = loss_lm = None
@@ -287,6 +314,7 @@ class VAEForLM(VAE):
             loss=loss,
             logits=logits,
             z=outputs.z,
+            representation=outputs.representation,
             supp_data=supp_data
         )
 
@@ -301,19 +329,19 @@ class TwinVAEForLM(nn.Module):
         super().__init__()
         self.models = nn.ModuleList(models) if isinstance(models, list) else nn.ModuleList([models])
         self.config = config
+        self.z_dims = [m.z_dim for m in self.models]
         self.lambd_a = self.config.lambd_a
         self.mu = self.config.mu
         # from https://github.com/facebookresearch/barlowtwins/blob/main/main.py
-        # does not seem to help much when tested on trvial same-same control dataset
-        # z_dim = self.model.z_dim
+        # does not seem to help much when tested on trivial same-same control dataset
         # projectors = []
-        # for i in range(2):
+        # for i in range(len(self.models)):
         #     projectors.append(nn.Sequential(
-        #         nn.Linear(z_dim, z_dim, bias=False),
-        #         nn.BatchNorm1d(z_dim, affine=False),
+        #         nn.Linear(self.z_dims[i], 2 * self.z_dims[i], bias=False),
+        #         nn.BatchNorm1d(2 * self.z_dims[i], affine=False),
         #         nn.ReLU(inplace=True),
-        #         nn.Linear(z_dim, z_dim, bias=False),
-        #         nn.BatchNorm1d(z_dim, affine=False))
+        #         nn.Linear(2 * self.z_dims[i], self.z_dims[i], bias=False),
+        #         nn.BatchNorm1d(self.z_dims[i], affine=False))
         #     )
         # self.projectors = nn.ModuleList(projectors)
 
@@ -329,17 +357,17 @@ class TwinVAEForLM(nn.Module):
                 self.models[0](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
+            # z = [self.projectors[0](out.z) for i, out in enumerate(outputs)]
         else:  # one model trained for each type fo twin example
             outputs = [
                 self.models[i](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
-        z = [out.z for out in outputs]  # [self.projectors[i](out.z) for i, out in enumerate(outputs)]
-        loss_diag, loss_off_diag = self.compute_loss_on_twin_latent_vars(z)
+            # z = [self.projectors[i](out.z) for i, out in enumerate(outputs)]
+        loss_diag, loss_off_diag = self.compute_loss_on_twins([out.representation for out in outputs])
         losses = torch.stack([out.loss for out in outputs])
         loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
-        loss = loss_twin_z + losses.sum()
-
+        loss = losses.sum() + loss_twin_z
         return TwinOutput(
             loss=loss,
             logits=[out.logits for out in outputs],
@@ -354,7 +382,8 @@ class TwinVAEForLM(nn.Module):
             }
         )
 
-    def compute_loss_on_twin_latent_vars(self, z: List[torch.Tensor]) -> torch.Tensor:
+    def compute_loss_on_twins(self, z: List[torch.Tensor]) -> torch.Tensor:
+        # TODO: only take a subsegment of latent var for conceptual representation; the rest is dedicated for details and decorative language
         assert len(z) == 2  # for the moment, this works only on twin pairs, not for higher order
         assert len(z[0]) == len(z[1])  # square
         batch_size = len(z[0])
