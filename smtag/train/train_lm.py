@@ -196,7 +196,7 @@ def train(
                     freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                     hidden_features=256,
                     z_dim=1024,
-                    gamma=1E-3,  # 1E-4 for mmd 1E-1 for kl #  # weight of lm loss as compared to z_loss
+                    gamma=1.0,  # 1E-3,  # 1E-4 for mmd 1E-1 for kl #  # weight of lm loss as compared to z_loss
                     sampling_iterations=200,
                     seq_length=config.max_length[i],
                     residuals=residuals,
@@ -212,8 +212,8 @@ def train(
                 for i in range(num_models)
             ]
             model_config = TwinVAEConfig(
-                lambd_a=1E-6,  # weight off-diagonal vs diagonal
-                mu=1E-3  # weight of twin_z_losss over other losses
+                lambd_a=1.0, # 1E-8,  # weight off-diagonal vs diagonal
+                mu=1.0, # 1E-3  # weight of twin_z_losss over other losses
             )
             model = TwinVAEForLM(
                 models=models,
