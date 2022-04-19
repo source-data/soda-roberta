@@ -208,7 +208,7 @@ class VAE(nn.Module):
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
         # compress
-        y = x  # keep x as residual
+        y = x  # keep x for later as residual
         y = self.vae_dropout(y)
         y = self.fc_compress(y)  # -> B x L x H (example: 32 x 512 x 100)
         y = self.norm_compress(y)
@@ -253,9 +253,9 @@ class VAE(nn.Module):
         logits = decoder_outputs[0]
 
         if self.latent_var_loss == "mmd": 
-            loss = self.compute_mmd_loss_on_latent_var(z)
+            loss = self.compute_mmd_loss(z)
         elif self.latent_var_loss == "kl":
-            loss = self.compute_kl_loss_on_latent_var(z_mean, z_logvar)
+            loss = self.compute_kl_loss(z_mean, z_logvar)
             # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
@@ -272,13 +272,13 @@ class VAE(nn.Module):
             supp_data={"loss_z": loss}
         )
 
-    def compute_mmd_loss_on_latent_var(self, z) -> torch.Tensor:
+    def compute_mmd_loss(self, z) -> torch.Tensor:
         # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
         z_samples = sample_z(self.z_dim, self.sampling_iterations)
         z_loss = mmd(z_samples, z)
         return z_loss
 
-    def compute_kl_loss_on_latent_var(self, mean, logvar) -> torch.Tensor:
+    def compute_kl_loss(self, mean, logvar) -> torch.Tensor:
         # https://github.com/timbmg/Sentence-VAE/blob/master/train.py
         kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
         return kl.sum()
@@ -383,14 +383,22 @@ class TwinVAEForLM(nn.Module):
         )
 
     def compute_loss_on_twins(self, z: List[torch.Tensor]) -> torch.Tensor:
-        # TODO: only take a subsegment of latent var for conceptual representation; the rest is dedicated for details and decorative language
         assert len(z) == 2  # for the moment, this works only on twin pairs, not for higher order
         assert len(z[0]) == len(z[1])  # square
+        z = [t.cpu() for t in z]  # move tensors to CPU to gather all examples across batches
         batch_size = len(z[0])
         c = (z[0].T @ z[1]) / batch_size
         diag = c.diagonal()
         off_diag = c - torch.diag_embed(diag)
+        # geeky way for off_diag https://github.com/facebookresearch/barlowtwins/blob/main/main.py
+        # re-order matrix with 1-element shorter rows such that first column is the former diag
+        # n = z[0].size(1)
+        # off_diag = z.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
         loss_diag = (diag - 1) ** 2
         loss_off_diag = off_diag ** 2
-        # observation: loss_diag is easier to minimize than loss_off_diag
-        return loss_diag.sum(), loss_off_diag.sum()
+        loss_diag = loss_diag.sum()
+        loss_off_diag = loss_off_diag.sum()
+        if torch.cuda.is_available():  # move results back to GPU
+            loss_diag = loss_diag.cuda()
+            loss_off_diag = loss_off_diag.cuda()
+        return loss_diag, loss_off_diag
