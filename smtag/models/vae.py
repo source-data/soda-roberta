@@ -1,3 +1,4 @@
+import pdb
 from dataclasses import dataclass
 from typing import List, Dict, Union
 from sklearn.multiclass import OutputCodeClassifier
@@ -230,8 +231,8 @@ class VAE(nn.Module):
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         # decompress
-        y = self.act_fct(z)  # beneficial?
-        y = self.fc_z_2(y)  # -> B x (L * H)
+        # y = self.act_fct(z)  # beneficial?
+        y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
         y = self.act_fct(y)
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
@@ -383,22 +384,21 @@ class TwinVAEForLM(nn.Module):
         )
 
     def compute_loss_on_twins(self, z: List[torch.Tensor]) -> torch.Tensor:
-        assert len(z) == 2  # for the moment, this works only on twin pairs, not for higher order
-        assert len(z[0]) == len(z[1])  # square
-        z = [t.cpu() for t in z]  # move tensors to CPU to gather all examples across batches
-        batch_size = len(z[0])
+        assert len(z) == 2, "for the moment, this works only on twin pairs, not for higher order"
+        assert z[0].size() == z[1].size(), "z dims have to be equal for square cross correl matrix"
+        z = [t.cpu() for t in z]
+        batch_size, z_dim = z[0].size()
         c = (z[0].T @ z[1]) / batch_size
         diag = c.diagonal()
         off_diag = c - torch.diag_embed(diag)
         # geeky way for off_diag https://github.com/facebookresearch/barlowtwins/blob/main/main.py
-        # re-order matrix with 1-element shorter rows such that first column is the former diag
-        # n = z[0].size(1)
-        # off_diag = z.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+        # re-order matrix with 1-element longer rows such that first column is the diag
+        # off_diag = c.flatten()[:-1].view(z_dim - 1, z_dim + 1)[:, 1:].flatten()
         loss_diag = (diag - 1) ** 2
         loss_off_diag = off_diag ** 2
-        loss_diag = loss_diag.sum()
-        loss_off_diag = loss_off_diag.sum()
-        if torch.cuda.is_available():  # move results back to GPU
+        loss_diag = loss_diag.sum() / z_dim
+        loss_off_diag = loss_off_diag.sum() / (z_dim ** 2)
+        if torch.cuda.is_available():
             loss_diag = loss_diag.cuda()
             loss_off_diag = loss_off_diag.cuda()
         return loss_diag, loss_off_diag
