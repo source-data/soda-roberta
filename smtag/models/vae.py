@@ -231,7 +231,6 @@ class VAE(nn.Module):
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         # decompress
-        # y = self.act_fct(z)  # beneficial?
         y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
         y = self.act_fct(y)
@@ -365,7 +364,7 @@ class TwinVAEForLM(nn.Module):
                 for i in range(len(input_ids))
             ]
             # z = [self.projectors[i](out.z) for i, out in enumerate(outputs)]
-        loss_diag, loss_off_diag = self.compute_loss_on_twins([out.representation for out in outputs])
+        loss_diag, loss_off_diag, cross_correl = self.compute_loss_on_twins([out.representation for out in outputs])
         losses = torch.stack([out.loss for out in outputs])
         loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
         loss = losses.sum() + loss_twin_z
@@ -380,6 +379,7 @@ class TwinVAEForLM(nn.Module):
                 "loss_z_2": outputs[1].supp_data["loss_z"],
                 "loss_lm_1": outputs[0].supp_data["loss_lm"],
                 "loss_lm_2": outputs[1].supp_data["loss_lm"],
+                "img_correl": cross_correl.unsqueeze(0),
             }
         )
 
@@ -396,9 +396,10 @@ class TwinVAEForLM(nn.Module):
         # off_diag = c.flatten()[:-1].view(z_dim - 1, z_dim + 1)[:, 1:].flatten()
         loss_diag = (diag - 1) ** 2
         loss_off_diag = off_diag ** 2
-        loss_diag = loss_diag.sum() / z_dim
-        loss_off_diag = loss_off_diag.sum() / (z_dim ** 2)
+        loss_diag = loss_diag.sum() / z_dim  # num elements of diag scales as z_dim
+        loss_off_diag = loss_off_diag.sum() / (z_dim ** 2)  # num elements off_diag roughly scales as square of z_dim
         if torch.cuda.is_available():
             loss_diag = loss_diag.cuda()
             loss_off_diag = loss_off_diag.cuda()
-        return loss_diag, loss_off_diag
+            c = c.cuda()
+        return loss_diag, loss_off_diag, c

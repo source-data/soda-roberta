@@ -399,15 +399,18 @@ class MyTrainer(Trainer):
         else:
             metrics = {}
 
+        # MODIFICATION OF BASE CLASS
+        for k, all_supp_data in all_supp_data_dict.items():
+            supp_data = all_supp_data.mean(0)
+            if supp_data.ndim > 1:  # some image, or matrix, need to be denumpified manually
+                supp_data = supp_data.tolist()
+            metrics[f"{metric_key_prefix}_supp_data_{k}"] = supp_data  # a bit of a hack as metrics are supposed to be scalars...
+
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
 
         if all_losses is not None:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
-        # MODIFICATION OF BASE CLASS
-        for k, all_supp_data in all_supp_data_dict.items():
-            supp_data = all_supp_data.mean(0)
-            metrics[f"{metric_key_prefix}_supp_data_{k}"] = supp_data.item()
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
