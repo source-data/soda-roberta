@@ -25,6 +25,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
 )
 from transformers.integrations import TensorBoardCallback
+from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
     VAEForLM, TwinVAEForLM,
@@ -43,6 +44,7 @@ from ..show import (
 )
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
+from ..progress_callback import MyProgressCallback
 
 from ..config import config
 from .. import LM_MODEL_PATH, CACHE, RUNS_DIR
@@ -168,10 +170,10 @@ def train(
             pretrained = AutoModel.from_pretrained(from_pretrained)
             residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
             model_config = VAEConfigLM(
-                freeze_pretrained=None,  #'encoder',
+                freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
                 z_dim=1024,
-                gamma=1E-1,  # 1E-4 for mmd 1E-1 for kl # weight of lm loss as compared to z_loss
+                gamma=1E-1,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length,
                 residuals=residuals,
@@ -195,8 +197,8 @@ def train(
                 VAEConfigLM(
                     freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                     hidden_features=256,
-                    z_dim=1024,
-                    gamma=1.0,  # 1E-3,  # 1E-4 for mmd 1E-1 for kl #  # weight of lm loss as compared to z_loss
+                    z_dim=100,#1024,
+                    gamma=1.0,  # weight of lm loss as compared to z_loss
                     sampling_iterations=200,
                     seq_length=config.max_length[i],
                     residuals=residuals,
@@ -212,8 +214,8 @@ def train(
                 for i in range(num_models)
             ]
             model_config = TwinVAEConfig(
-                lambd_a=1.0, # 1E-8,  # weight off-diagonal vs diagonal
-                mu=1.0, # 1E-3  # weight of twin_z_losss over other losses
+                lambd_a=1.0,  # weight off-diagonal vs diagonal
+                mu=1.0,  # weight of twin_z_losss over other losses
             )
             model = TwinVAEForLM(
                 models=models,
@@ -250,6 +252,8 @@ def train(
     # switch the Tensorboard callback to plot losses on same plot
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
     trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
+    trainer.remove_callback(ProgressCallback)
+    trainer.add_callback(MyProgressCallback)
 
     print(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
