@@ -54,7 +54,6 @@ def aligned_tokenization_task(example: str, dest_file_path: str, max_length: Lis
         pos_labels.append(_align_labels(ex, pos_words, tokenized))
     if len(tokenized_examples) == 1:
         assert len(pos_labels) == 1
-        tokenized_examples = tokenized_examples[0]
         input_ids = tokenized_examples[0]["input_ids"]
         special_tokens_mask = tokenized_examples[0]["special_tokens_mask"]
         pos_labels = pos_labels[0]
