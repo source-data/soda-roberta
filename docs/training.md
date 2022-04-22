@@ -1,5 +1,13 @@
 # General setup before training
 
+Update the `.env.example` and save as `.env`. Recommended:
+
+    LM_MODEL_PATH="/lm_models"
+    TOKCL_MODEL_PATH="/tokcl_models"
+    CACHE="/cache"
+    RUNS_DIR="/runs"
+    DUMMY_DIR="/dummy"
+
 Install `git-lfs` (https://git-lfs.github.com/).
 
 Build and start the Docker container with docker-compose:
