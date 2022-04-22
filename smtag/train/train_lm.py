@@ -229,6 +229,10 @@ def train(
     print("\nTraining arguments:")
     print(training_args)
     if model_type in ["Twin"]:
+        show_example = ShowExampleTwinLM(tokenizer)
+    elif model_type in ["VAE", "Autoencoder"]:
+        show_example = ShowExampleLM(tokenizer)
+    if model_type in ["Twin", "VAE"]:
         trainer = MyTrainer(
             model=model,
             args=training_args,
@@ -236,10 +240,10 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleTwinLM(tokenizer)]
+            callbacks=[show_example]
         )
     else:
-        trainer = MyTrainer(
+        trainer = Trainer(
             model=model,
             args=training_args,
             data_collator=data_collator,
