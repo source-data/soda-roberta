@@ -13,7 +13,7 @@ services:
     - tensorboard
     - celery
     - flower
-    runtime: nvidia
+    runtime: '${RUNTIME}'
     volumes: &volumes
     - .:/app
     - ./data:/data
@@ -31,7 +31,7 @@ services:
 
   tensorboard:
     image: smtag
-    runtime: nvidia
+    runtime: '${RUNTIME}'
     ports:
     - 6007:6007
     volumes:
