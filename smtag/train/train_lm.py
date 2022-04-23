@@ -28,8 +28,8 @@ from transformers.integrations import TensorBoardCallback
 from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    VAEForLM, TwinVAEForLM,
-    VAEConfig, VAEConfigLM, TwinVAEConfig
+    LatentEncoder, VAEForLM, Twin, TwinLM,
+    LatentConfig, VAEConfigLM, TwinConfig
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -147,6 +147,14 @@ def train(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
+    elif data_config_name == "NOLM":
+        if model_type == "Twin":
+            data_collator = MyDataCollatorForTwinSeq2Seq(
+                tokenizer=tokenizer,
+                max_length_list=config.max_length
+            )
+        else:
+            raise NotImplementedError(f"{data_config_name} is not implemented for {model_type}")
     else:
         raise NotImplementedError(f"{data_config_name} is not implemented")
 
@@ -192,35 +200,63 @@ def train(
                 AutoModel.from_pretrained(from_pretrained)
                 for i in range(num_models)
             ]
-            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
-            vae_configs = [
-                VAEConfigLM(
-                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
-                    hidden_features=256,
-                    z_dim=100,#1024,
-                    gamma=1.0,  # weight of lm loss as compared to z_loss
-                    sampling_iterations=200,
-                    seq_length=config.max_length[i],
-                    residuals=residuals,
-                    latent_var_loss=None  # "kl" or "mmd" or None
+            if data_config_name == "NOLM":
+                vae_configs = [
+                    LatentConfig(
+                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                        hidden_features=256,
+                        z_dim=96,
+                        sampling_iterations=200,
+                        seq_length=config.max_length[i],
+                        latent_var_loss=None # "kl" or "mmd" or None
+                    )
+                    for i in range(num_models)
+                ]
+                models = [
+                    LatentEncoder(
+                        pretrained=pretrained[i].get_encoder(),
+                        config=vae_configs[i]
+                    )
+                    for i in range(num_models)
+                ]
+                model_config = TwinConfig(
+                    lambd_a=1.0,  # weight off-diagonal vs diagonal
+                    mu=1.0,  # weight of twin_z_losss over other losses
                 )
-                for i in range(num_models)
-            ]
-            models = [
-                VAEForLM(
-                    pretrained=pretrained[i],
-                    config=vae_configs[i]
+                model = Twin(
+                    models=models,
+                    config=model_config
                 )
-                for i in range(num_models)
-            ]
-            model_config = TwinVAEConfig(
-                lambd_a=1.0,  # weight off-diagonal vs diagonal
-                mu=1.0,  # weight of twin_z_losss over other losses
-            )
-            model = TwinVAEForLM(
-                models=models,
-                config=model_config
-            )
+            elif data_config_name in ["SEQ2SEQ", "MLM"]:
+                residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
+                vae_configs = [
+                    VAEConfigLM(
+                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                        hidden_features=256,
+                        z_dim=96,
+                        gamma=1.0,  # weight of lm loss as compared to z_loss
+                        sampling_iterations=200,
+                        seq_length=config.max_length[i],
+                        residuals=residuals,
+                        latent_var_loss=None  # "kl" or "mmd" or None
+                    )
+                    for i in range(num_models)
+                ]
+                models = [
+                    VAEForLM(
+                        pretrained=pretrained[i],
+                        config=vae_configs[i]
+                    )
+                    for i in range(num_models)
+                ]
+                model_config = TwinConfig(
+                    lambd_a=1.0,  # weight off-diagonal vs diagonal
+                    mu=1.0,  # weight of twin_z_losss over other losses
+                )
+                model = TwinLM(
+                    models=models,
+                    config=model_config
+                )
         else:
             raise ValueError("Training TwinVAE from scratch is not implemented.")
 
@@ -229,6 +265,7 @@ def train(
     print("\nTraining arguments:")
     print(training_args)
     if model_type in ["Twin"]:
+        callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name == "SEQ2SEQ" else None
         trainer = MyTrainer(
             model=model,
             args=training_args,
@@ -236,7 +273,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleTwinLM(tokenizer)]
+            callbacks=callbacks
         )
     else:
         trainer = MyTrainer(
@@ -252,6 +289,7 @@ def train(
     # switch the Tensorboard callback to plot losses on same plot
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
     trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
+    # swithch ProgressCallback to use custom one that filters out non scalars from output
     trainer.remove_callback(ProgressCallback)
     trainer.add_callback(MyProgressCallback)
 

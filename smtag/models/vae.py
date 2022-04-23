@@ -1,3 +1,4 @@
+from json import encoder
 import pdb
 from dataclasses import dataclass
 from typing import List, Dict, Union
@@ -14,7 +15,7 @@ from transformers.modeling_outputs import (
     BaseModelOutput, MaskedLMOutput,
     BaseModelOutputWithPastAndCrossAttentions
 )
-# from transformers.utils import logging
+from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
@@ -52,9 +53,62 @@ def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
     return x
 
 
-class VAEConfig(BartConfig):
+def compute_mmd_loss(z: torch.Tensor, iterations: int) -> torch.Tensor:
+    # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
+    z_dim = z.size(-1)
+    z_samples = sample_z(z_dim, iterations)
+    z_loss = mmd(z_samples, z)
+    return z_loss
 
-    # inherited from BartConfig
+
+def compute_kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    # https://github.com/timbmg/Sentence-VAE/blob/master/train.py
+    kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
+    return kl.sum()
+
+def monte_carlo_kl_divergence(self, z, mu, std):
+    # https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
+    # --------------------------
+    # Monte carlo KL divergence
+    # --------------------------
+    # 1. define the first two probabilities (in this case Normal for both)
+    p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))  # N(0, 1) could be somethign else
+    q = torch.distributions.Normal(mu, std)
+
+    # 2. get the probabilities from the equation
+    log_qzx = q.log_prob(z)
+    log_pz = p.log_prob(z)
+
+    # kl
+    kl = (log_qzx - log_pz)
+
+    # sum over last dim to go from single dim distribution to multi-dim
+    kl = kl.sum(-1)
+    return kl
+
+
+def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
+    assert len(z) == 2, "for the moment, this works only on twin pairs, not for higher order"
+    assert z[0].size() == z[1].size(), "z dims have to be equal for square cross correl matrix"
+    # z = [t.cpu() for t in z]
+    batch_size, z_dim = z[0].size()
+    c = (z[0].T @ z[1]) / batch_size
+    diag = c.diagonal()
+    off_diag = c - torch.diag_embed(diag)
+    loss_diag = (diag - 1) ** 2
+    loss_off_diag = off_diag ** 2
+    loss_diag = loss_diag.sum() / z_dim  # num elements of diag scales as n
+    loss_off_diag = loss_off_diag.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as n^2 - n
+    # if torch.cuda.is_available():
+    #     loss_diag = loss_diag.cuda()
+    #     loss_off_diag = loss_off_diag.cuda()
+    #     c = c.cuda()
+    return loss_diag, loss_off_diag, c
+
+
+class LatentConfig(BartConfig):
+    # inherited from BartConfig:
+    #
     # vocab_size=50265,
     # max_position_embeddings=1024,
     # encoder_layers=12,
@@ -91,7 +145,6 @@ class VAEConfig(BartConfig):
         z_dim: int = 128,
         sampling_iterations: int = 100,
         seq_length: int = 512,
-        residuals: bool = True,
         latent_var_loss: str = 'mmd',
         **kwargs
     ):
@@ -101,8 +154,13 @@ class VAEConfig(BartConfig):
         self.z_dim = z_dim
         self.sampling_iterations = sampling_iterations
         self.seq_length = seq_length
-        self.residuals = residuals
         self.latent_var_loss = latent_var_loss
+
+
+class VAEConfig(LatentConfig):
+    def __init__(self, residuals: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.residuals = residuals
 
 
 class VAEConfigLM(VAEConfig):
@@ -112,15 +170,14 @@ class VAEConfigLM(VAEConfig):
         self.gamma = gamma  # weights of lm loss when composed with loss on latent var z
 
 
-class VAEConfigForTokenClassification(VAEConfig):
+class VAEConfigForTokenClassification(LatentConfig):
 
     def __init__(self, classifier_dropout: float = None, **kwargs):
         super().__init__(**kwargs)
         self.classifier_dropout = classifier_dropout
 
 
-@dataclass
-class TwinVAEConfig(VAEConfigLM):
+class TwinConfig(BartConfig):
 
     def __init__(self, lambd_a: float = None, mu: float = 1.0, **kwargs):
         super().__init__(**kwargs)
@@ -129,55 +186,80 @@ class TwinVAEConfig(VAEConfigLM):
 
 
 @dataclass
-class VAEOutput(MaskedLMOutput):
-    supp_data: Dict[str, torch.Tensor] = None
+class LatentEncoderOutput(ModelOutput):
+    loss: torch.Tensor = None
+    last_hidden_state: torch.Tensor = None
     z: torch.Tensor = None
     representation: torch.Tensor = None
+    supp_data: Dict[str, torch.Tensor] = None
 
 
 @dataclass
-class TwinOutput(MaskedLMOutput):
+class LatentDecoderOutput(ModelOutput):
+    loss: torch.Tensor = None
+    last_hidden_state: torch.Tensor = None
+    z: torch.Tensor = None
+    representation: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
-    # outputs: List[VAEOutput] = None
 
 
-class VAE(nn.Module):
+@dataclass
+class VAEOutput(ModelOutput):
+    loss: torch.Tensor = None
+    last_hidden_state: torch.Tensor = None
+    z: torch.Tensor = None
+    representation: torch.Tensor = None
+    supp_data: Dict[str, torch.Tensor] = None
+
+
+@dataclass
+class VAELMOutput(ModelOutput):
+    loss: torch.Tensor = None
+    logits: torch.Tensor = None
+    z: torch.Tensor = None
+    representation: torch.Tensor = None
+    supp_data: Dict[str, torch.Tensor] = None
+
+
+@dataclass
+class TwinOutput(ModelOutput):
+    loss: torch.Tensor = None
+    last_hidden_state: List[torch.Tensor] = None
+    representations: List[torch.Tensor] = None
+    supp_data: Dict[str, torch.Tensor] = None
+
+
+@dataclass
+class TwinLMOutput(ModelOutput):
+    loss: torch.Tensor = None
+    logits: List[torch.Tensor] = None
+    representations: List[torch.Tensor] = None
+    supp_data: Dict[str, torch.Tensor] = None
+
+
+class LatentEncoder(nn.Module):
 
     def __init__(
         self,
-        pretrained: BartForConditionalGeneration,
-        config: VAEConfig
+        pretrained,
+        config: LatentConfig
     ):
         super().__init__()
         self.config = config
-        # from the pretrained model
-        self.pretrained = pretrained
         self.freeze_pretrained = self.config.freeze_pretrained
-        self.encoder = self.pretrained.get_encoder()
-        self.decoder = self.pretrained.get_decoder()
-        # freeze the pretrained encoder and/or decoder
-        if self.freeze_pretrained == 'both':
-            for param in self.encoder.parameters():
-                param.requires_grad_(False)
-            for param in self.decoder.parameters():
-                param.requires_grad_(False)
-        elif self.freeze_pretrained == 'encoder':
-            for param in self.encoder.parameters():
-                param.requires_grad_(False)
-        elif self.freeze_pretrained == 'decoder':
-            for param in self.decoder.parameters():
+        self.model = pretrained
+        # freeze the pretrained model
+        if self.freeze_pretrained in ['both', 'encoder']:
+            for param in self.model.parameters():
                 param.requires_grad_(False)
         elif self.freeze_pretrained is None or self.freeze_pretrained == '':
             pass
         else:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
 
-        self.d_encoder = self.encoder.config.d_model
-        self.d_decoder = self.decoder.config.d_model
+        self.d_encoder = self.model.config.d_model
         self.seq_length = self.config.seq_length
-        self.pad_token_id = self.decoder.config.pad_token_id
-        self.decoder_start_token_id = self.decoder.config.decoder_start_token_id
-        self.residuals = self.config.residuals
+        self.pad_token_id = self.model.config.pad_token_id
         # latent vars
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
@@ -196,14 +278,11 @@ class VAE(nn.Module):
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
-        self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
-        self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
-        self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
 
-    def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
+    def forward(self, input_ids=None, labels=None, **kwargs) -> LatentEncoderOutput:
         # encoder
-        encoder_outputs: BaseModelOutput = self.encoder(input_ids=input_ids, **kwargs)
-        x = encoder_outputs[0]  # -> B x L x H_enc
+        encoder_outputs: BaseModelOutput = self.model(input_ids=input_ids, **kwargs)
+        x = encoder_outputs.last_hidden_state  # -> B x L x H_enc
         if self.freeze_pretrained in ['encoder', 'both']:
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
@@ -211,14 +290,14 @@ class VAE(nn.Module):
         # compress
         y = x  # keep x for later as residual
         y = self.vae_dropout(y)
-        y = self.fc_compress(y)  # -> B x L x H (example: 32 x 512 x 100)
+        y = self.fc_compress(y)  # -> B x L x H (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
         y = self.act_fct(y)
-        y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 51_200)
+        y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 65_536)
         # latent var
         y = self.vae_dropout(y)
         if self.latent_var_loss == "mmd" or self.latent_var_loss is None:
-            z = self.fc_z_1(y)  # -> B x Z
+            z = self.fc_z_1(y)  # -> B x Z  (example: 32 example x 128 dimensional latent var)
             z = self.norm_z(z)
             representation = z
         elif self.latent_var_loss == "kl":
@@ -230,6 +309,67 @@ class VAE(nn.Module):
             representation = self.norm_z(z_mean)  # for twin cross correlation: take latent before sampling
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
+
+        if self.latent_var_loss == "mmd":
+            loss = compute_mmd_loss(z, self.sampling_iterations)
+        elif self.latent_var_loss == "kl":
+            loss = compute_kl_loss(z_mean, z_logvar)
+            # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
+        elif self.latent_var_loss is None:
+            loss = torch.tensor(0)
+            if torch.cuda.is_available():
+                loss = loss.cuda()
+        else:
+            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
+
+        return LatentEncoderOutput(
+            loss=loss,
+            last_hidden_state=x,
+            z=z,
+            representation=representation,
+            supp_data={"loss_z": loss}
+        )
+
+
+class LatentDecoder(nn.Module):
+
+    def __init__(
+        self,
+        pretrained,
+        config: LatentConfig
+    ):
+        super().__init__()
+        self.config = config
+        self.freeze_pretrained = self.config.freeze_pretrained
+        self.model = pretrained
+        # freeze the pretrained model
+        if self.freeze_pretrained in ['both', 'decoder']:
+            for param in self.model.parameters():
+                param.requires_grad_(False)
+        elif self.freeze_pretrained is None or self.freeze_pretrained == '':
+            pass
+        else:
+            raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
+
+        self.d_decoder = self.model.config.d_model
+        self.seq_length = self.config.seq_length
+        self.pad_token_id = self.model.config.pad_token_id
+        self.decoder_start_token_id = self.model.config.decoder_start_token_id
+        self.residuals = self.config.residuals
+        # latent vars
+        self.hidden_features = self.config.hidden_features
+        self.z_dim = self.config.z_dim
+        # own layers
+        self.act_fct = nn.GELU()
+        self.vae_dropout = nn.Dropout(p=config.dropout)
+        self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
+        self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
+        self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
+
+    def forward(self, input_ids=None, encoder_outputs: LatentEncoderOutput = None, **kwargs) -> LatentDecoderOutput:
+        x = encoder_outputs.last_hidden_state
+        z = encoder_outputs.z
+        batch_size, z_dim = z.size()
         # decompress
         y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
@@ -244,60 +384,73 @@ class VAE(nn.Module):
             self.pad_token_id,
             self.decoder_start_token_id
         )
-        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
             input_ids=decoder_input_ids,
             encoder_hidden_states=y,
             **kwargs
         )
 
-        logits = decoder_outputs[0]
+        last_hidden_state = decoder_outputs.last_hidden_state
 
-        if self.latent_var_loss == "mmd": 
-            loss = self.compute_mmd_loss(z)
-        elif self.latent_var_loss == "kl":
-            loss = self.compute_kl_loss(z_mean, z_logvar)
-            # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
-        elif self.latent_var_loss is None:
-            loss = torch.tensor(0)
-            if torch.cuda.is_available():
-                loss = loss.cuda()
-        else:
-            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
+        loss = torch.tensor(0)
+        if torch.cuda.is_available():
+            loss = loss.cuda()
+
+        return LatentDecoderOutput(
+            loss=loss,
+            last_hidden_state=last_hidden_state
+        )
+
+
+class VAE(nn.Module):
+
+    def __init__(
+        self,
+        pretrained: BartForConditionalGeneration,
+        config: LatentConfig
+    ):
+        super().__init__()
+        self.config = config
+        # from the pretrained model
+        self.encoder = LatentEncoder(pretrained.get_encoder(), config)
+        self.decoder = LatentDecoder(pretrained.get_decoder(), config)
+        self.z_dim = self.encoder.z_dim
+
+    def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
+        encoder_outputs: LatentEncoderOutput = self.encoder(input_ids=input_ids, **kwargs)
+        decoder_outputs = self.decoder(input_ids=input_ids, encoder_outputs=encoder_outputs)
+
+        last_hidden_state = decoder_outputs.last_hidden_state
+
+        loss_z = encoder_outputs.loss
+        loss_decoder = decoder_outputs.loss
+        loss = loss_z + loss_decoder
 
         return VAEOutput(
             loss=loss,
-            logits=logits,
-            z=z,
-            representation=representation,
+            last_hidden_state=last_hidden_state,
+            z=encoder_outputs.z,
+            representation=encoder_outputs.representation,
             supp_data={"loss_z": loss}
         )
-
-    def compute_mmd_loss(self, z) -> torch.Tensor:
-        # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
-        z_samples = sample_z(self.z_dim, self.sampling_iterations)
-        z_loss = mmd(z_samples, z)
-        return z_loss
-
-    def compute_kl_loss(self, mean, logvar) -> torch.Tensor:
-        # https://github.com/timbmg/Sentence-VAE/blob/master/train.py
-        kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
-        return kl.sum()
 
 
 class VAEForLM(VAE):
 
     def __init__(self, pretrained: BartModel, config: VAEConfigLM, **kwargs):
         super().__init__(pretrained, config, **kwargs)
+        self.config = config
         self.gamma = config.gamma
         self.model = VAE(pretrained, config)
-        self.lm_head = nn.Linear(self.pretrained.config.d_model, self.pretrained.shared.num_embeddings, bias=False)
+        self.z_dim = self.model.z_dim
+        self.lm_head = nn.Linear(pretrained.config.d_model, pretrained.shared.num_embeddings, bias=False)
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
         outputs = self.model(input_ids, **kwargs)
         # outputs = super().forward(input_ids, labels, **kwargs)
 
         # trainable language model head
-        logits = self.lm_head(outputs.logits)
+        logits = self.lm_head(outputs.last_hidden_state)
         supp_data = outputs.supp_data
 
         # calculate composite loss
@@ -310,7 +463,7 @@ class VAEForLM(VAE):
         else:
             loss = None
             supp_data['loss_lm'] = loss_lm = None
-        return VAEOutput(
+        return VAELMOutput(
             loss=loss,
             logits=logits,
             z=outputs.z,
@@ -319,31 +472,19 @@ class VAEForLM(VAE):
         )
 
 
-class TwinVAEForLM(nn.Module):
+class Twin(nn.Module):
 
     def __init__(
         self,
-        models: Union[VAEForLM, List[VAEForLM]],
-        config: TwinVAEConfig
+        models: Union[LatentEncoder, List[LatentEncoder]],
+        config: TwinConfig
     ):
         super().__init__()
         self.models = nn.ModuleList(models) if isinstance(models, list) else nn.ModuleList([models])
         self.config = config
         self.z_dims = [m.z_dim for m in self.models]
-        self.lambd_a = self.config.lambd_a
         self.mu = self.config.mu
-        # from https://github.com/facebookresearch/barlowtwins/blob/main/main.py
-        # does not seem to help much when tested on trivial same-same control dataset
-        # projectors = []
-        # for i in range(len(self.models)):
-        #     projectors.append(nn.Sequential(
-        #         nn.Linear(self.z_dims[i], 2 * self.z_dims[i], bias=False),
-        #         nn.BatchNorm1d(2 * self.z_dims[i], affine=False),
-        #         nn.ReLU(inplace=True),
-        #         nn.Linear(2 * self.z_dims[i], self.z_dims[i], bias=False),
-        #         nn.BatchNorm1d(self.z_dims[i], affine=False))
-        #     )
-        # self.projectors = nn.ModuleList(projectors)
+        self.lambd_a = self.config.lambd_a
 
     def forward(
         self,
@@ -352,54 +493,124 @@ class TwinVAEForLM(nn.Module):
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
+        outputs = self.twin_prediction(input_ids, labels, attention_mask, **kwargs)
+
+        loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
+
+        representations = [out.representation for out in outputs]  # List[B X Z]
+
+        supp_data = {
+                "loss_diag": loss_diag,
+                "loss_off_diag": loss_off_diag,
+                "loss_twin_z": loss_twin_z,
+                "img_correl": cross_correl.unsqueeze(0),
+            }
+
+        supp_data = self.update_supp_data(supp_data, outputs)
+
+        return TwinOutput(
+            loss=loss,
+            last_hidden_state=[out.last_hidden_state for out in outputs],
+            representations=representations,
+            supp_data=supp_data
+        )
+
+    def twin_prediction(
+        self,
+        input_ids: List[torch.Tensor] = None,
+        labels: List[torch.Tensor] = None,
+        attention_mask: List[torch.Tensor] = None,
+        **kwargs
+    ) -> Union[List[LatentEncoderOutput], List[VAELMOutput]]:
+
+        # note: there are no labels for encoder-only Twin models
+        if len(self.models) == 1:  # single model for all twin examples
+            outputs = [
+                self.models[0](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+                for i in range(len(input_ids))
+            ]
+        else:  # one model trained for each type fo twin example
+            outputs = [
+                self.models[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+                for i in range(len(input_ids))
+            ]
+        return outputs
+
+    def all_losses(self, outputs):
+        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.representation for out in outputs])
+        losses = torch.stack([out.loss for out in outputs])
+        losses = losses.sum()
+        loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
+        loss = losses + loss_twin_z
+        return loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl
+
+    @staticmethod
+    def update_supp_data(supp_data, outputs):
+        for i, out in enumerate(outputs):
+            for k, v in out.supp_data.items():
+                supp_data[f"{k}_{i}"] = v
+        return supp_data
+
+
+class TwinLM(Twin):
+
+    def __init__(
+        self,
+        models: Union[VAEForLM, List[VAEForLM]],
+        config: TwinConfig
+    ):
+        super().__init__(models, config)
+
+    def forward(
+        self,
+        input_ids: List[torch.Tensor] = None,
+        labels: List[torch.Tensor] = None,
+        attention_mask: List[torch.Tensor] = None,
+        **kwargs
+    ):
+        outputs = self.twin_prediction(input_ids, labels, attention_mask, **kwargs)
+
+        loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
+
+        representations = [out.representation for out in outputs]  # List[B X Z]
+
+        supp_data = {
+                "loss_diag": loss_diag,
+                "loss_off_diag": loss_off_diag,
+                "loss_twin_z": loss_twin_z,
+                "img_correl": cross_correl.unsqueeze(0),
+                # "embeddings": torch.cat(representations, 0)  # not so easy...since trainer averages across GPUs
+            }
+
+        supp_data = self.update_supp_data(supp_data, outputs)
+
+        # the only difference with parent class: get logits from language model head
+        logits = [out.logits for out in outputs]
+
+        return TwinLMOutput(
+            loss=loss,
+            logits=logits,
+            representations=representations,
+            supp_data=supp_data
+        )
+
+    def twin_prediction(
+        self,
+        input_ids: List[torch.Tensor] = None,
+        labels: List[torch.Tensor] = None,
+        attention_mask: List[torch.Tensor] = None,
+        **kwargs
+    ) -> Union[List[LatentEncoderOutput], List[VAELMOutput]]:
+
+        # note: labels are required for language model Twin models
         if len(self.models) == 1:  # single model for all twin examples
             outputs = [
                 self.models[0](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
-            # z = [self.projectors[0](out.z) for i, out in enumerate(outputs)]
         else:  # one model trained for each type fo twin example
             outputs = [
                 self.models[i](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
-            # z = [self.projectors[i](out.z) for i, out in enumerate(outputs)]
-        loss_diag, loss_off_diag, cross_correl = self.compute_loss_on_twins([out.representation for out in outputs])
-        losses = torch.stack([out.loss for out in outputs])
-        loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
-        loss = losses.sum() + loss_twin_z
-        return TwinOutput(
-            loss=loss,
-            logits=[out.logits for out in outputs],
-            supp_data={
-                "loss_diag": loss_diag,
-                "loss_off_diag": loss_off_diag,
-                "loss_twin_z": loss_twin_z,
-                "loss_z_1": outputs[0].supp_data["loss_z"],
-                "loss_z_2": outputs[1].supp_data["loss_z"],
-                "loss_lm_1": outputs[0].supp_data["loss_lm"],
-                "loss_lm_2": outputs[1].supp_data["loss_lm"],
-                "img_correl": cross_correl.unsqueeze(0),
-            }
-        )
-
-    def compute_loss_on_twins(self, z: List[torch.Tensor]) -> torch.Tensor:
-        assert len(z) == 2, "for the moment, this works only on twin pairs, not for higher order"
-        assert z[0].size() == z[1].size(), "z dims have to be equal for square cross correl matrix"
-        z = [t.cpu() for t in z]
-        batch_size, z_dim = z[0].size()
-        c = (z[0].T @ z[1]) / batch_size
-        diag = c.diagonal()
-        off_diag = c - torch.diag_embed(diag)
-        # geeky way for off_diag https://github.com/facebookresearch/barlowtwins/blob/main/main.py
-        # re-order matrix with 1-element longer rows such that first column is the diag
-        # off_diag = c.flatten()[:-1].view(z_dim - 1, z_dim + 1)[:, 1:].flatten()
-        loss_diag = (diag - 1) ** 2
-        loss_off_diag = off_diag ** 2
-        loss_diag = loss_diag.sum() / z_dim  # num elements of diag scales as z_dim
-        loss_off_diag = loss_off_diag.sum() / (z_dim ** 2)  # num elements off_diag roughly scales as square of z_dim
-        if torch.cuda.is_available():
-            loss_diag = loss_diag.cuda()
-            loss_off_diag = loss_off_diag.cuda()
-            c = c.cuda()
-        return loss_diag, loss_off_diag, c
+        return outputs
