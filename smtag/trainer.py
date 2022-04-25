@@ -500,6 +500,8 @@ class MyTrainer(Trainer):
                     # MODIFICATION OF BASE CLASS
                     supp_data = {}
             else:
+                # TODO: this might not be correct; in case of pure representation optimization, there is a loss even there are no labels
+                # rather check if loss is None
                 loss = None
                 with self.autocast_smart_context_manager():
                     outputs = model(**inputs)

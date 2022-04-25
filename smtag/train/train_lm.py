@@ -176,15 +176,14 @@ def train(
     elif model_type == "VAE":
         if config.from_pretrained:
             pretrained = AutoModel.from_pretrained(from_pretrained)
-            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
-                z_dim=1024,
+                z_dim=96,
                 gamma=1E-1,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length,
-                residuals=residuals,
+                residuals=False,
                 latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(
@@ -205,10 +204,10 @@ def train(
                     LatentConfig(
                         freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                         hidden_features=256,
-                        z_dim=96,
+                        z_dim=1024, #96,
                         sampling_iterations=200,
                         seq_length=config.max_length[i],
-                        latent_var_loss=None # "kl" or "mmd" or None
+                        latent_var_loss=None  # "kl" or "mmd" or None
                     )
                     for i in range(num_models)
                 ]
@@ -228,7 +227,6 @@ def train(
                     config=model_config
                 )
             elif data_config_name in ["SEQ2SEQ", "MLM"]:
-                residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
                 vae_configs = [
                     VAEConfigLM(
                         freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
@@ -237,7 +235,7 @@ def train(
                         gamma=1.0,  # weight of lm loss as compared to z_loss
                         sampling_iterations=200,
                         seq_length=config.max_length[i],
-                        residuals=residuals,
+                        residuals=False,
                         latent_var_loss=None  # "kl" or "mmd" or None
                     )
                     for i in range(num_models)
@@ -265,7 +263,7 @@ def train(
     print("\nTraining arguments:")
     print(training_args)
     if model_type in ["Twin"]:
-        callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name == "SEQ2SEQ" else None
+        show_callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name in ["SEQ2SEQ", "MLM"] else None
         trainer = MyTrainer(
             model=model,
             args=training_args,
@@ -273,7 +271,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=callbacks
+            callbacks=show_callbacks
         )
     else:
         trainer = MyTrainer(
