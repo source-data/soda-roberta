@@ -31,8 +31,7 @@ class Config:
     def __post_init__(
         self,
         split_ratio,
-        tokenizer
-    ):
+        tokenizer):
         self.split_ratio = {
             "train": 0.7,
             "eval": 0.2,
@@ -46,12 +45,13 @@ class Config:
 
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
 # config = Config(tokenizer=char_level_tokenizer)
-config = Config(
-    max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-    from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-    model_type="Twin",  # "VAE" #  "Twin"  # "Autoencoder"
-    asynchr=True  # we need ordered examples while async returns results in non deterministic way
-)
+config = Config(from_pretrained='roberta-base')
+# config = Config(
+#     max_length=[512, 512],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
+#     model_type="Twin",  # "VAE" #  "Twin"  # "Autoencoder"
+#     asynchr=True  # we need ordered examples while async returns results in non deterministic way
+# )
 # config = Config(
 #     max_length=64, #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch

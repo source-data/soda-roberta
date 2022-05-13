@@ -316,7 +316,12 @@ class PreparatorTOKCL:
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         xml_encoder = XMLEncoder(xml)
+        print(xml_encoder.element.itertext())
         inner_text = innertext(xml_encoder.element)
+        # print(inner_text)
+        # print(inner_text.split())
+        # print([t for t in xml_encoder.element.itertext()])
+        # print(self.code_maps)
         # if isinstance(config.tokenizer, ByT5Tokenizer):
         #     inner_text = str(inner_text.encode('ascii', 'replace'))
         tokenized: BatchEncoding = self.tokenizer(
@@ -329,8 +334,17 @@ class PreparatorTOKCL:
         token_level_labels = {}
         for code_map in self.code_maps:
             xml_encoded = xml_encoder.encode(code_map)
+            # print(xml_encoded)
+            # print(xml_encoded["label_ids"])
+            # print(inner_text)
+            # stop
             labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
             token_level_labels[code_map.name] = labels
+
+        # print(token_level_labels)
+        # print(len(token_level_labels['panel_start']))
+        # print(len(inner_text.split()))
+        # stop
         return tokenized, token_level_labels
 
     def _align_labels(self, tokenized: BatchEncoding, xml_encoded: Dict, code_map: CodeMap, inner_text) -> List[int]:
