@@ -338,6 +338,7 @@ class PreparatorTOKCL:
             # print(xml_encoded["label_ids"])
             # print(inner_text)
             # stop
+            # Comment to take a look to
             labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
             token_level_labels[code_map.name] = labels
 
