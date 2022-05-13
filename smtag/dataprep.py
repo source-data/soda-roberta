@@ -344,7 +344,6 @@ class PreparatorTOKCL:
         print(token_level_labels)
         print(len(token_level_labels['panel_start']))
         print(len(inner_text.split()))
-        stop
         return tokenized, token_level_labels
 
     def _align_labels(self, tokenized: BatchEncoding, xml_encoded: Dict, code_map: CodeMap, inner_text) -> List[int]:
