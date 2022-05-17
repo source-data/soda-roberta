@@ -534,14 +534,9 @@ class GeneralTOKCL:
                 for offset in offsets:
                     char_level_labels[offset[0]] = "B-PANEL_START"
 
-            if code_map.name != "panel_start":
-                words, token_level_labels = self._from_char_to_token_level_labels(code_map,
-                                                                                  list(inner_text),
-                                                                                  char_level_labels)
-            else:
-                words, token_level_labels = self._panelization_token_level_labels(code_map,
-                                                                                  list(inner_text),
-                                                                                  char_level_labels)
+            words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                              list(inner_text),
+                                                                              char_level_labels)
 
             token_level_labels_dict[code_map.name] = token_level_labels
 
