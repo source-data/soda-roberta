@@ -316,35 +316,20 @@ class PreparatorTOKCL:
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         xml_encoder = XMLEncoder(xml)
-        print(xml_encoder.element.itertext())
         inner_text = innertext(xml_encoder.element)
-        # print(inner_text)
-        # print(inner_text.split())
-        # print([t for t in xml_encoder.element.itertext()])
-        # print(self.code_maps)
-        # if isinstance(config.tokenizer, ByT5Tokenizer):
-        #     inner_text = str(inner_text.encode('ascii', 'replace'))
         tokenized: BatchEncoding = self.tokenizer(
             inner_text,
             max_length=self.max_length,
             truncation=True,
             return_offsets_mapping=True,
-            add_special_tokens=True
+            add_special_tokens=False
         )
         token_level_labels = {}
         for code_map in self.code_maps:
             xml_encoded = xml_encoder.encode(code_map)
-            # print(xml_encoded)
-            # print(xml_encoded["label_ids"])
-            # print(inner_text)
-            # stop
             labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
             token_level_labels[code_map.name] = labels
 
-        #print(token_level_labels)
-        #print(len(token_level_labels['panel_start']))
-        #print(len(inner_text.split()))
-        stop
         return tokenized, token_level_labels
 
     def _align_labels(self, tokenized: BatchEncoding, xml_encoded: Dict, code_map: CodeMap, inner_text) -> List[int]:
@@ -466,3 +451,166 @@ class PreparatorTOKCL:
         print(f"longest example: {config.tokenizer.decode(longest_example)}")
         print(f"shortest example: {config.tokenizer.decode(shortest_example)}")
         return True
+
+
+class GeneralTOKCL:
+    """Processes source xml documents into examples that can be used in a token classification task.
+    It tokenizes the text with the provided tokenizer.
+    The XML is used to generate labels according to the provided CodeMap.
+    The datset is then split into train, eval, and test set and saved into json line files.
+
+    Args:
+        source_file_path (Path):
+            The path to the source file.
+        dest_file_path (Path):
+            The path of the destination file where the files with the encoded labeled examples should be saved.
+        code_maps (List[CodeMap)]:
+            A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
+        max_length (int):
+            Maximum number of token in one example. Examples will be truncated.
+        subsets (List[str]):
+            Files with the data splits to be used.
+    """
+    def __init__(
+        self,
+        source_dir_path: str,
+        dest_dir_path: str,
+        code_maps: List[CodeMap],
+        max_length: int = config.max_length,
+        subsets: List[str] = ["train", "eval", "test"]
+    ):
+        self.source_dir_path = Path(source_dir_path)
+        self.subsets = subsets
+        self.dest_dir_path = dest_dir_path
+        if not self.dest_dir_path:
+            basename = self.source_dir_path.name
+            self.dest_dir_path = Path("/data/json") / basename
+        else:
+            self.dest_dir_path = Path(self.dest_dir_path)
+        if self.dest_dir_path.exists():
+            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.dest_dir_path.parents[0].exists():
+            raise ValueError(f"{self.dest_dir_path.parents[0]} does not exist, cannot proceed")
+        else:
+            self.dest_dir_path.mkdir()
+            print(f"{self.dest_dir_path} created")
+        self.code_maps = code_maps
+        self.max_length = max_length
+
+    def run(self):
+        """Runs the coding and labeling of xml examples.
+        Saves the resulting text files to the destination directory.
+        """
+        for subset in self.subsets:
+            print(f"Preparing: {subset}")
+            source_file_path = self.source_dir_path / f"{subset}.txt"
+            dest_file_path = self.dest_dir_path / f"{subset}.jsonl"
+            examples = []
+            with source_file_path.open() as f:
+                lines = f.readlines()
+                for line in tqdm(lines):
+                    xml_example: Element = fromstring(line)
+                    tokens, token_level_labels = self._encode_example(xml_example)
+                    examples.append({
+                        'words': tokens,
+                        'label_ids': token_level_labels})
+            self._save_json(examples, dest_file_path)
+
+    def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
+        xml_encoder = XMLEncoder(xml)
+        inner_text = innertext(xml_encoder.element)
+        token_level_labels_dict = {}
+
+        for code_map in self.code_maps:
+            # At this point we have a tag for each character.
+            # It is here where I should put chars together into words
+            words, label_words = [], []
+            xml_encoded = xml_encoder.encode(code_map)
+            char_level_labels = xml_encoded['label_ids']
+
+            words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                              list(inner_text),
+                                                                              char_level_labels)
+            token_level_labels_dict[code_map.name] = token_level_labels
+
+        return words,  token_level_labels_dict
+
+    def _from_char_to_token_level_labels(self, code_map: CodeMap, text: List[str], labels: List) -> List:
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying Tthe XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of the characters inside the text of the XML elements
+            labels List:        List of labels for each character inside the XML elements. They will be
+                                a mix of integers and None
+
+        Returns:
+            List[str]           Word-level tokenized labels for the input text
+        """
+
+        word, label_word = '', ''
+        word_level_words, word_level_labels = [], []
+
+        for i, char in enumerate(text):
+            if char.isalnum():
+                word += char
+                label_word += str(labels[i]).replace("None", "O")
+            elif char == " ":
+                if word not in [""]:
+                    word_level_words.append(word)
+                    word_level_labels.append(label_word[0])
+                word = ''
+                label_word = ''
+            else:
+                if word not in [""]:
+                    word_level_words.append(word)
+                    word_level_labels.append(label_word[0])
+                word_level_words.append(char)
+                word_level_labels.append(str(labels[i]).replace("None", "O"))
+                word = ''
+                label_word = ''
+
+        word_level_iob2_labels = self._labels_to_iob2(code_map, word_level_words, word_level_labels)
+        assert len(word_level_words) == len(word_level_iob2_labels), "Length of labels and words not identical!"
+        return word_level_words, word_level_iob2_labels
+
+    @staticmethod
+    def _labels_to_iob2(code_map: CodeMap, words: List[str], labels: List) -> List:
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying The XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of separated words
+            labels List:        List of labels for each word inside the XML elements.
+
+        Returns:
+            List[str]           Word-level tokenized labels in IOB2 format
+
+        """
+        iob2_labels = []
+
+        for idx, label in enumerate(labels):
+            if code_map.name == "panel_start":
+                iob2_labels.append("O")
+
+            if code_map.name != "panel_start":
+                if label == "O":
+                    iob2_labels.append(label)
+
+                if label != "O":
+                    if idx == 0:
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2])
+                    if (idx > 0) and (labels[idx - 1] != label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2])
+                    if (idx > 0) and (labels[idx - 1] == label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+
+        return iob2_labels
+
+    @staticmethod
+    def _save_json(examples: List, dest_file_path: Path):
+        # saving line by line to json-line file
+        with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            shuffle(examples)
+            for example in examples:
+                f.write(f"{json.dumps(example)}\n")

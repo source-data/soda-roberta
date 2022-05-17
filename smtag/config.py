@@ -45,7 +45,7 @@ class Config:
 
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
 # config = Config(tokenizer=char_level_tokenizer)
-config = Config(from_pretrained='roberta-base')
+config = Config()
 # config = Config(
 #     max_length=[512, 512],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
