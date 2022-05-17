@@ -526,11 +526,23 @@ class GeneralTOKCL:
             # It is here where I should put chars together into words
             words, label_words = [], []
             xml_encoded = xml_encoder.encode(code_map)
-            char_level_labels = xml_encoded['label_ids']
+            if code_map.name != "panel_start":
+                char_level_labels = xml_encoded['label_ids']
+            else:
+                char_level_labels = ["O"] * len(xml_encoded['label_ids'])
+                offsets = xml_encoded["offsets"]
+                for offset in offsets:
+                    char_level_labels[offset[0]] = "B-PANEL_START"
 
-            words, token_level_labels = self._from_char_to_token_level_labels(code_map,
-                                                                              list(inner_text),
-                                                                              char_level_labels)
+            if code_map.name != "panel_start":
+                words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                                  list(inner_text),
+                                                                                  char_level_labels)
+            else:
+                words, token_level_labels = self._panelization_token_level_labels(code_map,
+                                                                                  list(inner_text),
+                                                                                  char_level_labels)
+
             token_level_labels_dict[code_map.name] = token_level_labels
 
         return words,  token_level_labels_dict
@@ -558,13 +570,27 @@ class GeneralTOKCL:
             elif char == " ":
                 if word not in [""]:
                     word_level_words.append(word)
-                    word_level_labels.append(label_word[0])
+                    if code_map.name != "panel_start":
+                        word_level_labels.append(label_word[0])
+                    else:
+                        if "B-PANEL_START" in label_word:
+                            word_level_labels.append("B-PANEL_START")
+                        else:
+                            word_level_labels.append("O")
+
                 word = ''
                 label_word = ''
             else:
                 if word not in [""]:
                     word_level_words.append(word)
-                    word_level_labels.append(label_word[0])
+                    if code_map.name != "panel_start":
+                        word_level_labels.append(label_word[0])
+                    else:
+                        if "B-PANEL_START" in label_word:
+                            word_level_labels.append("B-PANEL_START")
+                        else:
+                            word_level_labels.append("O")
+
                 word_level_words.append(char)
                 word_level_labels.append(str(labels[i]).replace("None", "O"))
                 word = ''
