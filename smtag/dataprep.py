@@ -534,9 +534,13 @@ class GeneralTOKCL:
                 for offset in offsets:
                     char_level_labels[offset[0]] = "B-PANEL_START"
 
-            words, token_level_labels = self._from_char_to_token_level_labels(code_map,
-                                                                              list(inner_text),
-                                                                              char_level_labels)
+            if code_map.name != "panel_start":
+                words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                                  list(inner_text),
+                                                                                  char_level_labels)
+            else:
+                words, token_level_labels = self._from_char_to_token_level_labels_panel(list(inner_text),
+                                                                                        char_level_labels)
 
             token_level_labels_dict[code_map.name] = token_level_labels
 
@@ -565,26 +569,13 @@ class GeneralTOKCL:
             elif char == " ":
                 if word not in [""]:
                     word_level_words.append(word)
-                    if code_map.name != "panel_start":
-                        word_level_labels.append(label_word[0])
-                    else:
-                        if "B-PANEL_START" in label_word:
-                            word_level_labels.append("B-PANEL_START")
-                        else:
-                            word_level_labels.append("O")
-
+                    word_level_labels.append(label_word[0])
                 word = ''
                 label_word = ''
             else:
                 if word not in [""]:
                     word_level_words.append(word)
-                    if code_map.name != "panel_start":
-                        word_level_labels.append(label_word[0])
-                    else:
-                        if "B-PANEL_START" in label_word:
-                            word_level_labels.append("B-PANEL_START")
-                        else:
-                            word_level_labels.append("O")
+                    word_level_labels.append(label_word[0])
 
                 word_level_words.append(char)
                 word_level_labels.append(str(labels[i]).replace("None", "O"))
@@ -594,6 +585,49 @@ class GeneralTOKCL:
         word_level_iob2_labels = self._labels_to_iob2(code_map, word_level_words, word_level_labels)
         assert len(word_level_words) == len(word_level_iob2_labels), "Length of labels and words not identical!"
         return word_level_words, word_level_iob2_labels
+
+    @staticmethod
+    def _from_char_to_token_level_labels_panel(text: List[str], labels: List) -> List:
+        """
+        Args:
+            text List[str]:     List of the characters inside the text of the XML elements
+            labels List:        List of labels for each character inside the XML elements. They will be
+                                a mix of integers and None
+
+        Returns:
+            List[str]           Word-level tokenized labels for the input text
+        """
+
+        word_level_words, word_level_labels = [], []
+        word, label_word = '', ''
+
+        for i, char in enumerate(text):
+            if char.isalnum():
+                word += char
+                label_word += str(labels[i])
+            elif char == " ":
+                if word not in [""]:
+                    word_level_words.append(word)
+                    if "B-PANEL_START" in label_word:
+                        word_level_labels.append("B-PANEL_START")
+                    else:
+                        word_level_labels.append("O")
+                word = ''
+                label_word = ''
+            else:
+                if word not in [""]:
+                    word_level_words.append(word)
+                    if "B-PANEL_START" in label_word:
+                        word_level_labels.append("B-PANEL_START")
+                    else:
+                        word_level_labels.append("O")
+                word_level_words.append(char)
+                word_level_labels.append(labels[i])
+                word = ''
+                label_word = ''
+
+        return word_level_words, word_level_labels
+
 
     @staticmethod
     def _labels_to_iob2(code_map: CodeMap, words: List[str], labels: List) -> List:

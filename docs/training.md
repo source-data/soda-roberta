@@ -161,22 +161,22 @@ Download the SourceData raw dataset:
 
 Note that the latest dataset can be prepared from the SourceData REST API using:
 
-    python -m smtag.cli.prepo.get_sd  # takes a very long time!!
+    python -m smtag.cli.prepro.get_sd  # takes a very long time!!
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 
-    python -m common.split /data/xml/sourcedata/ --extension xml
-    python -m common.split /data/xml/panelization_compendium --extension xml
+    python -m smtag.cli.prepro.split /data/xml/sourcedata/ --extension xml
+    python -m smtag.cli.prepro.split /data/xml/panelization_compendium --extension xml
 
 Extract the examples for NER and ROLES using an XPAth that identifies individual panel legends within figure legends:
 
     mkdir /data/xml/sd_panels
-    python -m common.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
 
 Using an XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
     mkdir /data/xml/sd_panelization
-    python -m common.extract /data/xml/panelization_compendium /data/xml/sd_panelization --xpath .//fig --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/panelization_compendium /data/xml/sd_panelization --xpath .//fig --keep_xml
 
 Prepare the datasets for NER, ROLES and PANELIZATION:
 
@@ -184,6 +184,19 @@ Prepare the datasets for NER, ROLES and PANELIZATION:
     python -m tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
     mkdir /data/json/sd_panelization
     python -m tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization
+
+The previous code will generate the data with the special `roberta-base` tokenization. 
+That means that the data can be used **only** for models that have been pre-trained
+using the `roberta-base` tokenizer. To generate a more general text that can be tokenized
+with any tokenizer the following commands can be used.
+
+    mkdir /data/json/sd_panels_general_tokenization
+    python -m smtag.cli.tokcl.generatlTOKCL /data/xml/sd_panels /data/json/sd_panels_general_tokenization
+    mkdir /data/json/sd_panelization_general_tokenization
+    python -m smtag.cli.tokcl.generatlTOKCL /data/xml/sd_panelization /data/json/sd_panelization_general_tokenization
+
+The resulting dataset will contain the text split into words, being each word correctly
+labeled.
 
 ## Train the models
 
