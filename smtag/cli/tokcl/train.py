@@ -6,7 +6,7 @@ from ...train.train_tokcl import TrainingArgumentsTOKCL, train
 from ...config import config
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((TrainingArgumentsTOKCL), description="Traing script.")
+    parser = HfArgumentParser(TrainingArgumentsTOKCL, description="Training script.")
     parser.add_argument("loader_path", help="Path of the loader.")
     parser.add_argument("data_config_name", choices=["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"], help="Name of the dataset configuration to use.")
     parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")

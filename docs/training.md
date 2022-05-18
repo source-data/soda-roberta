@@ -200,14 +200,8 @@ labeled.
 
 ## Train the models
 
-Train the NER task to learn entity types:
+The `roberta-base` tokenize models can be trained using the following command, where
+`TASK_NAME` must be replaced by one of the following 
+`["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]`
 
-    python -m tokcl.train NER
-
-Train the ROLES task to learn entity roles:
-
-    python -m tokcl.train ROLES
-
-Train the PANELIZATION task to learn panel segmentation:
-
-    python -m tokcl.train PANELIZATION
+    python -m smtag.cli.tokcl.train TASK_NAME
