@@ -100,7 +100,7 @@ def train(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[ShowExampleTOKCL(tokenizer)]
+        # callbacks=[ShowExampleTOKCL(tokenizer)]
     )
 
     trainer.train()
