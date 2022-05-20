@@ -4,19 +4,20 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --masked_data_collator True \
                                 --tokenizer bert-base-cased \
                                 --do_predict True \
-                                --per_device_train_batch_size 8\
-                                --per_device_eval_batch_size 8\
+                                --prediction_loss_only False \
+                                --per_device_train_batch_size 16\
+                                --per_device_eval_batch_size 32\
                                 --evaluation_strategy steps \
-                                --eval_steps 500 \
+                                --eval_steps 1000 \
                                 --label_smoothing_factor 0.0 \
-                                --learning_rate 0.0001 \
+                                --learning_rate 0.0005 \
                                 --num_train_epochs 5 \
                                 --lr_scheduler_type linear \
                                 --save_strategy steps \
-                                --save_steps 500 \
+                                --save_steps 1000 \
                                 --seed 42 \
                                 --load_best_model_at_end True \
-                                --metric_for_best_model overall_f1 \
+                                --metric_for_best_model f1 \
                                 --greater_is_better True \
                                 --report_to tensorboard \
                                 --push_to_hub True \
