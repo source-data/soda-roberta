@@ -99,7 +99,6 @@ def train(
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        test_dataset=test_dataset,
         compute_metrics=compute_metrics,
 #        callbacks=[ShowExampleTOKCL(tokenizer)]
     )
