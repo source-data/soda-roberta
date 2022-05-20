@@ -1,5 +1,11 @@
 FROM nvcr.io/nvidia/pytorch:22.01-py3
 
+# Install a rust compiler, which is required to build the tokenizers package from source on the arm64 arch.
+# tokenizers is a dependency of transformers, which we're installing below.
+RUN apt-get install curl build-essential -y
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 RUN apt-get update \
 && pip install --upgrade pip setuptools \
 && pip install --upgrade pip \
@@ -24,8 +30,11 @@ RUN apt-get update \
 # apparently need separate installation for progress bar stuff in jupyter
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
 && pip install ipywidgets
+
 # optional for plotting
-RUN pip install plotly 
+RUN pip install plotly
+
+RUN apt-get install -y git-lfs
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*1

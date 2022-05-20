@@ -77,6 +77,7 @@ def train(
 
     print(f"\nLoading and tokenizing datasets found in {data_dir}.")
     print(f"using {loader_path} as dataset loader.")
+    data = load_dataset("drAbreu/sd-nlp-2", "NER")
     train_dataset, eval_dataset, test_dataset = load_dataset(
         path=loader_path,
         name=data_config_name,
