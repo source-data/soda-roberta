@@ -1,18 +1,55 @@
-FROM python:3.7-slim-buster
+FROM python:3.7-slim-buster AS base-compile-image
 
-WORKDIR /app
+# amd64 or arm64, for example
+ARG TARGETARCH
 
 RUN apt-get update
+
+RUN apt-get install -y git-lfs
+# Set up the virtualenv that is copied to the build-image
+RUN python -m venv /opt/venv
+# Make sure we use the virtualenv:
+ENV PATH="/opt/venv/bin:$PATH"
+
 RUN pip install --upgrade pip
+
 RUN pip install torch==1.10
-RUN pip install tensorflow==2.4.0
-RUN pip install transformers==4.15.0
 RUN pip install python-dotenv==0.15.0
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*1
 
+# The normal tensorflow package doesn't run on ARM, we need a special version for that.
+# The blocks below acts basically like an if-else statement:
+# if (ARM)   install tensorflow-aarch64
+# elif (x86) install tensorflow
+# else       fail
+FROM base-compile-image AS compile-image-arm64
+ENV TENSORFLOW_PACKAGE=tensorflow-aarch64==2.8.0
+
+# Install a rust compiler, which is required to build the tokenizers package from source on the arm64 arch.
+# tokenizers is a dependency of transformers, which we're installing below.
+RUN apt-get install curl build-essential -y
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+
+FROM base-compile-image AS compile-image-amd64
+ENV TENSORFLOW_PACKAGE=tensorflow==2.4.0
+
+
+FROM compile-image-${TARGETARCH} AS compile-image
+RUN pip install transformers==4.15.0
+RUN  pip install ${TENSORFLOW_PACKAGE}
+
+
+FROM python:3.7-slim-buster AS build-image
+
+COPY --from=compile-image /opt/venv /opt/venv
+# Make sure we use the virtualenv:
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
 RUN mkdir /app/smtag
+
 COPY ./pipeline.py /app/smtag/pipeline.py
 COPY ./xml2labels.py /app/smtag/xml2labels.py
 COPY ./cli/inference/tag.py /app/smtag/cli/inference/tag.py
