@@ -100,20 +100,6 @@ class TrainModel:
         # of the training hyperparameters
         if self.from_pretrained in ['roberta-base', 'EMBO/bio-lm']:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
-            self.model = AutoModelForTokenClassification.from_config(
-                            RobertaConfig(**{
-                                "architectures": [
-                                    "RobertaForMaskedLM"
-                                ],
-                                "_name_or_path": self.from_pretrained,
-                                "classifier_dropout": self.dropout,
-                                "hidden_size": self.hidden_size,
-                                "num_labels":  list(self.label2id.keys()),
-                                "max_position_embeddings": self._max_position_embeddings(),
-                                "id2label": self.id2label,
-                                "label2id": self.label2id}
-                                          )
-            )
         elif self.from_pretrained in ['bert-base-cased', 'bert-base-uncased',
                                       'dmis-lab/biobert-base-cased-v1.2',
                                       'dmis-lab/biobert-base-cased-v1.1',
@@ -121,28 +107,16 @@ class TrainModel:
                                       'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
                                       'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext']:
             self.hidden_size = self.hidden_size * BertConfig().num_attention_heads
-            self.model = AutoModelForTokenClassification.from_config(
-                BertConfig(**{
-                    "_name_or_path": self.from_pretrained,
-                    "architectures": [
-                        "BertForMaskedLM"
-                    ],
-                    "classifier_dropout": self.dropout,
-                    "hidden_size": self.hidden_size,
-                    "num_labels": list(self.label2id.keys()),
-                    "max_position_embeddings": self._max_position_embeddings(),
-                    "id2label": self.id2label,
-                    "label2id": self.label2id}
-                              )
-            )
-        else:
-            self.model = AutoModelForTokenClassification.from_pretrained(
-                self.from_pretrained,
-                num_labels=len(list(self.label2id.keys())),
-                max_position_embeddings=self._max_position_embeddings(),
-                id2label=self.id2label,
-                label2id=self.label2id
-            )
+
+        self.model = AutoModelForTokenClassification.from_pretrained(
+            self.from_pretrained,
+            num_labels=len(list(self.label2id.keys())),
+            max_position_embeddings=self._max_position_embeddings(),
+            id2label=self.id2label,
+            label2id=self.label2id,
+            classifier_dropout=self.dropout,
+            hidden_size=self.hidden_size,
+        )
 
         model_config = self.model.config
         print(f"\nTraining arguments for model type {self.model_type}:")
