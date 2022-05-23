@@ -132,11 +132,13 @@ class TrainModel:
             compute_metrics=self.compute_metrics,
             # callbacks=[ShowExampleTOKCL(tokenizer)]
         )
-
-        self.trainer.train()
         # switch the Tensorboard callback to plot losses on same plot
         self.trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
         self.trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
+
+        print(f"CUDA available: {torch.cuda.is_available()}")
+
+        self.trainer.train()
 
         if self.do_test:
             self._run_test()
@@ -144,8 +146,8 @@ class TrainModel:
 
     def _tokenize_and_align_labels(self, examples):
         tokenized_inputs = self.tokenizer(examples['words'],
-                                         truncation=True,
-                                         is_split_into_words=True)
+                                          truncation=True,
+                                          is_split_into_words=True)
 
         all_labels = examples['labels']
         new_labels = []
