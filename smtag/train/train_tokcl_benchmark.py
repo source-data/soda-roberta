@@ -297,7 +297,9 @@ class TrainModel:
             "training_epochs": TrainingArgumentsTOKCL.num_train_epochs,
             "training_examples": len(self.train_dataset),
             "training_steps": len(self.train_dataset) * TrainingArgumentsTOKCL.num_train_epochs,
-            "training_batch_size": TrainingArguments.per_device_train_batch_size,
+            "training_batch_size": TrainingArguments.learning_rate,
+            "learning_rate_init": TrainingArguments.lr_scheduler_type.name,
+            "learning_rate_scheduled": TrainingArguments.per_device_train_batch_size,
             "accuracy_metrics": self.test_results}
 
         if exists(self.file_):

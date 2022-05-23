@@ -15,7 +15,8 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --label_smoothing_factor 0.0 \
                                 --learning_rate 0.0001 \
                                 --num_train_epochs 1 \
-                                --lr_scheduler_type linear \
+                                --lr_scheduler_type sinusoidal \
+                                --num_warmup_steps 50 \
                                 --save_strategy epoch \
                                 --save_steps 1 \
                                 --seed 42 \
