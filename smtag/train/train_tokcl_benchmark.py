@@ -130,7 +130,7 @@ class TrainModel:
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
             compute_metrics=self.compute_metrics,
-            # callbacks=[ShowExampleTOKCL(tokenizer)]
+            # callbacks=[TensorBoardCallback]
         )
         # switch the Tensorboard callback to plot losses on same plot
         self.trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
@@ -307,7 +307,7 @@ class TrainModel:
             "training_examples": len(self.train_dataset),
             "training_steps": len(self.train_dataset) * TrainingArgumentsTOKCL.num_train_epochs,
             "training_batch_size": TrainingArguments.learning_rate,
-            "learning_rate_init": TrainingArguments.lr_scheduler_type.name,
+            "learning_rate_init": TrainingArguments.lr_scheduler_type,
             "learning_rate_scheduled": TrainingArguments.per_device_train_batch_size,
             "accuracy_metrics": self.test_results}
 
