@@ -5,16 +5,16 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --tokenizer bert-base-cased \
                                 --do_predict True \
                                 --do_test True \
-                                --dropout 0.2 \
+                                --dropout 0.0 \
                                 --hidden_size_multiple 64 \
                                 --prediction_loss_only False \
-                                --per_device_train_batch_size 16\
+                                --per_device_train_batch_size 32\
                                 --per_device_eval_batch_size 32\
                                 --evaluation_strategy epoch \
                                 --eval_steps 1 \
                                 --label_smoothing_factor 0.0 \
-                                --learning_rate 0.0005 \
-                                --num_train_epochs 5 \
+                                --learning_rate 0.005 \
+                                --num_train_epochs 1 \
                                 --lr_scheduler_type linear \
                                 --save_strategy epoch \
                                 --save_steps 1 \

@@ -55,7 +55,8 @@ class TrainModel:
                  no_cache: bool = True,
                  do_test: bool = False,
                  dropout: float = 0.2,
-                 hidden_size_multiple: int = 50
+                 hidden_size_multiple: int = 50,
+                 file_: str = "./benchmarking_results.json"
                  ):
 
         self.training_args = training_args
@@ -71,6 +72,7 @@ class TrainModel:
         self.dropout = dropout
         self.hidden_size = hidden_size_multiple
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.file_ = file_
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
@@ -100,6 +102,7 @@ class TrainModel:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
             self.model = AutoModelForTokenClassification.from_config(
                             RobertaConfig(**{
+                                "_name_or_path": self.from_pretrained,
                                 "classifier_dropout": self.dropout,
                                 "hidden_size": self.hidden_size,
                                 "num_labels":  list(self.label2id.keys()),
@@ -117,6 +120,7 @@ class TrainModel:
             self.hidden_size = self.hidden_size * BertConfig().num_attention_heads
             self.model = AutoModelForTokenClassification.from_config(
                 BertConfig(**{
+                    "_name_or_path": self.from_pretrained,
                     "classifier_dropout": self.dropout,
                     "hidden_size": self.hidden_size,
                     "num_labels": list(self.label2id.keys()),
@@ -126,7 +130,7 @@ class TrainModel:
                               )
             )
         else:
-            self.model = AutoModelForTokenClassification.from_config(
+            self.model = AutoModelForTokenClassification.from_pretrained(
                 self.from_pretrained,
                 num_labels=len(list(self.label2id.keys())),
                 max_position_embeddings=self._max_position_embeddings(),
@@ -153,6 +157,7 @@ class TrainModel:
 
         if self.do_test:
             self._run_test()
+            self._save_benchmark_results()
 
     def _tokenize_and_align_labels(self, examples):
         tokenized_inputs = self.tokenizer(examples['words'],
@@ -294,7 +299,7 @@ class TrainModel:
 
         self.test_results = metric.compute()
 
-    def save_benchmark_results(self, file_):
+    def _save_benchmark_results(self):
         data_output = {
             "date": datetime.today(),
             "model_name": self.model_name,
@@ -315,8 +320,8 @@ class TrainModel:
             "training_batch_size": TrainingArguments.per_device_train_batch_size,
             "accuracy_metrics": self.test_results}
 
-        if exists(file_):
-            with open(file_) as json_file:
+        if exists(self.file_):
+            with open(self.file_) as json_file:
                 data = json.load(json_file)
                 data["test_results"].append(data_output)
             json_string = json.dumps(data)
@@ -324,7 +329,7 @@ class TrainModel:
             to_file = {'test_results': [data_output]}
             json_string = json.dumps(to_file)
 
-        with open(file_, 'w') as outfile:
+        with open(self.file_, 'w') as outfile:
             outfile.write(json_string)
 
 
