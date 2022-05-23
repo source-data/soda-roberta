@@ -9,6 +9,7 @@ services:
       #   - user_id=${USER_ID}
       #   - group_id=${GROUP_ID}
     image: smtag
+    runtime: nvidia
     depends_on:
     - tensorboard
     - celery
@@ -31,6 +32,7 @@ services:
 
   tensorboard:
     image: smtag
+    runtime: nvidia
     ports:
     - 6007:6007
     volumes:
@@ -40,6 +42,7 @@ services:
 
   celery:
     image: smtag
+    runtime: nvidia
     depends_on:
     - rabbitmq
     env_file:
@@ -50,6 +53,7 @@ services:
 
   flower:
     image: smtag
+    runtime: nvidia
     depends_on:
     - celery
     volumes: *volumes
@@ -60,6 +64,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
+    runtime: nvidia
     working_dir: /app
     ports:
       # The standard AMQP protocol port
