@@ -9,14 +9,10 @@ from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
-    BartModel
+    RobertaConfig, BertConfig
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
-from ..models.experimental import (
-    BecauseTokenClassification,
-    BecauseConfigForTokenClassification,
-)
 from ..data_collator import DataCollatorForMaskedTokenClassification
 from ..trainer import MyTrainer
 from ..metrics import MetricsTOKCL
@@ -26,7 +22,10 @@ from ..config import config
 from .. import LM_MODEL_PATH, TOKCL_MODEL_PATH, CACHE, RUNS_DIR
 from datasets.arrow_dataset import Dataset
 from typing import Dict, Union, Tuple
-
+from torch.utils.data import DataLoader
+from datasets import load_metric
+from os.path import exists
+import json
 # changing default values
 @dataclass
 class TrainingArgumentsTOKCL(TrainingArguments):
@@ -44,184 +43,287 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     replacement_probability: float = field(default=None)
     select_labels: bool = field(default=False)
 
+class TrainModel:
+    def __init__(self, training_args: TrainingArgumentsTOKCL,
+                 loader_path: str,
+                 task: str,
+                 tokenizer_name: str,
+                 from_pretrained: str,
+                 model_type: str = 'Autoencoder',
+                 masked_data_collator: bool = False,
+                 data_dir: str = "",
+                 no_cache: bool = True,
+                 do_test: bool = False,
+                 dropout: float = 0.2,
+                 hidden_size_multiple: int = 50
+                 ):
 
-def train(
-    training_args: TrainingArgumentsTOKCL,
-    loader_path: str,
-    task: str,
-    tokenizer_name: str,
-    from_pretrained: str,
-    model_type: str = 'Autoencoder',
-    masked_data_collator: bool = False,
-    data_dir: str = "",
-    no_cache: bool = True,
-    do_test: bool = False,
-):
-    # Define the tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        self.training_args = training_args
+        self.loader_path = loader_path
+        self.task = task
+        self.tokenizer_name = tokenizer_name
+        self.from_pretrained = from_pretrained
+        self.model_type = model_type
+        self.masked_data_collator = masked_data_collator
+        self.data_dir = data_dir
+        self.no_cache = no_cache
+        self.do_test = do_test
+        self.dropout = dropout
+        self.hidden_size = hidden_size_multiple
+        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    # Downloading the dataset
-    train_dataset, eval_dataset, test_dataset = data_loader(loader_path, task, from_pretrained, tokenizer_name)
+        # Define the tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
 
-    id2label, label2id = get_data_labels(train_dataset)
-    print(f"\nTraining with {len(train_dataset)} examples.")
-    print(f"Evaluating on {len(eval_dataset)} examples.")
-    if do_test:
-        print(f"Testing on {len(test_dataset)} examples.")
+    def __call__(self):
 
-    # Defining the Data Collator
-    data_collator = get_data_collator(from_pretrained,
-                                      masked_data_collator,
-                                      task,
-                                      training_args,
-                                      tokenizer)
+        # Downloading the dataset
+        self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
 
-    # Defining the metrics to be computed
-    compute_metrics = MetricsTOKCL(label_list=list(label2id.keys()))
+        self.id2label, self.label2id = self._get_data_labels()
+        print(f"\nTraining with {len(self.train_dataset)} examples.")
+        print(f"Evaluating on {len(self.eval_dataset)} examples.")
+        if self.do_test:
+            print(f"Testing on {len(self.test_dataset)} examples.")
 
-    # Defining the AutoModelForTokenClassification
-    model = AutoModelForTokenClassification.from_pretrained(
-                from_pretrained,
-                num_labels=len(list(label2id.keys())),
-                max_position_embeddings=max_position_embeddings(tokenizer_name),  # max_length + 2 for start/end token
-                id2label=id2label,
-                label2id=label2id
+        # Defining the Data Collator
+        self.data_collator = self._get_data_collator()
+
+        # Defining the metrics to be computed
+        self.compute_metrics = MetricsTOKCL(label_list=list(self.label2id.keys()))
+
+        # Defining the AutoModelForTokenClassification
+        # Here I should check if using model config would be better
+        # Note that in that case I would be able to control part
+        # of the training hyperparameters
+        if self.from_pretrained in ['roberta-base', 'EMBO/bio-lm']:
+            self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
+            self.model = AutoModelForTokenClassification.from_config(
+                            RobertaConfig(**{
+                                "hidden_dropout_prob": self.dropout,
+                                "hidden_size": self.hidden_size,
+                                "num_labels":  list(self.label2id.keys()),
+                                "max_position_embeddings": self._max_position_embeddings(),
+                                "id2label": self.id2label,
+                                "label2id": self.label2id}
+                                          )
+            )
+        elif self.from_pretrained in ['bert-base-cased', 'bert-base-uncased',
+                                      'dmis-lab/biobert-base-cased-v1.2',
+                                      'dmis-lab/biobert-base-cased-v1.1',
+                                      'dmis-lab/biobert-large-cased-v1.1',
+                                      'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
+                                      'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext']:
+            self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
+            self.model = AutoModelForTokenClassification.from_config(
+                RobertaConfig(**{
+                    "hidden_dropout_prob": self.dropout,
+                    "hidden_size": self.hidden_size,
+                    "num_labels": list(self.label2id.keys()),
+                    "max_position_embeddings": self._max_position_embeddings(),
+                    "id2label": self.id2label,
+                    "label2id": self.label2id}
+                              )
+            )
+        else:
+            self.model = AutoModelForTokenClassification.from_config(
+                self.from_pretrained,
+                num_labels=len(list(self.label2id.keys())),
+                max_position_embeddings=self._max_position_embeddings(),
+                id2label=self.id2label,
+                label2id=self.label2id
             )
 
-    model_config = model.config
-    print(f"\nTraining arguments for model type {model_type}:")
-    print(model_config)
-    print(training_args)
+        model_config = self.model.config
+        print(f"\nTraining arguments for model type {self.model_type}:")
+        print(model_config)
+        print(self.training_args)
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
-        # callbacks=[ShowExampleTOKCL(tokenizer)]
-    )
+        self.trainer = Trainer(
+            model=self.model,
+            args=self.training_args,
+            data_collator=self.data_collator,
+            train_dataset=self.train_dataset,
+            eval_dataset=self.eval_dataset,
+            compute_metrics=self.compute_metrics,
+            # callbacks=[ShowExampleTOKCL(tokenizer)]
+        )
 
-    trainer.train()
+        self.trainer.train()
 
+        if self.do_test:
+            self._run_test()
 
-def data_loader(loader_path, task, from_pretrained, tokenizer_name):
-    def tokenize_and_align_labels(examples):
-        tokenized_inputs = tokenizer(examples['words'],
-                                     truncation=True,
-                                     is_split_into_words=True)
+    def _tokenize_and_align_labels(self, examples):
+        tokenized_inputs = self.tokenizer(examples['words'],
+                                         truncation=True,
+                                         is_split_into_words=True)
 
         all_labels = examples['labels']
         new_labels = []
         for i, labels in enumerate(all_labels):
             word_ids = tokenized_inputs.word_ids(i)
-            new_labels.append(align_labels_with_tokens(labels, word_ids))
+            new_labels.append(self._align_labels_with_tokens(labels, word_ids))
 
         tokenized_inputs['labels'] = new_labels
         return tokenized_inputs
 
-    data = load_dataset(loader_path, task)
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-    if from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
-        return data["train"], data['validation'], data['test']
-    else:
-        # Tokenize data if the data is not roberta-base tokenized
-        tokenized_data = data.map(
-            tokenize_and_align_labels,
-            batched=True,
-            remove_columns=data['train'].column_names)
-        return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
-
-
-def get_data_labels(dataset: Dataset) -> Tuple[dict, dict]:
-    num_labels = dataset.info.features['labels'].feature.num_classes
-    label_list = dataset.info.features['labels'].feature.names
-    id2label, label2id = {}, {}
-    for class_, label in zip(range(num_labels), label_list):
-        id2label[class_] = label
-        label2id[label] = class_
-    print(f"\nTraining on {num_labels} features:")
-    print(", ".join(label_list))
-    return id2label, label2id
-
-
-def max_position_embeddings(tokenizer: str) -> int:
-    if tokenizer in ["roberta-base"]:
-        return config.max_length + 2
-    else:
-        return config.max_length
-
-
-def get_masked_data_collator_args(task: str, training_args: TrainingArgumentsTOKCL,
-                                  tokenizer: AutoTokenizer) -> dict:
-    if task == "NER":
-        replacement_probability = 0.025 if training_args.replacement_probability is None else float(training_args.replacement_probability)
-        # probabilistic masking
-        masking_probability = 0.025 if training_args.masking_probability is None else float(training_args.masking_probability)
-    elif task in ["GENEPROD_ROLES", "SMALL_MOL_ROLES"]:
-        masking_probability = 1.0 if training_args.masking_probability is None else float(training_args.masking_probability)
-        # pure contextual learning, all entities are masked
-        replacement_probability = .0 if training_args.replacement_probability is None else float(training_args.replacement_probability)
-    else:
-        masking_probability = 0.0
-        replacement_probability = 0.0
-
-    return {
-          'tokenizer': tokenizer,
-          'padding': True,
-          'max_length': 512,
-          'pad_to_multiple_of': None,
-          'return_tensors': 'pt',
-          'masking_probability': masking_probability,
-          'replacement_probability': replacement_probability,
-          'select_labels': False,
-    }
-
-
-def shift_label(label):
-    # If the label is B-XXX we change it to I-XX
-    if label % 2 == 1:
-        label += 1
-    return label
-
-
-def align_labels_with_tokens(labels, word_ids):
-    """
-    Expands the NER tags once the sub-word tokenization is added.
-    Arguments
-    ---------
-    labels list[int]:
-    word_ids list[int]
-    """
-    new_labels = []
-    current_word = None
-    for word_id in word_ids:
-        if word_id is None:
-            new_labels.append(-100)
-        elif word_id != current_word:
-            # Start of a new word!
-            current_word = word_id
-            # As far as word_id matches the index of the current word
-            # We append the same label
-            new_labels.append(labels[word_id])
+    def _data_loader(self):
+        data = load_dataset(self.loader_path, self.task)
+        if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+            return data["train"], data['validation'], data['test']
         else:
-            new_labels.append(shift_label(labels[word_id]))
+            # Tokenize data if the data is not roberta-base tokenized
+            tokenized_data = data.map(
+                self._tokenize_and_align_labels,
+                batched=True,
+                remove_columns=data['train'].column_names)
+            return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
-    return new_labels
+    def _get_data_labels(self) -> Tuple[dict, dict]:
+        num_labels = self.train_dataset.info.features['labels'].feature.num_classes
+        label_list = self.train_dataset.info.features['labels'].feature.names
+        id2label, label2id = {}, {}
+        for class_, label in zip(range(num_labels), label_list):
+            id2label[class_] = label
+            label2id[label] = class_
+        print(f"\nTraining on {num_labels} features:")
+        print(", ".join(label_list))
+        return id2label, label2id
 
-
-def get_data_collator(from_pretrained, masked_data_collator, task, training_args, tokenizer):
-    if from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
-        if masked_data_collator:
-            masked_data_collator_args = get_masked_data_collator_args(task,
-                                                                      training_args,
-                                                                      tokenizer)
-            data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
+    def _max_position_embeddings(self) -> int:
+        if self.tokenizer in ["roberta-base"]:
+            return config.max_length + 2
         else:
-            data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer,
+            return config.max_length
+
+    def _get_masked_data_collator_args(self) -> dict:
+        if self.task == "NER":
+            self.replacement_probability = 0.025 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
+            # probabilistic masking
+            self.masking_probability = 0.025 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
+        elif self.task in ["GENEPROD_ROLES", "SMALL_MOL_ROLES"]:
+            self.masking_probability = 1.0 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
+            # pure contextual learning, all entities are masked
+            self.replacement_probability = .0 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
+        else:
+            self.masking_probability = 0.0
+            self.replacement_probability = 0.0
+
+        return {
+              'tokenizer': self.tokenizer,
+              'padding': True,
+              'max_length': 512,
+              'pad_to_multiple_of': None,
+              'return_tensors': 'pt',
+              'masking_probability': self.masking_probability,
+              'replacement_probability': self.replacement_probability,
+              'select_labels': False,
+        }
+
+    @staticmethod
+    def _shift_label(label):
+        # If the label is B-XXX we change it to I-XX
+        if label % 2 == 1:
+            label += 1
+        return label
+
+    def _align_labels_with_tokens(self, labels, word_ids):
+        """
+        Expands the NER tags once the sub-word tokenization is added.
+        Arguments
+        ---------
+        labels list[int]:
+        word_ids list[int]
+        """
+        new_labels = []
+        current_word = None
+        for word_id in word_ids:
+            if word_id is None:
+                new_labels.append(-100)
+            elif word_id != current_word:
+                # Start of a new word!
+                current_word = word_id
+                # As far as word_id matches the index of the current word
+                # We append the same label
+                new_labels.append(labels[word_id])
+            else:
+                new_labels.append(self._shift_label(labels[word_id]))
+
+        return new_labels
+
+    def _get_data_collator(self):
+        if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+            if self.masked_data_collator:
+                masked_data_collator_args = self._get_masked_data_collator_args()
+                data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
+            else:
+                data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
+                                                                   return_tensors='pt')
+        else:
+            data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt')
-    else:
-        data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer,
-                                                           return_tensors='pt')
-    return data_collator
+        return data_collator
+
+    def _run_test(self):
+        test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
+        metric = load_metric('seqeval')
+        self.model.eval()
+
+        for batch in test_dataloader:
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            with torch.no_grad():
+                outputs = self.model(**batch)
+
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+
+            batch_true_labels, batch_predictions = [], []
+            for i, sentence in enumerate(batch['labels']):
+                true_label_list, predictions_list = [], []
+                for true_label, prediction in zip(sentence.tolist(), predictions[i].tolist()):
+                    if true_label != -100:
+                        true_label_list.append(self.model.config.id2label[true_label])
+                        predictions_list.append(self.model.config.id2label[prediction])
+
+                batch_true_labels.append(true_label_list)
+                batch_predictions.append(predictions_list)
+
+            metric.add_batch(predictions=batch_predictions,
+                             references=batch_true_labels)
+
+        self.test_results = metric.compute()
+
+    def save_benchmark_results(self, file_):
+        data_output = {
+            "date": datetime.today(),
+            "model_name": self.model_name,
+            "pretrained_model": self.from_pretrained,
+            "base_model": self.model.base_model_prefix,
+            "hidden_size": self.model.classifier.in_features,
+            "attention_heads": self.model.config.num_attention_heads,
+            "num_hidden_layers": self.model.config.num_hidden_layers,
+            "hidden_size": self.model.classifier.in_features,
+            "base_model_parameters": self.model.base_model.num_parameters(),
+            "dropout": self.model.dropout,
+            "vocab_size": self.tokenizer.vocab_size,
+            "task": self.task,
+            "id2label": self.id2label,
+            "accuracy_metrics": self.test_results}
+
+        if exists(file_):
+            with open(file_) as json_file:
+                data = json.load(json_file)
+                data["test_results"].append(data_output)
+            json_string = json.dumps(data)
+        else:
+            to_file = {'test_results': [data_output]}
+            json_string = json.dumps(to_file)
+
+        with open(file_, 'w') as outfile:
+            outfile.write(json_string)
+
+
+
+
+

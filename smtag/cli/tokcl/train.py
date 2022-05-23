@@ -2,7 +2,7 @@
 from transformers import HfArgumentParser
 
 from smtag import LM_MODEL_PATH
-from ...train.train_tokcl_benchmark import TrainingArgumentsTOKCL, train
+from ...train.train_tokcl_benchmark import TrainingArgumentsTOKCL, TrainModel
 from ...config import config
 
 if __name__ == "__main__":
@@ -32,13 +32,26 @@ if __name__ == "__main__":
                         The reason to use the masked_data_collator is to 
                         introduce noise to scramble entities to reinforce role of 
                         context over entity identity.""")
+    parser.add_argument("--hidden_size_multiple", default="50",
+                        help="""Number of neurons in the classifier layer. It will be multiplied
+                        by the number of transformer layers in the model. So for BERT, 
+                        a hidde_size_multiple of 50 would be multiplied by 12 and generate
+                        a layer with 600 neurons.""")
+    parser.add_argument("--dropout",
+                        default="0.2",
+                        help="""Dropout rate for the classifier layers.""")
     parser.add_argument("--tokenizer", default=None, help="The pretrained model to fine tune.")
     parser.add_argument("--do_test",
-                        default=False,
+                        default=True,
                         help="""If set to true, it will use the test dataset to do an
                         inference and return the performance of the model in the 
                         test dataset.""")
+    parser.add_argument("--test_results_file",
+                        default="./test_results_benchmark.json",
+                        help="""JSON file with the results of the model.""")
 
+    # Here I should add the parameters for the base model.
+    # That would give a much better control over the benchmark
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
     loader_path = args.loader_path
@@ -46,11 +59,14 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     from_pretrained = args.from_pretrained
     model_type = args.model_type
+    dropout = float(args.dropout)
+    hidden_size_multiple = int(args.hidden_size_multiple)
     masked_data_collator = bool(args.masked_data_collator)
     do_test = bool(args.do_test)
     tokenizer_name = args.tokenizer if args.tokenizer else from_pretrained
+    test_results_file = args.test_results_file
 
-    train(
+    trainer = TrainModel(
         training_args=training_args,
         loader_path=loader_path,
         task=task,
@@ -59,5 +75,11 @@ if __name__ == "__main__":
         model_type=model_type,
         do_test=do_test,
         data_dir=data_dir,
+        dropout=dropout,
+        hidden_size_multiple=hidden_size_multiple,
         no_cache=no_cache,
     )
+
+    trainer()
+
+    trainer.save_benchmark_results(test_results_file)
