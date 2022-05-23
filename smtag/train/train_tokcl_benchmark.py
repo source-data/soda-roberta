@@ -281,7 +281,7 @@ class TrainModel:
 
     def _save_benchmark_results(self):
         data_output = {
-            "date": datetime.today(),
+            "date": str(datetime.today()),
             "model_name": self.training_args.hub_model_id,
             "pretrained_model": self.from_pretrained,
             "base_model": self.model.base_model_prefix,
