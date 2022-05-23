@@ -134,6 +134,9 @@ class TrainModel:
         )
 
         self.trainer.train()
+        # switch the Tensorboard callback to plot losses on same plot
+        self.trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
+        self.trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 
         if self.do_test:
             self._run_test()
