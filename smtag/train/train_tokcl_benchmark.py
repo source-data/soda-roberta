@@ -116,7 +116,7 @@ class TrainModel:
                                       'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext']:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
             self.model = AutoModelForTokenClassification.from_config(
-                RobertaConfig(**{
+                BertConfig(**{
                     "hidden_dropout_prob": self.dropout,
                     "hidden_size": self.hidden_size,
                     "num_labels": list(self.label2id.keys()),
@@ -309,6 +309,7 @@ class TrainModel:
             "vocab_size": self.tokenizer.vocab_size,
             "task": self.task,
             "id2label": self.id2label,
+            "training_batch_size": TrainingArguments.per_device_train_batch_size,
             "accuracy_metrics": self.test_results}
 
         if exists(file_):

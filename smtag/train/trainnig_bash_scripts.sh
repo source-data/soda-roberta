@@ -5,8 +5,8 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --tokenizer bert-base-cased \
                                 --do_predict True \
                                 --do_test True \
-                                --dropout 0.5 \
-                                --hidden_size_multiple 50 \
+                                --dropout 0.2 \
+                                --hidden_size_multiple 64 \
                                 --prediction_loss_only False \
                                 --per_device_train_batch_size 16\
                                 --per_device_eval_batch_size 32\
