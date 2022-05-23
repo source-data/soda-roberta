@@ -1,3 +1,4 @@
+export HUB_TOKEN=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
 python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --from_pretrained bert-base-cased \
                                 --model_type Autoencoder \
@@ -18,6 +19,7 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --lr_scheduler_type cosine \
                                 --save_strategy epoch \
                                 --save_steps 1 \
+                                --logging_steps 1000 \
                                 --seed 42 \
                                 --load_best_model_at_end True \
                                 --metric_for_best_model f1 \

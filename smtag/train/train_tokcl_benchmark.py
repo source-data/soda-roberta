@@ -278,6 +278,10 @@ class TrainModel:
                              references=batch_true_labels)
 
         self.test_results = metric.compute()
+        print(100*"-")
+        print(f"Test results.")
+        print(100*"-")
+        print(self.test_results)
 
     def _save_benchmark_results(self):
         data_output = {
