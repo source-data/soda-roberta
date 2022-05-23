@@ -299,7 +299,7 @@ class TrainModel:
             "num_hidden_layers": self.model.config.num_hidden_layers,
             "hidden_size": self.model.classifier.in_features,
             "base_model_parameters": self.model.base_model.num_parameters(),
-            "dropout": self.model.dropout,
+            "dropout": self.dropout,
             "vocab_size": self.tokenizer.vocab_size,
             "task": self.task,
             "id2label": self.id2label,
