@@ -1,11 +1,11 @@
 python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --from_pretrained bert-base-cased \
                                 --model_type Autoencoder \
-                                --masked_data_collator True \
+                                --masked_data_collator False \
                                 --tokenizer bert-base-cased \
                                 --do_predict True \
                                 --do_test True \
-                                --dropout 0.0 \
+                                --dropout 0.2 \
                                 --hidden_size_multiple 64 \
                                 --prediction_loss_only False \
                                 --per_device_train_batch_size 32\
