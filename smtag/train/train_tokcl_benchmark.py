@@ -102,6 +102,9 @@ class TrainModel:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
             self.model = AutoModelForTokenClassification.from_config(
                             RobertaConfig(**{
+                                "architectures": [
+                                    "RobertaForMaskedLM"
+                                ],
                                 "_name_or_path": self.from_pretrained,
                                 "classifier_dropout": self.dropout,
                                 "hidden_size": self.hidden_size,
@@ -121,6 +124,9 @@ class TrainModel:
             self.model = AutoModelForTokenClassification.from_config(
                 BertConfig(**{
                     "_name_or_path": self.from_pretrained,
+                    "architectures": [
+                        "BertForMaskedLM"
+                    ],
                     "classifier_dropout": self.dropout,
                     "hidden_size": self.hidden_size,
                     "num_labels": list(self.label2id.keys()),
@@ -302,7 +308,7 @@ class TrainModel:
     def _save_benchmark_results(self):
         data_output = {
             "date": datetime.today(),
-            "model_name": self.model_name,
+            "model_name": self.training_args.hub_model_id,
             "pretrained_model": self.from_pretrained,
             "base_model": self.model.base_model_prefix,
             "hidden_size": self.model.classifier.in_features,
