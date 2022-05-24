@@ -44,30 +44,30 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     select_labels: bool = field(default=False)
 
 class Results:
-  def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results):
-    self.date = str(datetime.today()),
-    self.model_name = training_args.hub_model_id,
-    self.pretrained_model = from_pretrained,
-    self.base_model = str(model.base_model_prefix),
-    self.hidden_size = str(model.classifier.in_features),
-    self.attention_heads = str(model.config.num_attention_heads),
-    self.num_hidden_layers = str(model.config.num_hidden_layers),
-    self.hidden_size = str(model.classifier.in_features),
-    self.base_model_parameters = str(model.base_model.num_parameters()),
-    self.dropout = str(0.2),
-    self.vocab_size = str(tokenizer.vocab_size),
-    self.task = task,
-    self.id2label = id2label,
-    self.training_epochs = str(10),
-    self.training_examples = str(len(train_dataset)),
-    self.training_steps = str(len(train_dataset) * training_args.num_train_epochs),
-    self.learning_rate_init = str(training_args.learning_rate),
-    self.learning_rate_scheduled = str(training_args.lr_scheduler_type),
-    self.training_batch_size = str(training_args.per_device_train_batch_size),
-    self.accuracy_metrics = test_results
-ss
-  def toJSON(self):
-      return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+    def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results):
+        self.date = str(datetime.today()),
+        self.model_name = training_args.hub_model_id,
+        self.pretrained_model = from_pretrained,
+        self.base_model = str(model.base_model_prefix),
+        self.hidden_size = str(model.classifier.in_features),
+        self.attention_heads = str(model.config.num_attention_heads),
+        self.num_hidden_layers = str(model.config.num_hidden_layers),
+        self.hidden_size = str(model.classifier.in_features),
+        self.base_model_parameters = str(model.base_model.num_parameters()),
+        self.dropout = str(0.2),
+        self.vocab_size = str(tokenizer.vocab_size),
+        self.task = task,
+        self.id2label = id2label,
+        self.training_epochs = str(10),
+        self.training_examples = str(len(train_dataset)),
+        self.training_steps = str(len(train_dataset) * training_args.num_train_epochs),
+        self.learning_rate_init = str(training_args.learning_rate),
+        self.learning_rate_scheduled = str(training_args.lr_scheduler_type),
+        self.training_batch_size = str(training_args.per_device_train_batch_size),
+        self.accuracy_metrics = test_results
+
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 class TrainModel:
     def __init__(self, training_args: TrainingArgumentsTOKCL,
