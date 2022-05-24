@@ -168,7 +168,7 @@ class TrainModel:
 
         if self.do_test:
             self._run_test()
-            self._save_benchmark_results()
+            self.save_benchmark_results()
 
     def _tokenize_and_align_labels(self, examples):
         tokenized_inputs = self.tokenizer(examples['words'],
