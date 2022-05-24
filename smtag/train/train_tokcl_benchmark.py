@@ -314,7 +314,7 @@ class TrainModel:
         print(100*"-")
         print(self.test_results)
 
-    def _save_benchmark_results(self):
+    def save_benchmark_results(self):
 
         data_output = Results(self.training_args, self.model, self.train_dataset,
                                  self.from_pretrained, self.tokenizer, self.task, self.id2label,
