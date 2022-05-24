@@ -42,9 +42,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     masking_probability: float = field(default=None)
     replacement_probability: float = field(default=None)
     select_labels: bool = field(default=False)
-self.training_args, self.model, self.train_dataset,
-                                 self.from_pretrained, self.tokenizer, self.task, self.id2label,
-                                 self.test_results, self.dropout
+
 class Results:
     def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results, dropout):
         self.date = str(datetime.today()),
