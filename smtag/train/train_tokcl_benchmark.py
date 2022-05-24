@@ -297,7 +297,7 @@ class TrainModel:
             "hidden_size": str(self.model.classifier.in_features),
             "attention_heads": str(self.model.config.num_attention_heads),
             "num_hidden_layers": str(self.model.config.num_hidden_layers),
-            "hidden_size": self.model.classifier.in_features,
+            "hidden_size": str(self.model.classifier.in_features),
             "base_model_parameters": str(self.model.base_model.num_parameters()),
             "dropout": str(self.dropout),
             "vocab_size": str(self.tokenizer.vocab_size),
