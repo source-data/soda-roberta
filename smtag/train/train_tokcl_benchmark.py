@@ -311,6 +311,8 @@ class TrainModel:
             "training_batch_size": str(TrainingArguments.per_device_train_batch_size),
             "accuracy_metrics": self.test_results}
 
+        print(data_output)
+
         if exists(self.file_):
             with open(self.file_) as json_file:
                 data = json.load(json_file)
