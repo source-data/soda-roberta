@@ -35,8 +35,9 @@ services:
     runtime: nvidia
     ports:
     - 6007:6007
+    - 6006:6006
     volumes:
-    - ./runs:/runs
+    - ./tokcl_models:/tokcl_models
     working_dir: /app
     command: tensorboard --logdir /tokcl_models --port 6007 --bind_all
 

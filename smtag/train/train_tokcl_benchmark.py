@@ -293,7 +293,7 @@ class TrainModel:
             "date": str(datetime.today()),
             "model_name": self.training_args.hub_model_id,
             "pretrained_model": self.from_pretrained,
-            "base_model": self.model.base_model_prefix,
+            "base_model": str(self.model.base_model_prefix),
             "hidden_size": str(self.model.classifier.in_features),
             "attention_heads": str(self.model.config.num_attention_heads),
             "num_hidden_layers": str(self.model.config.num_hidden_layers),
@@ -307,7 +307,7 @@ class TrainModel:
             "training_examples": str(len(self.train_dataset)),
             "training_steps": str(len(self.train_dataset) * TrainingArgumentsTOKCL.num_train_epochs),
             "learning_rate_init": str(TrainingArguments.learning_rate),
-            "learning_rate_scheduled": TrainingArguments.lr_scheduler_type,
+            "learning_rate_scheduled": str(TrainingArguments.lr_scheduler_type),
             "training_batch_size": str(TrainingArguments.per_device_train_batch_size),
             "accuracy_metrics": self.test_results}
 
