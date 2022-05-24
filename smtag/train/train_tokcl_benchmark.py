@@ -312,8 +312,8 @@ class TrainModel:
             "accuracy_metrics": self.test_results}
 
         print(data_output)
-        for value in data_output.values():
-            print(type(value))
+        for key in data_output.keys():
+            print(f"{key} - {data_output[key]}")
 
         if exists(self.file_):
             with open(self.file_) as json_file:
