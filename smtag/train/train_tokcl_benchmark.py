@@ -44,31 +44,6 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     replacement_probability: float = field(default=None)
     select_labels: bool = field(default=False)
 
-class Results:
-    def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results, dropout):
-        self.date = str(datetime.today())
-        # self.model_name = training_args.hub_model_id
-        # self.pretrained_model = from_pretrained
-        self.base_model = str(model.base_model_prefix)
-        self.hidden_size = str(model.classifier.in_features)
-        self.attention_heads = str(model.config.num_attention_heads)
-        self.num_hidden_layers = str(model.config.num_hidden_layers)
-        self.hidden_size = str(model.classifier.in_features)
-        self.base_model_parameters = str(model.base_model.num_parameters())
-        self.dropout = str(dropout)
-        self.vocab_size = str(tokenizer.vocab_size)
-        # self.task = task,
-        # self.id2label = id2label,
-        self.training_epochs = str(training_args.num_train_epochs)
-        self.training_examples = str(len(train_dataset))
-        self.training_steps = str(len(train_dataset) * training_args.num_train_epochs)
-        self.learning_rate_init = str(training_args.learning_rate)
-        self.learning_rate_scheduled = str(training_args.lr_scheduler_type)
-        self.training_batch_size = str(training_args.per_device_train_batch_size)
-        # self.accuracy_metrics = test_results
-
-    def toJSON(self):
-        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 class TrainModel:
     def __init__(self, training_args: TrainingArgumentsTOKCL,
@@ -316,18 +291,36 @@ class TrainModel:
 
     def save_benchmark_results(self):
 
-        data_output = Results(self.training_args, self.model, self.train_dataset,
-                                 self.from_pretrained, self.tokenizer, self.task, self.id2label,
-                                 self.test_results, self.dropout)
+        output_data = {
+            "date": datetime.today(),
+            "model_name": self.training_args.hub_model_id,
+            "pretrained_model": self.from_pretrained,
+            "base_model" : self.model.base_model_prefix,
+            "hidden_size" : self.model.classifier.in_features,
+            "attention_heads": self.model.config.num_attention_heads,
+            "num_hidden_layers": self.model.config.num_hidden_layers,
+            "base_model_parameters": self.model.base_model.num_parameters(),
+            "dropout": self.dropout,
+            "vocab_size": self.tokenizer.vocab_size,
+            "task": self.task,
+            "id2label": self.id2label,
+            "training_epochs": self.training_args.num_train_epochs,
+            "training_examples": len(self.train_dataset),
+            "training_steps": len(self.train_dataset) * self.training_args.num_train_epochs,
+            "learning_rate_init": self.training_args.learning_rate,
+            "learning_rate_scheduled": self.training_args.lr_scheduler_type,
+            "training_batch_size": self.training_args.per_device_train_batch_size,
+            "accuracy_metrics": self.test_results
+        }
 
         if exists(self.file_):
             with open(self.file_, 'rb') as pkl_file:
                 data = pickle.load(pkl_file)
-                data["test_results"].append(data_output)
+                data["test_results"].append(output_data)
         else:
-            data = {'test_results': [data_output]}
+            data = {'test_results': [output_data]}
 
-        with open('filename.pickle', 'wb') as pkl_file:
+        with open(self.file_, 'wb') as pkl_file:
             pickle.dump(data, pkl_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
