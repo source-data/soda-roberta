@@ -78,8 +78,9 @@ if __name__ == "__main__":
         dropout=dropout,
         hidden_size_multiple=hidden_size_multiple,
         no_cache=no_cache,
+        file_= test_results_file
     )
 
     trainer()
 
-    trainer.save_benchmark_results(test_results_file)
+    trainer.save_benchmark_results()
