@@ -36,5 +36,5 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --weight_decay 0.0 \
                                 --overwrite_output_dir \
                                 --output_dir ./tokcl_models/EMBO_bert-base-cased_NER-task \
-                                --test_results_file ./benchmarking_results.json
+                                --test_results_file ./benchmarking_results.pkl
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from copy import deepcopy
 import torch
+import pickle
 from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
@@ -320,16 +321,14 @@ class TrainModel:
                                  self.test_results, self.dropout)
 
         if exists(self.file_):
-            with open(self.file_) as json_file:
-                data = json.load(json_file)
-                data["test_results"].append(data_output.toJSON())
-            json_string = json.dumps(data)
+            with open(self.file_, 'rb') as pkl_file:
+                data = pickle.load(pkl_file)
+                data["test_results"].append(data_output)
         else:
-            to_file = {'test_results': [data_output.toJSON()]}
-            json_string = json.dumps(to_file)
+            data = {'test_results': [data_output]}
 
-        with open(self.file_, 'w') as outfile:
-            outfile.write(json_string)
+        with open('filename.pickle', 'wb') as pkl_file:
+            pickle.dump(data, pkl_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 
