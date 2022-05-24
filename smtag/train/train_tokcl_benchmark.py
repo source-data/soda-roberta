@@ -42,9 +42,11 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     masking_probability: float = field(default=None)
     replacement_probability: float = field(default=None)
     select_labels: bool = field(default=False)
-
+self.training_args, self.model, self.train_dataset,
+                                 self.from_pretrained, self.tokenizer, self.task, self.id2label,
+                                 self.test_results, self.dropout
 class Results:
-    def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results):
+    def __init__(self, training_args, model, train_dataset, from_pretrained, tokenizer, task, id2label, test_results, dropout):
         self.date = str(datetime.today()),
         self.model_name = training_args.hub_model_id,
         self.pretrained_model = from_pretrained,
@@ -54,11 +56,11 @@ class Results:
         self.num_hidden_layers = str(model.config.num_hidden_layers),
         self.hidden_size = str(model.classifier.in_features),
         self.base_model_parameters = str(model.base_model.num_parameters()),
-        self.dropout = str(0.2),
+        self.dropout = str(dropout),
         self.vocab_size = str(tokenizer.vocab_size),
         self.task = task,
         self.id2label = id2label,
-        self.training_epochs = str(10),
+        self.training_epochs = str(training_args.num_train_epochs),
         self.training_examples = str(len(train_dataset)),
         self.training_steps = str(len(train_dataset) * training_args.num_train_epochs),
         self.learning_rate_init = str(training_args.learning_rate),
