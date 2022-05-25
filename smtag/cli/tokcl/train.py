@@ -77,6 +77,7 @@ if __name__ == "__main__":
         data_dir=data_dir,
         dropout=dropout,
         hidden_size_multiple=hidden_size_multiple,
+        masked_data_collator=masked_data_collator,
         no_cache=no_cache,
         file_= test_results_file
     )
