@@ -244,16 +244,16 @@ class TrainModel:
         return new_labels
 
     def _get_data_collator(self):
-        if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
-            if self.masked_data_collator:
-                masked_data_collator_args = self._get_masked_data_collator_args()
-                data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
-            else:
-                data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                                   return_tensors='pt')
+        # if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+        if self.masked_data_collator:
+            masked_data_collator_args = self._get_masked_data_collator_args()
+            data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt')
+        # else:
+        #     data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
+        #                                                        return_tensors='pt')
         return data_collator
 
     def _run_test(self):
