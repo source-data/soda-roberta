@@ -300,6 +300,7 @@ class TrainModel:
             "attention_heads": self.model.config.num_attention_heads,
             "num_hidden_layers": self.model.config.num_hidden_layers,
             "base_model_parameters": self.model.base_model.num_parameters(),
+            "masked_data_collator": self.masked_data_collator,
             "dropout": self.dropout,
             "vocab_size": self.tokenizer.vocab_size,
             "task": self.task,
