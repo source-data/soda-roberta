@@ -77,6 +77,10 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        print(100*"*")
+        print(self.masked_data_collator)
+        print(type(self.masked_data_collator))
+        print(100*"*")
 
     def __call__(self):
 
