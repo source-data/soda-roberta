@@ -28,6 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("--masked_data_collator",
                         default=False,
                         choices=[True, False],
+                        type=bool,
                         help="""Whether to use a normal or masked data collator.
                         If set to true, a tag_mask will need to be generated.
                         The reason to use the masked_data_collator is to 

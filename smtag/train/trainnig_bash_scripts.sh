@@ -5,6 +5,7 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --from_pretrained bert-base-cased \
                                 --model_type Autoencoder \
                                 --tokenizer bert-base-cased \
+                                --masked_data_collator True\
                                 --do_predict True \
                                 --do_test True \
                                 --dropout 0.1 \
