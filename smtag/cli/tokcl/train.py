@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_type", default="Autoencoder", help="The pretrained model to fine tune.")
     parser.add_argument("--masked_data_collator",
                         default=False,
+                        choices=[True, False],
                         help="""Whether to use a normal or masked data collator.
                         If set to true, a tag_mask will need to be generated.
                         The reason to use the masked_data_collator is to 
@@ -70,6 +71,7 @@ if __name__ == "__main__":
     print(masked_data_collator)
     print(type(masked_data_collator))
     print(100 * "*")
+    stop
 
     trainer = TrainModel(
         training_args=training_args,
