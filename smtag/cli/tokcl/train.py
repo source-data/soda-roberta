@@ -66,6 +66,11 @@ if __name__ == "__main__":
     tokenizer_name = args.tokenizer if args.tokenizer else from_pretrained
     test_results_file = args.test_results_file
 
+    print(100 * "*")
+    print(masked_data_collator)
+    print(type(masked_data_collator))
+    print(100 * "*")
+
     trainer = TrainModel(
         training_args=training_args,
         loader_path=loader_path,
