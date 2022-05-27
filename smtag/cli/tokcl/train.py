@@ -68,8 +68,7 @@ if __name__ == "__main__":
     test_results_file = args.test_results_file
 
     print(100 * "*")
-    print(masked_data_collator)
-    print(type(masked_data_collator))
+    print(training_args)
     print(100 * "*")
     stop
 
