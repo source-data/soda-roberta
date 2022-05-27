@@ -125,6 +125,8 @@ class TrainModel:
         # print(self.training_args)
         print(self.data_collator)
         print(self.train_dataset)
+        print(self.masked_data_collator)
+        print(type(self.masked_data_collator))
         print(100*"*")
 
         self.trainer = Trainer(
@@ -248,9 +250,14 @@ class TrainModel:
     def _get_data_collator(self):
         # if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
         if self.masked_data_collator:
+            print(100 * "*")
+            print(100 * "IT is true. I am masked")
+
             masked_data_collator_args = self._get_masked_data_collator_args()
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
+            print(100 * "*")
+            print(100 * "IT is true. I am NOT masked")
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt')
         # else:
