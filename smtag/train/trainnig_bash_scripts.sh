@@ -13,18 +13,18 @@ python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --prediction_loss_only False \
                                 --per_device_train_batch_size 8\
                                 --per_device_eval_batch_size 8\
-                                --evaluation_strategy epoch \
-                                --eval_steps 1 \
+                                --evaluation_strategy steps \
+                                --eval_steps 10 \
                                 --label_smoothing_factor 0.0 \
                                 --learning_rate 0.0001 \
                                 --save_total_limit 100 \
-                                --num_train_epochs 10 \
+                                --num_train_epochs 0.1 \
                                 --lr_scheduler_type cosine \
-                                --save_strategy epoch \
-                                --save_steps 1 \
+                                --save_strategy steps \
+                                --save_steps 100 \
                                 --logging_steps 50 \
                                 --seed 42 \
-                                --load_best_model_at_end True \
+                                --load_best_model_at_end False \
                                 --metric_for_best_model f1 \
                                 --greater_is_better True \
                                 --report_to tensorboard \

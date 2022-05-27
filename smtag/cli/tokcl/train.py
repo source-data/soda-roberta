@@ -67,10 +67,6 @@ if __name__ == "__main__":
     tokenizer_name = args.tokenizer if args.tokenizer else from_pretrained
     test_results_file = args.test_results_file
 
-    print(100 * "*")
-    print(training_args)
-    print(100 * "*")
-    stop
 
     trainer = TrainModel(
         training_args=training_args,
