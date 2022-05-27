@@ -27,8 +27,6 @@ if __name__ == "__main__":
     parser.add_argument("--model_type", default="Autoencoder", help="The pretrained model to fine tune.")
     parser.add_argument("--masked_data_collator",
                         default="False",
-                        choices=["True", "False"],
-                        type=bool,
                         help="""Whether to use a normal or masked data collator.
                         If set to true, a tag_mask will need to be generated.
                         The reason to use the masked_data_collator is to 
@@ -64,8 +62,8 @@ if __name__ == "__main__":
     model_type = args.model_type
     dropout = float(args.dropout)
     hidden_size_multiple = int(args.hidden_size_multiple)
-    masked_data_collator = bool(args.masked_data_collator)
-    do_test = bool(args.do_test)
+    masked_data_collator = eval(args.masked_data_collator)
+    do_test = eval(args.do_test)
     tokenizer_name = args.tokenizer if args.tokenizer else from_pretrained
     test_results_file = args.test_results_file
 
