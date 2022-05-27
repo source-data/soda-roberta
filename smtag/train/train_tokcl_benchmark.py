@@ -191,7 +191,7 @@ class TrainModel:
         return id2label, label2id
 
     def _max_position_embeddings(self) -> int:
-        if self.tokenizer in ["roberta-base"]:
+        if self.tokenizer_name in ["roberta-base"]:
             return config.max_length + 2
         else:
             return config.max_length
