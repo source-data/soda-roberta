@@ -26,8 +26,8 @@ if __name__ == "__main__":
                         However, it is dvisable to define the tokenizer too""")
     parser.add_argument("--model_type", default="Autoencoder", help="The pretrained model to fine tune.")
     parser.add_argument("--masked_data_collator",
-                        default=False,
-                        choices=[True, False],
+                        default="False",
+                        choices=["True", "False"],
                         type=bool,
                         help="""Whether to use a normal or masked data collator.
                         If set to true, a tag_mask will need to be generated.
@@ -51,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_results_file",
                         default="./test_results_benchmark.json",
                         help="""JSON file with the results of the model.""")
+
 
     # Here I should add the parameters for the base model.
     # That would give a much better control over the benchmark
