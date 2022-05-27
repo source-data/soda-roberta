@@ -4,7 +4,6 @@ export HUB_TOKEN=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
 python -m smtag.cli.tokcl.train EMBO/sd-nlp-non-tokenized NER \
                                 --from_pretrained bert-base-cased \
                                 --model_type Autoencoder \
-                                --masked_data_collator False \
                                 --tokenizer bert-base-cased \
                                 --do_predict True \
                                 --do_test True \
