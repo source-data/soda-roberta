@@ -1,7 +1,6 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
 from typing import NamedTuple
 from datetime import datetime
-from pathlib import Path
 from dataclasses import dataclass, field
 from copy import deepcopy
 import torch
