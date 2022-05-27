@@ -120,9 +120,12 @@ class TrainModel:
         )
 
         model_config = self.model.config
-        print(f"\nTraining arguments for model type {self.model_type}:")
-        print(model_config)
-        print(self.training_args)
+        print(100*"*")
+        # print(model_config)
+        # print(self.training_args)
+        print(self.data_collator)
+        print(self.train_dataset)
+        print(100*"*")
 
         self.trainer = Trainer(
             model=self.model,
