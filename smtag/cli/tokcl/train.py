@@ -136,6 +136,7 @@ if __name__ == "__main__":
                                 dropout = dr
                                 hidden_size_multiple = hidden_size
                                 masked_data_collator = masked
+                                print(f'data: {loader_path}, pre-trained: {from_pretrained}, tokenizer: {tokenizer_name}')
 
                                 trainer = TrainModel(
                                     training_args=TrainingArgumentsTOKCL(**training_args),
@@ -148,7 +149,7 @@ if __name__ == "__main__":
                                     dropout=dropout,
                                     hidden_size_multiple=hidden_size_multiple,
                                     masked_data_collator=masked_data_collator,
-                                    file_= test_results_file
+                                    file=test_results_file
                                 )
 
                                 trainer()
