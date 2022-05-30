@@ -160,6 +160,10 @@ class TrainModel:
         tokenized_inputs['labels'] = new_labels
         tag_mask = [0 if tag == "O" else 1 for tag in tokenized_inputs['labels']]
         tokenized_inputs['tag_mask'] = new_labels
+        print(100 * "*")
+        print(tokenized_inputs)
+        print(100 * "*")
+
         return tokenized_inputs
 
     def _data_loader(self):
