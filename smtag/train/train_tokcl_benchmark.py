@@ -178,8 +178,8 @@ class TrainModel:
             # Tokenize data if the data is not roberta-base tokenized
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
-                batched=True)#,
-                # remove_columns=data['train'].column_names)
+                batched=True,
+                remove_columns=['input_ids', 'labels', 'tag_mask'])
             # Tokenize data if the data is not roberta-base tokenized
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
