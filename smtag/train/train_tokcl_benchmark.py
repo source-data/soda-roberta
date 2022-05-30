@@ -208,9 +208,9 @@ class TrainModel:
             `dict`
         """
         if self.task == "NER":
-            self.replacement_probability = 0.05 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
+            self.replacement_probability = 0.02 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
             # probabilistic masking
-            self.masking_probability = 0.05 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
+            self.masking_probability = 0.02 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
         elif self.task in ["GENEPROD_ROLES", "SMALL_MOL_ROLES"]:
             self.masking_probability = 1.0 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
             # pure contextual learning, all entities are masked

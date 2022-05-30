@@ -71,7 +71,7 @@ if __name__ == "__main__":
     lr_scheduler = ["constant", "linear", "cosine"]
     dropout = [0.1, 0.25]
     per_device_train_batch_size = 16
-    hidden_size_multiple = [16, 32, 64]
+    hidden_size_multiple = [16, 32, 64, 128]
     prediction_loss_only = False
     evaluation_strategy = "epoch"
     eval_steps = 1
