@@ -120,7 +120,7 @@ if __name__ == "__main__":
                                     "save_steps": 500,
                                     "seed": 42,
                                     "load_best_model_at_end": True,
-                                    "metric_best_model": "f1",
+                                    "metric_for_best_model": "f1",
                                     "greater_is_better": True,
                                     "report_to": "tensorboard",
                                     "push_to_hub": False,
