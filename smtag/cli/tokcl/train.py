@@ -127,7 +127,6 @@ if __name__ == "__main__":
                                     "push_to_hub": False,
                                     "hub_strategy": "checkpoint",
                                     "overwrite_output_dir": True,
-                                    "model_type": "Autoencoder",
                                     "do_test": True
                                 }
 
