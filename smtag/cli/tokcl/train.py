@@ -53,30 +53,30 @@ if __name__ == "__main__":
     tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
-        "EMBO/bert-base-cased": "bert-base-cased",
-        "EMBO/": "bert-base-uncased",
-        "EMBO/bert-base-uncased": "bert-large-cased",
-        "EMBO/bert-large-uncased": "bert-large-uncased",
-        "EMBO/roberta-base": "roberta-base",
-        "EMBO/roberta-large": "roberta-large",
+        # "EMBO/bert-base-cased": "bert-base-cased",
+        # "EMBO/": "bert-base-uncased",
+        # "EMBO/bert-base-uncased": "bert-large-cased",
+        # "EMBO/bert-large-uncased": "bert-large-uncased",
+        # "EMBO/roberta-base": "roberta-base",
+        # "EMBO/roberta-large": "roberta-large",
         "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
-        "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
-        "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+        # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
+        # "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
         # "": "microsoft/BiomedNLP-KRISSBERT-PubMed-UMLS-EL",
-        "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+        # "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
     }
 
     learning_rate = [0.0001, 0.00005]
     lr_scheduler = ["constant", "linear", "cosine"]
-    dropout = [0.1, 0.5]
+    dropout = [0.1, 0.25]
     per_device_train_batch_size = 16
-    hidden_size_multiple = [16, 32, 64, 128]
+    hidden_size_multiple = [16, 32, 64]
     prediction_loss_only = False
     evaluation_strategy = "epoch"
     eval_steps = 1
     save_total_limit = 500
     num_train_epochs = 5
-    save_strategy = "epochs"
+    save_strategy = "epoch"
     save_steps = 500
     seed = 42
     load_best_model_at_end = True
