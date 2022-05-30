@@ -50,7 +50,8 @@ if __name__ == "__main__":
     #                     default="./test_results_benchmark.json",
     #                     help="""JSON file with the results of the model.""")
 
-    tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
+    # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
+    tasks = ["NER", "GENEPROD_ROLES"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
         # "EMBO/bert-base-cased": "bert-base-cased",
@@ -126,7 +127,6 @@ if __name__ == "__main__":
                                     "push_to_hub": False,
                                     "hub_strategy": "checkpoint",
                                     "overwrite_output_dir": True,
-                                    "test_results_file": "benchmarking_results.pkl",
                                     "model_type": "Autoencoder",
                                     "do_test": True
                                 }
