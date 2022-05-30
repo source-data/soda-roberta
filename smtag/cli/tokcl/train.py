@@ -102,7 +102,7 @@ if __name__ == "__main__":
                     for lr_schedule in lr_scheduler:
                         for dr in dropout:
                             for hidden_size in hidden_size_multiple:
-
+                                print()
                                 hub_model_id = f"EMBO/{model}_{task}"
                                 output_dir = f"./tokcl_models/EMBO_{model}_{task}"
                                 test_results_file = "benchmarking_results.pkl"
