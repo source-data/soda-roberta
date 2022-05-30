@@ -95,6 +95,7 @@ if __name__ == "__main__":
         dataset_to_load = "drAbreu/sd-nlp-2" if models[model] in ["EMBO/bio-lm",
                                                                   "roberta-base",
                                                                   "roberta-large"] else "EMBO/sd-nlp-non-tokenized"
+        tokenizer_name = "roberta-base" if models[model] in ["EMBO/bio-lm"] else models[model]
         for task in tasks:
             for masked in [True, False]:
                 for lr in learning_rate:
@@ -135,7 +136,6 @@ if __name__ == "__main__":
                                 dropout = dr
                                 hidden_size_multiple = hidden_size
                                 masked_data_collator = masked
-                                tokenizer_name = models[model]
 
                                 trainer = TrainModel(
                                     training_args=TrainingArgumentsTOKCL(**training_args),
