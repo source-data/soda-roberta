@@ -89,6 +89,12 @@ class TrainModel:
         if self.do_test:
             print(f"Testing on {len(self.test_dataset)} examples.")
 
+        print(100*"*")
+        # print(model_config)
+        # print(self.training_args)
+        print(self.train_dataset)
+        print(100*"*")
+
         # Defining the Data Collator
         self.data_collator = self._get_data_collator()
 
@@ -122,11 +128,8 @@ class TrainModel:
         model_config = self.model.config
         print(100*"*")
         # print(model_config)
-        print(self.training_args)
-        print(self.data_collator)
+        # print(self.training_args)
         print(self.train_dataset)
-        print(self.masked_data_collator)
-        print(type(self.masked_data_collator))
         print(100*"*")
 
         self.trainer = Trainer(
@@ -252,9 +255,6 @@ class TrainModel:
         if self.masked_data_collator:
             self.training_args.remove_unused_columns = False
             masked_data_collator_args = self._get_masked_data_collator_args()
-            print(100*'*')
-            print(masked_data_collator_args)
-            print(100*'*')
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
