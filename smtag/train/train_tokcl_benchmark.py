@@ -194,9 +194,9 @@ class TrainModel:
 
     def _get_masked_data_collator_args(self) -> dict:
         if self.task == "NER":
-            self.replacement_probability = 0.025 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
+            self.replacement_probability = 0.05 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
             # probabilistic masking
-            self.masking_probability = 0.025 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
+            self.masking_probability = 0.05 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
         elif self.task in ["GENEPROD_ROLES", "SMALL_MOL_ROLES"]:
             self.masking_probability = 1.0 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
             # pure contextual learning, all entities are masked
@@ -204,8 +204,6 @@ class TrainModel:
         else:
             self.masking_probability = 0.0
             self.replacement_probability = 0.0
-        self.training_args['masking_probability'] = self.masking_probability
-        self.training_args['replacement_probability'] = self.replacement_probability
 
         return {
               'tokenizer': self.tokenizer,
@@ -321,7 +319,9 @@ class TrainModel:
             "learning_rate_init": self.training_args.learning_rate,
             "learning_rate_scheduled": self.training_args.lr_scheduler_type,
             "training_batch_size": self.training_args.per_device_train_batch_size,
-            "accuracy_metrics": self.test_results
+            "accuracy_metrics": self.test_results,
+            'masking_probability': self.masking_probability,
+            'replacement_probability': self.replacement_probability
         }
 
         if exists(self.file_):
