@@ -78,6 +78,7 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        print(f"AutoModelForTokenClassification.from_pretrained('{self.from_pretrained}')")
         print(f"AutoTokenizer.from_pretrained('{self.tokenizer_name}')")
         print(f"load_dataset('{self.loader_path}','{self.task}')")
 
