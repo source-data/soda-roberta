@@ -173,6 +173,7 @@ class TrainModel:
         Returns:
             (DatasetDict, DatasetDict, DatasetDict)
         """
+        print(f"load_dataset('{self.loader_path}',' {self.task}')")
         data = load_dataset(self.loader_path, self.task)
         if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
             return data["train"], data['validation'], data['test']
