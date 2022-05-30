@@ -83,10 +83,7 @@ class TrainModel:
         # Downloading the dataset
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
         print(100*"*")
-        # print(model_config)
-        # print(self.training_args)
         print(self.train_dataset)
-        print(self.train_dataset[0]['tag_mask'])
         print(100*"*")
 
         self.id2label, self.label2id = self._get_data_labels()
@@ -178,8 +175,7 @@ class TrainModel:
             # Tokenize data if the data is not roberta-base tokenized
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
-                batched=True,
-                remove_columns=['input_ids', 'labels', 'tag_mask'])
+                batched=True)
             # Tokenize data if the data is not roberta-base tokenized
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
