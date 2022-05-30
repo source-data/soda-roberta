@@ -164,7 +164,6 @@ class TrainModel:
 
         tokenized_inputs['labels'] = new_labels
         tokenized_inputs['tag_mask'] = tag_mask
-        tokenized_inputs.remove_columns_(['words'])
 
         return tokenized_inputs
 
@@ -178,6 +177,7 @@ class TrainModel:
                 self._tokenize_and_align_labels,
                 batched=True)
             # Tokenize data if the data is not roberta-base tokenized
+            tokenized_data.remove_columns_(['words'])
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
     def _get_data_labels(self) -> Tuple[dict, dict]:
