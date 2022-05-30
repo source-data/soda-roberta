@@ -96,7 +96,7 @@ def train(
         cache_dir=CACHE
     )
 
-    if data_config_name in ["DET", "NOUN", "VERB", "SMALL", "ROLES"]:
+    if data_config_name in ["DET", "NOUN", "VERB", "SMALL"]:
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
@@ -179,11 +179,11 @@ def train(
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
-                z_dim=96,
-                gamma=1E-1,  # weight of lm loss as compared to z_loss
+                z_dim=1024,
+                gamma=10,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length,
-                residuals=False,
+                residuals=data_config_name in ["MLM", "DET", "NOUN", "VERB", "SMALL"],
                 latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(

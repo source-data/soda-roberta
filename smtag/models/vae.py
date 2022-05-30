@@ -66,6 +66,7 @@ def compute_kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
     return kl.sum()
 
+
 def monte_carlo_kl_divergence(self, z, mu, std):
     # https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
     # --------------------------
