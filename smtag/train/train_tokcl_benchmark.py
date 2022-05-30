@@ -82,6 +82,11 @@ class TrainModel:
 
         # Downloading the dataset
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
+        print(100*"*")
+        # print(model_config)
+        # print(self.training_args)
+        print(self.train_dataset)
+        print(100*"*")
 
         self.id2label, self.label2id = self._get_data_labels()
         print(f"\nTraining with {len(self.train_dataset)} examples.")
@@ -174,10 +179,6 @@ class TrainModel:
                 batched=True)#,
                 # remove_columns=data['train'].column_names)
             # Tokenize data if the data is not roberta-base tokenized
-            print(100 * "*")
-            print(tokenized_data["train"])
-            print(tokenized_data["train"][0]["attention_mask"])
-            print(100 * "*")
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
     def _get_data_labels(self) -> Tuple[dict, dict]:
