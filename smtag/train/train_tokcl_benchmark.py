@@ -159,10 +159,7 @@ class TrainModel:
 
         tokenized_inputs['labels'] = new_labels
         tag_mask = [0 if tag == "O" else 1 for tag in tokenized_inputs['labels']]
-        tokenized_inputs['tag_mask'] = new_labels
-        print(100 * "*")
-        print(tokenized_inputs)
-        print(100 * "*")
+        tokenized_inputs['tag_mask'] = tag_mask
 
         return tokenized_inputs
 
@@ -172,15 +169,10 @@ class TrainModel:
             return data["train"], data['validation'], data['test']
         else:
             # Tokenize data if the data is not roberta-base tokenized
-            print(100 * "*")
-            print(data["train"])
-            print(data["train"][0]["tag_mask"])
-            print(100 * "*")
-
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
-                batched=True,
-                remove_columns=data['train'].column_names)
+                batched=True)#,
+                # remove_columns=data['train'].column_names)
             # Tokenize data if the data is not roberta-base tokenized
             print(100 * "*")
             print(tokenized_data["train"])
