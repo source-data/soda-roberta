@@ -77,10 +77,6 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
-        print(100*"*")
-        print(self.masked_data_collator)
-        print(type(self.masked_data_collator))
-        print(100*"*")
 
     def __call__(self):
 
@@ -208,6 +204,8 @@ class TrainModel:
         else:
             self.masking_probability = 0.0
             self.replacement_probability = 0.0
+        self.training_args['masking_probability'] = self.masking_probability
+        self.training_args['replacement_probability'] = self.replacement_probability
 
         return {
               'tokenizer': self.tokenizer,
