@@ -164,7 +164,7 @@ class TrainModel:
             new_labels.append(self._align_labels_with_tokens(labels, word_ids))
 
         tokenized_inputs['labels'] = new_labels
-        tag_mask = [0 if tag == "O" else 1 for tag in tokenized_inputs['labels']]
+        tag_mask = [0 if tag == 0 else 1 for tag in new_labels]
         tokenized_inputs['tag_mask'] = tag_mask
 
         return tokenized_inputs
