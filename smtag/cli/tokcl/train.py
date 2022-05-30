@@ -149,7 +149,7 @@ if __name__ == "__main__":
                                     dropout=dropout,
                                     hidden_size_multiple=hidden_size_multiple,
                                     masked_data_collator=masked_data_collator,
-                                    file=test_results_file
+                                    file_=test_results_file
                                 )
 
                                 trainer()
