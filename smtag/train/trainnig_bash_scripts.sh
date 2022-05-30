@@ -343,17 +343,17 @@ python -m smtag.cli.tokcl.train drAbreu/sd-nlp-2 NER \
                                 --dropout 0.1 \
                                 --hidden_size_multiple 64 \
                                 --prediction_loss_only False \
-                                --per_device_train_batch_size 8\
-                                --per_device_eval_batch_size 8\
+                                --per_device_train_batch_size 16\
+                                --per_device_eval_batch_size 16\
                                 --evaluation_strategy steps \
-                                --eval_steps 10 \
+                                --eval_steps 1000 \
                                 --label_smoothing_factor 0.0 \
-                                --learning_rate 0.0001 \
+                                --learning_rate 0.00005 \
                                 --save_total_limit 100 \
-                                --num_train_epochs 0.1 \
+                                --num_train_epochs 5 \
                                 --lr_scheduler_type cosine \
                                 --save_strategy steps \
-                                --save_steps 100 \
+                                --save_steps 1000 \
                                 --logging_steps 50 \
                                 --seed 42 \
                                 --load_best_model_at_end False \

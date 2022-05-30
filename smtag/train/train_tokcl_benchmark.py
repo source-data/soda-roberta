@@ -126,7 +126,7 @@ class TrainModel:
         model_config = self.model.config
         print(100*"*")
         # print(model_config)
-        # print(self.training_args)
+        print(self.training_args)
         print(self.data_collator)
         print(self.train_dataset)
         print(self.masked_data_collator)
