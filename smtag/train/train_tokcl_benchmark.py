@@ -86,6 +86,7 @@ class TrainModel:
         # print(model_config)
         # print(self.training_args)
         print(self.train_dataset)
+        print(self.train_dataset[0]['tag_mask'])
         print(100*"*")
 
         self.id2label, self.label2id = self._get_data_labels()
