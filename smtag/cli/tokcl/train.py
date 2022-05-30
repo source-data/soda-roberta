@@ -139,7 +139,7 @@ if __name__ == "__main__":
 
                                 trainer = TrainModel(
                                     training_args=TrainingArgumentsTOKCL(**training_args),
-                                    loader_path=models[model],
+                                    loader_path=loader_path,
                                     task=task,
                                     from_pretrained=from_pretrained,
                                     tokenizer_name=tokenizer_name,
