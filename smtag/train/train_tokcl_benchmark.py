@@ -164,7 +164,7 @@ class TrainModel:
 
         tokenized_inputs['labels'] = new_labels
         tokenized_inputs['tag_mask'] = tag_mask
-        tokenized_inputs.remove_columns_(['attention_mask', 'input_ids', 'labels', 'tag_mask', 'token_type_ids'])
+        tokenized_inputs.remove_columns_(['words'])
 
         return tokenized_inputs
 
