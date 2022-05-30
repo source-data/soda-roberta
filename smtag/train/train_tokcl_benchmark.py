@@ -78,6 +78,10 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        print(f"AutoTokenizer.from_pretrained('{self.tokenizer_name})")
+        print(f"load_dataset('{self.loader_path}',' {self.task}')")
+        stop
+
 
     def __call__(self):
 
@@ -174,7 +178,7 @@ class TrainModel:
             (DatasetDict, DatasetDict, DatasetDict)
         """
         print(f"load_dataset('{self.loader_path}',' {self.task}')")
-        stop
+
         data = load_dataset(self.loader_path, self.task)
         if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
             return data["train"], data['validation'], data['test']
