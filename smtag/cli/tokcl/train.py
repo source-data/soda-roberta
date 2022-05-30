@@ -126,8 +126,7 @@ if __name__ == "__main__":
                                     "report_to": "tensorboard",
                                     "push_to_hub": False,
                                     "hub_strategy": "checkpoint",
-                                    "overwrite_output_dir": True,
-                                    "do_test": True
+                                    "overwrite_output_dir": True
                                 }
 
                                 loader_path = dataset_to_load
