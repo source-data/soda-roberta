@@ -102,6 +102,12 @@ if __name__ == "__main__":
                     for lr_schedule in lr_scheduler:
                         for dr in dropout:
                             for hidden_size in hidden_size_multiple_values:
+                                if hidden_size == 16:
+                                    num_train_epochs = 20
+                                elif hidden_size == 32:
+                                    num_train_epochs = 10
+                                else:
+                                    num_train_epochs = 5
                                 hub_model_id = f"EMBO/{model}_{task}"
                                 output_dir = f"./tokcl_models/EMBO_{model}_{task}"
                                 test_results_file = "benchmarking_results.pkl"
@@ -116,7 +122,7 @@ if __name__ == "__main__":
                                     "evaluation_strategy": "epoch",
                                     "eval_steps": 1,
                                     "save_total_limit": 500,
-                                    "num_train_epochs": 5,
+                                    "num_train_epochs": num_train_epochs,
                                     "save_strategy": "epoch",
                                     "save_steps": 500,
                                     "seed": 42,
