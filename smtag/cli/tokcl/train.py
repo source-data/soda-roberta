@@ -115,7 +115,7 @@ if __name__ == "__main__":
                                     "per_device_train_batch_size": per_device_train_batch_size,
                                     "prediction_loss_only": False,
                                     "evaluation_strategy": "epoch",
-                                    "eval_steps": "1",
+                                    "eval_steps": 1,
                                     "save_total_limit": 500,
                                     "num_train_epochs": 5,
                                     "save_strategy": "epoch",
