@@ -165,6 +165,9 @@ class TrainModel:
 
         tokenized_inputs['labels'] = new_labels
         tag_mask = [0 if tag == 0 else 1 for tag in new_labels]
+        print(tag_mask)
+        stop
+        stop
         tokenized_inputs['tag_mask'] = tag_mask
 
         return tokenized_inputs
