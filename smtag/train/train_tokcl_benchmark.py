@@ -254,11 +254,11 @@ class TrainModel:
     def _get_data_collator(self):
         # if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
         if self.masked_data_collator:
-            print(100*'*')
-            print("Masked Data Collator is selected.")
-            print(100*'*')
             self.training_args.remove_unused_columns = False
             masked_data_collator_args = self._get_masked_data_collator_args()
+            print(100*'*')
+            print(masked_data_collator_args)
+            print(100*'*')
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
