@@ -9,7 +9,7 @@ from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
-    RobertaConfig, BertConfig
+    RobertaConfig, BertConfig, AutoConfig
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
@@ -111,7 +111,8 @@ class TrainModel:
         print(100*"*")
         print(self.hidden_size)
         print(100*"*")
-        self.model = AutoModelForTokenClassification.from_pretrained(
+
+        self.model_config = AutoConfig.from_pretrained(
             self.from_pretrained,
             num_labels=len(list(self.label2id.keys())),
             max_position_embeddings=self._max_position_embeddings(),
@@ -120,6 +121,7 @@ class TrainModel:
             classifier_dropout=self.dropout,
             hidden_size=self.hidden_size,
         )
+        self.model = AutoModelForTokenClassification.from_config(self.model_config)
 
         model_config = self.model.config
 
