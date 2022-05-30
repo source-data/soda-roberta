@@ -168,6 +168,7 @@ class TrainModel:
             # Tokenize data if the data is not roberta-base tokenized
             print(100 * "*")
             print(data["train"])
+            print(data["train"][0]["tag_mask"])
             print(100 * "*")
 
             tokenized_data = data.map(
@@ -177,6 +178,7 @@ class TrainModel:
             # Tokenize data if the data is not roberta-base tokenized
             print(100 * "*")
             print(tokenized_data["train"])
+            print(tokenized_data["train"][0]["attention_mask"])
             print(100 * "*")
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
