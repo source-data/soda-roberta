@@ -108,6 +108,9 @@ class TrainModel:
         else:
             self.hidden_size = self.hidden_size * BertConfig().num_attention_heads
 
+        print(100*"*")
+        print(self.hidden_size)
+        print(100*"*")
         self.model = AutoModelForTokenClassification.from_pretrained(
             self.from_pretrained,
             num_labels=len(list(self.label2id.keys())),
