@@ -78,9 +78,6 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
-        print(f"AutoModelForTokenClassification.from_pretrained('{self.from_pretrained}')")
-        print(f"AutoTokenizer.from_pretrained('{self.tokenizer_name}')")
-        print(f"load_dataset('{self.loader_path}','{self.task}')")
 
     def __call__(self):
 
@@ -107,10 +104,6 @@ class TrainModel:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
         else:
             self.hidden_size = self.hidden_size * BertConfig().num_attention_heads
-
-        print(100*"*")
-        print(self.hidden_size)
-        print(100*"*")
 
         self.model_config = AutoConfig.from_pretrained(
             self.from_pretrained,
