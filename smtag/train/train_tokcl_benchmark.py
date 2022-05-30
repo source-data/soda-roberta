@@ -163,7 +163,7 @@ class TrainModel:
         for i, labels in enumerate(all_labels):
             word_ids = tokenized_inputs.word_ids(i)
             new_labels.append(self._align_labels_with_tokens(labels, word_ids))
-            tag_mask.append([0 if tag == 0 else 1 for tag in new_labels])
+            tag_mask.append([0 if tag == 0 else 1 for tag in new_labels[-1]])
 
         tokenized_inputs['labels'] = new_labels
         tokenized_inputs['tag_mask'] = tag_mask
