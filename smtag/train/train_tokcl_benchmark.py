@@ -78,10 +78,8 @@ class TrainModel:
 
         # Define the tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
-        print(f"AutoTokenizer.from_pretrained('{self.tokenizer_name})")
-        print(f"load_dataset('{self.loader_path}',' {self.task}')")
-        stop
-
+        print(f"AutoTokenizer.from_pretrained('{self.tokenizer_name}')")
+        print(f"load_dataset('{self.loader_path}','{self.task}')")
 
     def __call__(self):
 
@@ -106,12 +104,7 @@ class TrainModel:
         # of the training hyperparameters
         if self.from_pretrained in ['roberta-base', 'EMBO/bio-lm']:
             self.hidden_size = self.hidden_size * RobertaConfig().num_attention_heads
-        elif self.from_pretrained in ['bert-base-cased', 'bert-base-uncased',
-                                      'dmis-lab/biobert-base-cased-v1.2',
-                                      'dmis-lab/biobert-base-cased-v1.1',
-                                      'dmis-lab/biobert-large-cased-v1.1',
-                                      'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
-                                      'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext']:
+        else:
             self.hidden_size = self.hidden_size * BertConfig().num_attention_heads
 
         self.model = AutoModelForTokenClassification.from_pretrained(
