@@ -25,6 +25,7 @@ from typing import Dict, Union, Tuple
 from torch.utils.data import DataLoader
 from datasets import load_metric
 from os.path import exists
+from datasets import DatasetDict
 import json
 # changing default values
 @dataclass
@@ -82,9 +83,6 @@ class TrainModel:
 
         # Downloading the dataset
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
-        print(100*"*")
-        print(self.train_dataset)
-        print(100*"*")
 
         self.id2label, self.label2id = self._get_data_labels()
         print(f"\nTraining with {len(self.train_dataset)} examples.")
@@ -123,11 +121,6 @@ class TrainModel:
         )
 
         model_config = self.model.config
-        print(100*"*")
-        # print(model_config)
-        # print(self.training_args)
-        print(self.train_dataset)
-        print(100*"*")
 
         self.trainer = Trainer(
             model=self.model,
@@ -142,14 +135,20 @@ class TrainModel:
         self.trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
         self.trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 
-        print(f"CUDA available: {torch.cuda.is_available()}")
-
         self.trainer.train()
 
         if self.do_test:
             self._run_test()
 
-    def _tokenize_and_align_labels(self, examples):
+    def _tokenize_and_align_labels(self, examples) -> DatasetDict:
+        """
+        Tokenizes data split into words into sub-token tokenization parts.
+        Args:
+            examples: batch of data from a `datasets.DatasetDict`
+
+        Returns:
+            `datasets.DatasetDict` with entries tokenized to the `AutoTokenizer`
+        """
         tokenized_inputs = self.tokenizer(examples['words'],
                                           truncation=True,
                                           is_split_into_words=True)
@@ -167,7 +166,13 @@ class TrainModel:
 
         return tokenized_inputs
 
-    def _data_loader(self):
+    def _data_loader(self) -> Tuple[DatasetDict, DatasetDict, DatasetDict]:
+        """
+        Load the data for training, validating and testing. It will also
+        send the data to the proper pipeline needed to successfully be trained.
+        Returns:
+            (DatasetDict, DatasetDict, DatasetDict)
+        """
         data = load_dataset(self.loader_path, self.task)
         if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
             return data["train"], data['validation'], data['test']
@@ -198,6 +203,12 @@ class TrainModel:
             return config.max_length
 
     def _get_masked_data_collator_args(self) -> dict:
+        """
+        Generates arguments to be entered in the data collator. It works as a
+        kind of default argument parser.
+        Returns:
+            `dict`
+        """
         if self.task == "NER":
             self.replacement_probability = 0.05 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
             # probabilistic masking
@@ -253,7 +264,13 @@ class TrainModel:
         return new_labels
 
     def _get_data_collator(self):
-        # if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+        """
+        Loads the data collator for the training. The options are the typical
+        `DataCollatorForTokenClassification` or a special `DataCollationForMaskedTokenClassification`.
+        Deciding between both of them can be done by setting up the parameter `--masked_data_collator`.
+        Returns:
+            DataCollator
+        """
         if self.masked_data_collator:
             self.training_args.remove_unused_columns = False
             masked_data_collator_args = self._get_masked_data_collator_args()
@@ -261,12 +278,15 @@ class TrainModel:
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt')
-        # else:
-        #     data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-        #                                                        return_tensors='pt')
         return data_collator
 
     def _run_test(self):
+        """
+        It loads the best model of the training and computes the
+        model performance in the test set.
+        Returns:
+            Prints the results of the token classification task in the screen.
+        """
         test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
         metric = load_metric('seqeval')
         self.model.eval()
@@ -300,7 +320,8 @@ class TrainModel:
         print(self.test_results)
 
     def save_benchmark_results(self):
-
+        """Outputs a dictionary with the most important information about the trainings
+        for benchmarking."""
         output_data = {
             "date": datetime.today(),
             "model_name": self.training_args.hub_model_id,
