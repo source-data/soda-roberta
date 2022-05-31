@@ -124,7 +124,7 @@ if __name__ == "__main__":
                                     "save_total_limit": 500,
                                     "num_train_epochs": num_train_epochs,
                                     "save_strategy": "epoch",
-                                    "save_steps": 500,
+                                    "save_steps": 1,
                                     "seed": 42,
                                     "load_best_model_at_end": True,
                                     "metric_for_best_model": "f1",
@@ -133,7 +133,10 @@ if __name__ == "__main__":
                                     "push_to_hub": False,
                                     "hub_strategy": "checkpoint",
                                     "overwrite_output_dir": True,
-                                    "logging_dir": "./logs"
+                                    "logging_dir": "./logs",
+                                    "log_level": "info",
+                                    "logging_strategy": "steps",
+                                    "logging_steps": 200
                                 }
 
                                 loader_path = dataset_to_load
