@@ -69,14 +69,14 @@ if __name__ == "__main__":
 
     learning_rate = [0.0001, 0.00005]
     lr_scheduler = ["constant", "linear", "cosine"]
-    dropout_list = [0.1, 0.25]
+    dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
     per_device_train_batch_size = 16
-    hidden_size_multiple_values = [16, 32, 64, 128]
+    hidden_size_multiple_values = [32, 64] # 16 learns too slow and 128 does not even learn with masked
     prediction_loss_only = False
     evaluation_strategy = "epoch"
     eval_steps = 1
     save_total_limit = 500
-    num_train_epochs = 10
+    num_train_epochs = 20
     save_strategy = "epoch"
     save_steps = 500
     seed = 42
@@ -102,12 +102,6 @@ if __name__ == "__main__":
                     for lr_schedule in lr_scheduler:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
-                                if hidden_size == 16:
-                                    num_train_epochs = 20
-                                elif hidden_size == 32:
-                                    num_train_epochs = 10
-                                else:
-                                    num_train_epochs = 5
                                 hub_model_id = f"EMBO/{model}_{task}"
                                 output_dir = f"./tokcl_models/EMBO_{model}_{task}"
                                 test_results_file = "benchmarking_results.pkl"
