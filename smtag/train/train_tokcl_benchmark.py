@@ -9,7 +9,7 @@ from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
-    RobertaConfig, BertConfig, AutoConfig, DefaultFlowCallback
+    RobertaConfig, BertConfig, AutoConfig, DefaultFlowCallback, EarlyStoppingCallback
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
@@ -125,7 +125,9 @@ class TrainModel:
             train_dataset=self.train_dataset,
             eval_dataset=self.eval_dataset,
             compute_metrics=self.compute_metrics,
-            callbacks=[DefaultFlowCallback]
+            callbacks=[DefaultFlowCallback,
+                       EarlyStoppingCallback(early_stopping_patience=2,
+                                             early_stopping_threshold=0.0)]
         )
         # switch the Tensorboard callback to plot losses on same plot
         self.trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
