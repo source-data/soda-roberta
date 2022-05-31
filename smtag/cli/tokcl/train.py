@@ -97,9 +97,9 @@ if __name__ == "__main__":
                                                                   "roberta-large"] else "EMBO/sd-nlp-non-tokenized"
         tokenizer_name = "roberta-base" if models[model] in ["EMBO/bio-lm"] else models[model]
         for task in tasks:
-            for masked in [True, False]:
-                for lr in learning_rate:
-                    for lr_schedule in lr_scheduler:
+            for lr in learning_rate:
+                for lr_schedule in lr_scheduler:
+                    for masked in [True, False]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
                                 hub_model_id = f"EMBO/{model}_{task}"
