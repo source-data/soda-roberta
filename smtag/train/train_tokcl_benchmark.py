@@ -361,9 +361,7 @@ class TrainModel:
             "learning_rate_init": self.training_args.learning_rate,
             "learning_rate_scheduled": self.training_args.lr_scheduler_type,
             "training_batch_size": self.training_args.per_device_train_batch_size,
-            "accuracy_metrics": self.test_results,
-            'masking_probability': self.masking_probability,
-            'replacement_probability': self.replacement_probability
+            "accuracy_metrics": self.test_results
         }
 
         if exists(self.file_):
