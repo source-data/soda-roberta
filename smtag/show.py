@@ -1,4 +1,4 @@
-from random import randrange
+from random import randrange, sample
 from typing import Dict
 
 import torch
@@ -54,14 +54,16 @@ class ShowExample(TrainerCallback):
         self.to_console(inputs, pred_idx)
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
-        batch = next(iter(dataloader))
-        rand_example_idx = randrange(batch['input_ids'].size(0))
+        # batch = next(iter(dataloader))
+        L = len(dataloader.dataset)
+        batch_size = dataloader.batch_size
+        rand_indices = sample(range(L), batch_size)
+        dataset = dataloader.dataset
+        rand_example_idx = randrange(L)
+        batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
         inputs = {}
         for k, v in batch.items():
-            ex = v[rand_example_idx].clone().unsqueeze(0)   # single example
-            if torch.cuda.is_available():
-                ex = ex.cuda()
-            inputs[k] = ex
+            inputs[k] = v.cuda() if torch.cuda.is_available() else v
         return inputs
 
     def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
