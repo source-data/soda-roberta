@@ -277,7 +277,8 @@ class TrainModel:
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                               return_tensors='pt')
+                                                               return_tensors='pt',
+                                                               padding='max_length')
         return data_collator
 
     def _run_test(self):
