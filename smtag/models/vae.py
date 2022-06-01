@@ -1,8 +1,5 @@
-from json import encoder
-import pdb
 from dataclasses import dataclass
 from typing import List, Dict, Union
-from sklearn.multiclass import OutputCodeClassifier
 import torch
 from torch import nn
 from transformers import (
@@ -12,7 +9,7 @@ from transformers import (
 )
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.modeling_outputs import (
-    BaseModelOutput, MaskedLMOutput,
+    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions
 )
 from transformers.file_utils import ModelOutput
@@ -66,8 +63,10 @@ def compute_kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
     return kl.sum()
 
+
 def monte_carlo_kl_divergence(self, z, mu, std):
     # https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
+    # this has the advantage that one can choose the distribution, and in particular, mu and std
     # --------------------------
     # Monte carlo KL divergence
     # --------------------------
