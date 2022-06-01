@@ -303,9 +303,6 @@ class TrainModel:
             test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
         metric = load_metric('seqeval')
         self.model.eval()
-        print(test_dataloader)
-        print(len(self.test_dataset))
-        print(self.data_collator)
         for batch in test_dataloader:
             continue
 
