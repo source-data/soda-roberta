@@ -101,7 +101,7 @@ if __name__ == "__main__":
                 for lr_schedule in lr_scheduler:
                     if lr_schedule != "constant":
                         stop
-                    for masked in [True, False]:
+                    for masked in [False, True]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
                                 hub_model_id = f"EMBO/{model}_{task}"
