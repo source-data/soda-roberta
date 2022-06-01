@@ -180,7 +180,7 @@ class TrainModel:
             # Tokenize data if the data is not roberta-base tokenized
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
-                batched=True)
+                truncation=True)
             # Tokenize data if the data is not roberta-base tokenized
             tokenized_data.remove_columns_(['words'])
             return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
@@ -277,8 +277,7 @@ class TrainModel:
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                               return_tensors='pt',
-                                                               padding='max_length')
+                                                               return_tensors='pt')
         return data_collator
 
     def _run_test(self):
