@@ -51,7 +51,7 @@ if __name__ == "__main__":
     #                     help="""JSON file with the results of the model.""")
 
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
-    tasks = ["NER", "GENEPROD_ROLES"]
+    tasks = ["NER"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
         # "EMBO/bert-base-cased": "bert-base-cased",
@@ -99,8 +99,6 @@ if __name__ == "__main__":
         for task in tasks:
             for lr in learning_rate:
                 for lr_schedule in lr_scheduler:
-                    if lr_schedule != "constant":
-                        stop
                     for masked in [False, True]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
