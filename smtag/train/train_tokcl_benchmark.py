@@ -277,7 +277,8 @@ class TrainModel:
             data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                               return_tensors='pt')
+                                                               return_tensors='pt',
+                                                               padding=True)
         return data_collator
 
     def _run_test(self):
@@ -287,7 +288,20 @@ class TrainModel:
         Returns:
             Prints the results of the token classification task in the screen.
         """
-        test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
+        if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+            masked_data_collator_args = {'tokenizer': self.tokenizer,
+                                         'padding': True,
+                                         'max_length': 512,
+                                         'pad_to_multiple_of': None,
+                                         'return_tensors': 'pt',
+                                         'masking_probability': 0.0,
+                                         'replacement_probability': 0.0,
+                                         'select_labels': False}
+
+            data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
+            test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=data_collator)
+        else:
+            test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
         metric = load_metric('seqeval')
         self.model.eval()
         print(test_dataloader)
