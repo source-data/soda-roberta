@@ -69,10 +69,10 @@ if __name__ == "__main__":
         # "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased"
     }
 
-    learning_rate = [0.0001] # [0.0001, 0.00005]
+    learning_rate = [0.00075] # [0.0001, 0.00005]
     lr_scheduler = ["linear", "cosine"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
-    per_device_train_batch_size = 32
+    per_device_train_batch_size = 16
     hidden_size_multiple_values = [80] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
     prediction_loss_only = False
     evaluation_strategy = "epoch"
