@@ -53,6 +53,7 @@ if __name__ == "__main__":
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
     tasks = ["NER"]
     models = {
+        # "EMBO/bio-lm": "EMBO/bio-lm",
         "EMBO/bert-base-cased": "bert-base-cased",
         "EMBO/bert-base-uncased": "bert-base-uncased",
         "EMBO/bert-large-cased": "bert-large-cased",
@@ -65,7 +66,6 @@ if __name__ == "__main__":
         "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
         "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
         "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
-        "EMBO/bio-lm": "EMBO/bio-lm",
     }
 
     learning_rate = [0.0001] # [0.0001, 0.00005]
