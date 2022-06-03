@@ -278,7 +278,8 @@ class TrainModel:
         else:
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt',
-                                                               padding=True)
+                                                               padding=True,
+                                                               max_length=512)
         return data_collator
 
     def _run_test(self):
@@ -304,8 +305,6 @@ class TrainModel:
             test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
         metric = load_metric('seqeval')
         self.model.eval()
-        for batch in test_dataloader:
-            continue
 
         for batch in test_dataloader:
             batch = {k: v.to(self.device) for k, v in batch.items()}
