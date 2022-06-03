@@ -73,7 +73,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name == ["SEQ2SEQ", "QandA"]:
+        elif self.config.name in ["SEQ2SEQ", "QandA"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "labels": datasets.Sequence(feature=datasets.Value("int32"))
