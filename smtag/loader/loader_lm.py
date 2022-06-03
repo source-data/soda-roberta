@@ -174,3 +174,8 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         "input_ids": data['input_ids'],
                         "labels": data['input_ids']
                     }
+                elif self.config.name == "QandA":
+                    yield id_, {
+                        "input_ids": data['input_ids'][0],
+                        "labels": data['input_ids'][1]
+                    }
