@@ -51,6 +51,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.1")
 
     BUILDER_CONFIGS = [
+        datasets.BuilderConfig(name="QandA", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
         datasets.BuilderConfig(name="SEQ2SEQ", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
@@ -72,7 +73,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name == "SEQ2SEQ":
+        elif self.config.name == ["SEQ2SEQ", "QandA"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "labels": datasets.Sequence(feature=datasets.Value("int32"))
