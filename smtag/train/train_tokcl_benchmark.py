@@ -115,6 +115,7 @@ class TrainModel:
             hidden_size=self.hidden_size,
             max_length=512
         )
+        print("Is here telling me about the truncation")
         self.model = AutoModelForTokenClassification.from_config(self.model_config)
 
         model_config = self.model.config
