@@ -9,5 +9,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir_path = args.source_dir
     dest_dir_path = args.dest_dir
+    print(source_dir_path, dest_dir_path)
     sdprep = PreparatorLM(source_dir_path, dest_dir_path)
     sdprep.run()

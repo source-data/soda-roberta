@@ -34,8 +34,8 @@ class Config:
         tokenizer
     ):
         self.split_ratio = {
-            "train": 0.7,
-            "eval": 0.2,
+            "train": 0.8,
+            "eval": 0.1,
             "test": 0.1,
             "max_eval": 10_000,
             "max_test": 10_000
