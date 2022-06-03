@@ -54,21 +54,21 @@ if __name__ == "__main__":
     tasks = ["NER"]
     models = {
         # "EMBO/bio-lm": "EMBO/bio-lm",
-        "EMBO/bert-base-cased": "bert-base-cased",
+        # "EMBO/bert-base-cased": "bert-base-cased",
         "EMBO/bert-base-uncased": "bert-base-uncased",
-        "EMBO/bert-large-cased": "bert-large-cased",
-        "EMBO/bert-large-uncased": "bert-large-uncased",
-        "EMBO/roberta-base": "roberta-base",
-        "EMBO/roberta-large": "roberta-large",
-        "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
-        "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
-        "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
-        "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
-        "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
-        "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
+        # "EMBO/bert-large-cased": "bert-large-cased",
+        # "EMBO/bert-large-uncased": "bert-large-uncased",
+        # "EMBO/roberta-base": "roberta-base",
+        # "EMBO/roberta-large": "roberta-large",
+        # "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
+        # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
+        # "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+        # "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
+        # "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
+        # "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
     }
 
-    learning_rate = [0.0001] # [0.0001, 0.00005]
+    learning_rate = [0.00075] # [0.0001, 0.00005]
     lr_scheduler = ["linear"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
     per_device_train_batch_size = 16
