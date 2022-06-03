@@ -100,7 +100,7 @@ if __name__ == "__main__":
         for task in tasks:
             for lr in learning_rate:
                 for lr_schedule in lr_scheduler:
-                    for masked in [False]: #[False, True]:
+                    for masked in [True]: #[False, True]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
                                 hub_model_id = f"EMBO/{model}_{task}"
