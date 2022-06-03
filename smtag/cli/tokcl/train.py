@@ -129,7 +129,6 @@ if __name__ == "__main__":
                                     "hub_strategy": "checkpoint",
                                     "overwrite_output_dir": True,
                                     "hub_model_id": hub_model_id,
-                                    "max_length": 512
                                 }
 
                                 loader_path = dataset_to_load
