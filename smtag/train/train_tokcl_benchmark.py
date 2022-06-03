@@ -113,6 +113,7 @@ class TrainModel:
             label2id=self.label2id,
             classifier_dropout=self.dropout,
             hidden_size=self.hidden_size,
+            max_length=512
         )
         self.model = AutoModelForTokenClassification.from_config(self.model_config)
 
