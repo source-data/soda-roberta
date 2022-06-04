@@ -71,7 +71,7 @@ if __name__ == "__main__":
     learning_rate = [0.000075] # [0.0001, 0.00005]
     lr_scheduler = ["linear"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
-    per_device_train_batch_size = 16
+    per_device_train_batch_size = 8
     hidden_size_multiple_values = [64] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
     prediction_loss_only = False
     evaluation_strategy = "epoch"
