@@ -34,8 +34,8 @@ class Config:
         tokenizer
     ):
         self.split_ratio = {
-            "train": 0.7,
-            "eval": 0.2,
+            "train": 0.8,
+            "eval": 0.1,
             "test": 0.1,
             "max_eval": 10_000,
             "max_test": 10_000
@@ -55,7 +55,7 @@ class Config:
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
 
-# config for SEQ2SET 
+# config for QandA 
 config = Config(
     max_length=[256, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch

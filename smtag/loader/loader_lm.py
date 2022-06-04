@@ -51,6 +51,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.1")
 
     BUILDER_CONFIGS = [
+        datasets.BuilderConfig(name="QandA", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
         datasets.BuilderConfig(name="SEQ2SEQ", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
@@ -75,7 +76,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name == "SEQ2SEQ":
+        elif self.config.name in ["SEQ2SEQ", "QandA"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "labels": datasets.Sequence(feature=datasets.Value("int32"))
@@ -176,6 +177,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         "input_ids": data['input_ids'],
                         "labels": data['input_ids']
                     }
+<<<<<<< HEAD
                 elif self.config.name == "GENEPROD_INTERVENTION":
                     # masking genprod that are target of an intervention
                     role_labels = data["label_ids"]["geneprod_roles"]
@@ -212,8 +214,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         "input_ids": data['input_ids'],
                         "tag_mask": semantic_mask
                     }
-                elif self.config.name == "SEQ2SET":
-                    
+                elif self.config.name == "QandA":
                     yield id_, {
                         "input_ids": data['input_ids'][0],
                         "labels": data['input_ids'][1]
