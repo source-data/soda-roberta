@@ -57,6 +57,9 @@ class BioLang(datasets.GeneratorBasedBuilder):
         datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
         datasets.BuilderConfig(name="SMALL", version="0.0.1", description="Dataset for part-of-speech (determinants, conjunctions, prepositions, pronouns) masked language model."),
         datasets.BuilderConfig(name="NOUN", version="0.0.1", description="Dataset for part-of-speech (nouns) masked language model."),
+        datasets.BuilderConfig(name="GENEPROD_INTERVENTION", version="0.0.1", description="Dataset for semantic (intervention on geneprod) masked language model."),
+        datasets.BuilderConfig(name="GENEPROD_OBSERVATION", version="0.0.1", description="Dataset for semantic (observation of geneprod) masked language model."),
+        datasets.BuilderConfig(name="GENEPROD", version="0.0.1", description="Dataset for semantic (geneprod as entity type) masked language model."),
     ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -67,7 +70,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "special_tokens_mask": datasets.Sequence(feature=datasets.Value("int8")),
             })
-        elif self.config.name in ["DET", "VERB", "SMALL", "NOUN", "NULL"]:
+        elif self.config.name in ["DET", "VERB", "SMALL", "NOUN", "NULL", "GENEPROD_INTERVENTION", "GENEPROD_OBSERVATION", "GENEPROD"]:
             features = datasets.Features({
                 "input_ids": datasets.Sequence(feature=datasets.Value("int32")),
                 "tag_mask": datasets.Sequence(feature=datasets.Value("int8")),
@@ -169,8 +172,49 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     }
                 elif self.config.name == "SEQ2SEQ":
                     "Seq2seq training needs the input_ids as labels, no masking"
-                    pos_mask = [0] * len(data['input_ids'])
                     yield id_, {
                         "input_ids": data['input_ids'],
                         "labels": data['input_ids']
+                    }
+                elif self.config.name == "GENEPROD_INTERVENTION":
+                    # masking genprod that are target of an intervention
+                    role_labels = data["label_ids"]["geneprod_roles"]
+                    intervention = ["B-CONTROLLED_VAR ", "I-CONTROLLED_VAR"]
+                    semantic_mask = [
+                        1 if (role in intervention) else 0 
+                        for role in role_labels
+                    ]
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "tag_mask": semantic_mask
+                    }
+                elif self.config.name == "GENEPROD_OBSERVATION":
+                    # masking genprod that are target of an intervention
+                    role_labels = data["label_ids"]["geneprod_roles"]
+                    observation = ["B-MEASURED_VAR", "I-MEASURED_VAR"]
+                    semantic_mask = [
+                        1 if (role in observation) else 0 
+                        for role in role_labels
+                    ]
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "tag_mask": semantic_mask
+                    }
+                elif self.config.name == "GENEPROD":
+                    # masking any genprod
+                    entity_type_labels = data["label_ids"]["entity_types"]
+                    geneprod = ["I-GENEPROD", "B-GENEPROD"]
+                    semantic_mask = [
+                        1 if (typ in geneprod) else 0 
+                        for typ in entity_type_labels
+                    ]
+                    yield id_, {
+                        "input_ids": data['input_ids'],
+                        "tag_mask": semantic_mask
+                    }
+                elif self.config.name == "SEQ2SET":
+                    
+                    yield id_, {
+                        "input_ids": data['input_ids'][0],
+                        "labels": data['input_ids'][1]
                     }

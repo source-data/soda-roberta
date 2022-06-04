@@ -46,22 +46,37 @@ class Config:
 
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
 # config = Config(tokenizer=char_level_tokenizer)
+
+# config for Twin 
+# config = Config(
+#     max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
+#     model_type="Twin",  # "VAE" #  "Twin"  # "Autoencoder"
+#     asynchr=True  # we need ordered examples while async returns results in non deterministic way
+# )
+
+# config for SEQ2SET 
 config = Config(
-    max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length=[256, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-    model_type="Twin",  # "VAE" #  "Twin"  # "Autoencoder"
+    model_type="Autoencoder"
     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 )
+
+# config for VAE
 # config = Config(
-#     max_length=64, #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     max_length=512, #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
 #     model_type="VAE",  # "VAE" #  "Twin"  # "Autoencoder"
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
+
+# config for nomral language model
 # config = Config(
-#     max_length=64,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-#     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-#     model_type="VAE",  # "VAE" #  "Twin"  # "Autoencoder"
+#     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained=""roberta-base"",  # leave empty if training a language model from scratch
+#     model_type="Autoencoder"
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
+
 # config = Config()
