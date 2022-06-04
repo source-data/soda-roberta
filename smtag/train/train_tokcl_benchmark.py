@@ -9,7 +9,7 @@ from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
-    RobertaConfig, BertConfig, AutoConfig, DefaultFlowCallback, EarlyStoppingCallback
+    RobertaConfig, BertConfig, AutoConfig, DefaultFlowCallback, EarlyStoppingCallback, BertTokenizerFast
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode
@@ -77,7 +77,10 @@ class TrainModel:
         self.file_ = file_
 
         # Define the tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        if self.from_pretrained in ["EMBO/BioMegatron345mCased", "EMBO/BioMegatron345mUncased"]:
+            self.tokenizer = BertTokenizerFast.from_pretrained(self.tokenizer_name)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
 
     def __call__(self):
 

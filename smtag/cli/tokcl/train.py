@@ -62,8 +62,8 @@ if __name__ == "__main__":
         # "EMBO/roberta-large": "roberta-large",
         # "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
         # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
-        "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
-        "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
+        # "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+        # "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
         "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
         "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
     }
