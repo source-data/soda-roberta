@@ -54,25 +54,25 @@ if __name__ == "__main__":
     tasks = ["GENEPROD_ROLES"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
-        "EMBO/bert-base-cased": "bert-base-cased",
-        "EMBO/bert-base-uncased": "bert-base-uncased",
-        # "EMBO/bert-large-cased": "bert-large-cased",
-        # "EMBO/bert-large-uncased": "bert-large-uncased",
-        "EMBO/roberta-base": "roberta-base",
-        # "EMBO/roberta-large": "roberta-large",
-        "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
-        # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
-        "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
-        "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
-        "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
-        "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
+        # "EMBO/bert-base-cased": "bert-base-cased",
+        # "EMBO/bert-base-uncased": "bert-base-uncased",
+        # # "EMBO/bert-large-cased": "bert-large-cased",
+        # # "EMBO/bert-large-uncased": "bert-large-uncased",
+        # "EMBO/roberta-base": "roberta-base",
+        # # "EMBO/roberta-large": "roberta-large",
+        # "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
+        # # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
+        # "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+        # "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
+        # "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
+        # "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
     }
 
-    learning_rate = [0.000075] # [0.0001, 0.00005]
+    learning_rate = [0.00005] # [0.0001, 0.00005]
     lr_scheduler = ["linear"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
     per_device_train_batch_size = 8
-    hidden_size_multiple_values = [64] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
+    hidden_size_multiple_values = [8, 16, 32, 64] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
     prediction_loss_only = False
     evaluation_strategy = "epoch"
     eval_steps = 1
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         for task in tasks:
             for lr in learning_rate:
                 for lr_schedule in lr_scheduler:
-                    for masked in [True]: #[False, True]:
+                    for masked in [True, False]: #[False, True]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
                                 hub_model_id = f"EMBO/{model}_{task}"
