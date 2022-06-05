@@ -363,7 +363,8 @@ class TrainModel:
             "learning_rate_init": self.training_args.learning_rate,
             "learning_rate_scheduled": self.training_args.lr_scheduler_type,
             "training_batch_size": self.training_args.per_device_train_batch_size,
-            "accuracy_metrics": self.test_results
+            "accuracy_metrics": self.test_results,
+            "logs_folder": self.training_args.logging_dir
         }
 
         if exists(self.file_):
