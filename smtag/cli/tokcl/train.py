@@ -53,12 +53,12 @@ if __name__ == "__main__":
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
     tasks = ["GENEPROD_ROLES"]
     models = {
-        "EMBO/bio-lm": "EMBO/bio-lm",
-        "EMBO/bert-base-cased": "bert-base-cased",
-        "EMBO/bert-base-uncased": "bert-base-uncased",
+        # "EMBO/bio-lm": "EMBO/bio-lm",
+        # "EMBO/bert-base-cased": "bert-base-cased",
+        # "EMBO/bert-base-uncased": "bert-base-uncased",
         # # "EMBO/bert-large-cased": "bert-large-cased",
         # # "EMBO/bert-large-uncased": "bert-large-uncased",
-        "EMBO/roberta-base": "roberta-base",
+        # "EMBO/roberta-base": "roberta-base",
         # # "EMBO/roberta-large": "roberta-large",
         "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
         # # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
