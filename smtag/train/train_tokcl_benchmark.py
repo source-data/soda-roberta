@@ -295,24 +295,20 @@ class TrainModel:
         Returns:
             Prints the results of the token classification task in the screen.
         """
-        # if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
-        #     masked_data_collator_args = {'tokenizer': self.tokenizer,
-        #                                  'padding': True,
-        #                                  'max_length': 512,
-        #                                  'pad_to_multiple_of': None,
-        #                                  'return_tensors': 'pt',
-        #                                  'masking_probability': 0.0,
-        #                                  'replacement_probability': 0.0,
-        #                                  'select_labels': False}
-        #
-        #     data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
-        #     test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=data_collator)
-        # else:
-        data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                           return_tensors='pt',
-                                                           padding=True,
-                                                           max_length=512)
-        test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=data_collator)
+        if self.from_pretrained in ["EMBO/bio-lm", "roberta-base"]:
+            masked_data_collator_args = {'tokenizer': self.tokenizer,
+                                         'padding': True,
+                                         'max_length': 512,
+                                         'pad_to_multiple_of': None,
+                                         'return_tensors': 'pt',
+                                         'masking_probability': 0.0,
+                                         'replacement_probability': 0.0,
+                                         'select_labels': False}
+
+            data_collator = DataCollatorForMaskedTokenClassification(**masked_data_collator_args)
+            test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=data_collator)
+        else:
+            test_dataloader = DataLoader(self.test_dataset, batch_size=64, collate_fn=self.data_collator)
         metric = load_metric('seqeval')
         self.model.eval()
 
