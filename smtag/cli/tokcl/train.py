@@ -60,9 +60,9 @@ if __name__ == "__main__":
         # # "EMBO/bert-large-uncased": "bert-large-uncased",
         # "EMBO/roberta-base": "roberta-base",
         # # "EMBO/roberta-large": "roberta-large",
-        "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
+        # "EMBO/biobert-base-cased": "dmis-lab/biobert-base-cased-v1.2",
         # # "EMBO/biobert-large-cased": "dmis-lab/biobert-large-cased-v1.1",
-        "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+        # "EMBO/PubMedBERT-base-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
         "EMBO/PubMedBERT-base-uncased-abstract": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract",
         "EMBO/BioMegatron345mCased": "EMBO/BioMegatron345mCased",
         "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         for task in tasks:
             for lr in learning_rate:
                 for lr_schedule in lr_scheduler:
-                    for masked in [True, False]: #[False, True]:
+                    for masked in [True]: #[False, True]:
                         for dr in dropout_list:
                             for hidden_size in hidden_size_multiple_values:
                                 hub_model_id = f"EMBO/{model}_{task}"
