@@ -77,7 +77,7 @@ if __name__ == "__main__":
     evaluation_strategy = "epoch"
     eval_steps = 1
     save_total_limit = 500
-    num_train_epochs = 10
+    num_train_epochs = 5
     save_strategy = "epoch"
     save_steps = 500
     seed = 42
