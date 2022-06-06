@@ -72,12 +72,12 @@ if __name__ == "__main__":
     lr_scheduler = ["linear"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
     per_device_train_batch_size = 8
-    hidden_size_multiple_values = [8, 16, 32, 64] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
+    hidden_size_multiple_values = [32, 64] # [32, 64] # 16 learns too slow and 128 does not even learn with masked
     prediction_loss_only = False
     evaluation_strategy = "epoch"
     eval_steps = 1
     save_total_limit = 500
-    num_train_epochs = 5
+    num_train_epochs = 10
     save_strategy = "epoch"
     save_steps = 500
     seed = 42
