@@ -51,7 +51,7 @@ if __name__ == "__main__":
     #                     help="""JSON file with the results of the model.""")
 
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
-    tasks = ["SMALL_MOL_ROLES"]
+    tasks = ["PANELIZATION"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
         "EMBO/bert-base-cased": "bert-base-cased",
