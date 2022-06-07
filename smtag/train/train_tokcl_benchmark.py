@@ -195,15 +195,15 @@ class TrainModel:
     def _get_data_labels(self) -> Tuple[dict, dict]:
         num_labels = self.train_dataset.info.features['labels'].feature.num_classes
         label_list = self.train_dataset.info.features['labels'].feature.names
+        if self.task == "PANELIZATION":
+            num_labels = 3
+            label_list = ['O', 'B-PANEL_START', 'I-PANEL_START']
         id2label, label2id = {}, {}
         for class_, label in zip(range(num_labels), label_list):
             id2label[class_] = label
             label2id[label] = class_
         print(f"\nTraining on {num_labels} features:")
         print(", ".join(label_list))
-        if self.task == "PANELIZATION":
-            id2label[2] = 'ANOTHER_LABEL'
-            id2label['ANOTHER_LABEL'] = 2
         return id2label, label2id
 
     def _max_position_embeddings(self) -> int:
