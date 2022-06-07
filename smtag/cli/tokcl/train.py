@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
     tasks = ["PANELIZATION"]
     models = {
-        "EMBO/bio-lm": "EMBO/bio-lm",
+        # "EMBO/bio-lm": "EMBO/bio-lm",
         "EMBO/bert-base-cased": "bert-base-cased",
         "EMBO/bert-base-uncased": "bert-base-uncased",
         # # "EMBO/bert-large-cased": "bert-large-cased",
