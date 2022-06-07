@@ -122,6 +122,7 @@ class TrainModel:
         self.model = AutoModelForTokenClassification.from_config(self.model_config)
 
         model_config = self.model.config
+        print(model_config)
 
         self.trainer = Trainer(
             model=self.model,
