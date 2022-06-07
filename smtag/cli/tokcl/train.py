@@ -55,7 +55,7 @@ if __name__ == "__main__":
     models = {
         # "EMBO/bio-lm": "EMBO/bio-lm",
         # "EMBO/bert-base-cased": "bert-base-cased",
-        "EMBO/bert-base-uncased": "bert-base-uncased",
+        # "EMBO/bert-base-uncased": "bert-base-uncased",
         # # "EMBO/bert-large-cased": "bert-large-cased",
         # # "EMBO/bert-large-uncased": "bert-large-uncased",
         "EMBO/roberta-base": "roberta-base",
