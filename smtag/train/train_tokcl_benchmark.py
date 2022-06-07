@@ -202,7 +202,7 @@ class TrainModel:
         print(f"\nTraining on {num_labels} features:")
         print(", ".join(label_list))
         if self.task == "PANELIZATION":
-            id2label["2"] = 'ANOTHER_LABEL'
+            id2label[2] = 'ANOTHER_LABEL'
             id2label['ANOTHER_LABEL'] = 2
         return id2label, label2id
 
