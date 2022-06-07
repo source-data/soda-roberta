@@ -54,8 +54,8 @@ if __name__ == "__main__":
     tasks = ["PANELIZATION"]
     models = {
         # "EMBO/bio-lm": "EMBO/bio-lm",
-        # "EMBO/bert-base-cased": "bert-base-cased",
-        # "EMBO/bert-base-uncased": "bert-base-uncased",
+        "EMBO/bert-base-cased": "bert-base-cased",
+        "EMBO/bert-base-uncased": "bert-base-uncased",
         # # "EMBO/bert-large-cased": "bert-large-cased",
         # # "EMBO/bert-large-uncased": "bert-large-uncased",
         "EMBO/roberta-base": "roberta-base",
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     evaluation_strategy = "epoch"
     eval_steps = 1
     save_total_limit = 500
-    num_train_epochs = 5
+    num_train_epochs = 10
     save_strategy = "epoch"
     save_steps = 500
     seed = 42
