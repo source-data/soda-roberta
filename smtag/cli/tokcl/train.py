@@ -51,7 +51,7 @@ if __name__ == "__main__":
     #                     help="""JSON file with the results of the model.""")
 
     # tasks = ["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]
-    tasks = ["PANELIZATION"]
+    tasks = ["NER"]
     models = {
         "EMBO/bio-lm": "EMBO/bio-lm",
         "EMBO/bert-base-cased": "bert-base-cased",
@@ -68,7 +68,7 @@ if __name__ == "__main__":
         "EMBO/BioMegatron345mUncased": "EMBO/BioMegatron345mUncased",
     }
 
-    learning_rate = [0.00005] # [0.0001, 0.00005]
+    learning_rate = [0.000075] # [0.0001, 0.00005]
     lr_scheduler = ["linear"] # ["constant", "linear", "cosine"]
     dropout_list = [0.1] # Dropout is very similar. We will leave 0.1
     per_device_train_batch_size = 8
