@@ -8,10 +8,10 @@ from ...config import config
 if __name__ == "__main__":
     parser = HfArgumentParser(TrainingArgumentsTOKCL, description="""Class defining the arguments
                         of the HuggingFace Trainer class to be used.""")
-    parser.add_argument("loader_path", help="""Path to the data to be loaded. It can be a path to a
+    parser.add_argument("--loader_path", help="""Path to the data to be loaded. It can be a path to a
                         file stored in your computer or the name of the dataset repository
                         in the HuggingFace Hub.""")
-    parser.add_argument("task",
+    parser.add_argument("--task",
                         choices=["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"],
                         help="""Define the task on which the model must be fine tuned.""")
     parser.add_argument("--data_dir", help="""The dir for the dataset files to use for training.
