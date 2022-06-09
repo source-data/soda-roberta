@@ -200,8 +200,20 @@ labeled.
 
 ## Train the models
 
-The `roberta-base` tokenize models can be trained using the following command, where
-`TASK_NAME` must be replaced by one of the following 
-`["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]`
+The models can be fine-tuned using the following command. User can decide for different datasets using the 
+`loader_path` option. User can also decide between one of the following tasks using the `task` option
+`["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"]`.
 
-    python -m smtag.cli.tokcl.train TASK_NAME
+The option `from_pretrained` allows to define the base model to be fine-tuned. If no further definition for 
+`tokenizer`, then the trainer will use the sme tokenizer used by the base model. This is the recommended setup.
+Note that the data class used by the script inherits from `TrainingArguments`. This means that any of the arguments
+accepted by `TrainingArguments` can be added to the script. 
+
+    python -m smtag.cli.tokcl.train \
+                --load_best_model_at_end \
+                --loader_path "EMBO/sd-nlp-non-tokenized" \
+                --task "NER" \
+                --from_pretrained "bert-base-cased"
+
+    
+    python -m smtag.cli.tokcl.train --help
