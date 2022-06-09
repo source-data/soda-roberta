@@ -61,7 +61,7 @@ if __name__ == "__main__":
     tokenizer_name = from_pretrained if args.tokenizer is None else args.tokenizer
 
     trainer = TrainModel(
-        training_args=TrainingArgumentsTOKCL(**training_args),
+        training_args=training_args,
         loader_path=loader_path,
         task=task,
         from_pretrained=from_pretrained,
