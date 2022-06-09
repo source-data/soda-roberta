@@ -51,7 +51,6 @@ if __name__ == "__main__":
     no_cache = args.no_cache
     loader_path = args.loader_path
     task = args.task
-    data_config_name = args.data_config_name
     data_dir = args.data_dir
     from_pretrained = args.from_pretrained
     model_type = args.model_type
