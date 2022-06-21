@@ -19,7 +19,7 @@ from transformers import (
     Trainer,
     IntervalStrategy,
     RobertaForMaskedLM, RobertaConfig,
-    OPTForCausalLM, OPTConfig,
+    # OPTForCausalLM, OPTConfig,
     AutoModel, AutoModelForMaskedLM, AutoTokenizer, AutoModelForSeq2SeqLM,
     TrainingArguments,
     DataCollatorForLanguageModeling,

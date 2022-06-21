@@ -64,6 +64,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
         datasets.BuilderConfig(name="NOUN", version="0.0.1", description="Dataset for part-of-speech (nouns) masked language model."),
         datasets.BuilderConfig(name="GENEPROD_INTERVENTION", version="0.0.1", description="Dataset for semantic (intervention on geneprod) masked language model."),
         datasets.BuilderConfig(name="GENEPROD_OBSERVATION", version="0.0.1", description="Dataset for semantic (observation of geneprod) masked language model."),
+    ]
 
     DEFAULT_CONFIG_NAME = "MLM"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
