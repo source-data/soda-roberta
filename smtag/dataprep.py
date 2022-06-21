@@ -452,3 +452,82 @@ class PreparatorTOKCL:
         print(f"longest example: {config.tokenizer.decode(longest_example)}")
         print(f"shortest example: {config.tokenizer.decode(shortest_example)}")
         return True
+
+class PreparatorGraph:
+
+    def __init__(
+        self,
+        source_dir_path: str,
+        dest_dir_path: str,
+        code_maps: List[CodeMap],
+        tokenizer: AutoTokenizer = config.tokenizer,
+        max_length: int = config.max_length,
+        subsets: List[str] = ["train", "eval", "test"]
+    ):
+        self.source_dir_path = Path(source_dir_path)
+        self.subsets = subsets
+        self.dest_dir_path = dest_dir_path
+        if not self.dest_dir_path:
+            basename = self.source_dir_path.name
+            self.dest_dir_path = Path("/data/json") / basename
+        else:
+            self.dest_dir_path = Path(self.dest_dir_path)
+        if self.dest_dir_path.exists():
+            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.dest_dir_path.parents[0].exists():
+            raise ValueError(f"{self.dest_dir_path.parents[0]} does not exist, cannot proceed")
+        else:
+            self.dest_dir_path.mkdir()
+            print(f"{self.dest_dir_path} created")
+        self.code_maps = code_maps
+        self.max_length = max_length
+        self.tokenizer = tokenizer
+
+    def run(self):
+        """Runs the coding and labeling of xml examples.
+        Saves the resulting text files to the destination directory.
+        """
+        for subset in self.subsets:
+            print(f"Preparing: {subset}")
+            source_file_path = self.source_dir_path / f"{subset}.txt"
+            dest_file_path_tokenized = self.dest_dir_path / f"{subset}.jsonl"
+            dest_file_path_graph_tensor = self.dest_dir_path / f"{subset}.th"
+            dest_file_path_entity_index = self.dest_dir_path / f"{subset}.txt"
+            examples = []
+            with source_file_path.open() as f:
+                lines = f.readlines()
+                for line in tqdm(lines):
+                    xml_example: Element = fromstring(line)
+                    tokenized, token_level_labels = self._encode_example(xml_example)
+                    if self.tokenizer.is_fast:
+                        tokens = tokenized.tokens()
+                    else:
+                        tokens = self.tokenizer.convert_ids_to_tokens(tokenized.input_ids)
+                    # add special_tokens_mask "mannually" now that label_ids are aligned
+                    examples.append({
+                        'tokens': tokens,  # do we ever need this?
+                        'input_ids': tokenized.input_ids,
+                        'label_ids': token_level_labels,
+                        'special_tokens_mask': _special_tokens_mask(tokens, self.tokenizer)
+                    })
+            self._save_json(examples, dest_file_path)
+            self._verify(dest_file_path)
+
+    def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
+        xml_encoder = XMLEncoder(xml)
+        inner_text = innertext(xml_encoder.element)
+        # if isinstance(config.tokenizer, ByT5Tokenizer):
+        #     inner_text = str(inner_text.encode('ascii', 'replace'))
+        tokenized: BatchEncoding = self.tokenizer(
+            inner_text,
+            max_length=self.max_length,
+            truncation=True,
+            return_offsets_mapping=True,
+            add_special_tokens=True
+        )
+        token_level_labels = {}
+        for code_map in self.code_maps:
+            xml_encoded = xml_encoder.encode(code_map)
+            labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
+            token_level_labels[code_map.name] = labels
+        return tokenized, token_level_labels
