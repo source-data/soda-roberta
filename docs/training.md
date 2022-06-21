@@ -6,7 +6,9 @@ Update the `.env.example` and save as `.env`. Recommended:
     TOKCL_MODEL_PATH="/tokcl_models"
     CACHE="/cache"
     RUNS_DIR="/runs"
-    DUMMY_DIR="/dummy"
+    RUNTIME=""
+
+Specify `RUNTIME="nvidia"` on a NVIDIA DGX GPU station.
 
 Install `git-lfs` (https://git-lfs.github.com/).
 

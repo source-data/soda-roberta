@@ -5,7 +5,7 @@ from ...config import config
 if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArgumentsLM), description="Traing script.")
     parser.add_argument("loader_path", help="Path of the loader.")
-    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN", "SEQ2SEQ", "NOLM", "ROLES"], help="Name of the dataset configuration to use.")
+    parser.add_argument("data_config_name", nargs="?", default="MLM", choices=["MLM", "DET", "VERB", "SMALL", "NOUN", "SEQ2SEQ", "NOLM", "ROLES", "GENEPROD_INTERVENTION", "GENEPROD_OBSERVATION"], help="Name of the dataset configuration to use.")
     parser.add_argument("--data_dir", help="The dir for the dataset files to use for training.")
     parser.add_argument("--no_cache", action="store_true", help="Flag that forces re-donwloading the dataset rather than re-using it from the cache.")
     parser.add_argument("--from_pretrained", default=config.from_pretrained, help="The pretrained model to fine tune.")
