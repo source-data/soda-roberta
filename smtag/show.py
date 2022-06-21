@@ -53,6 +53,7 @@ class ShowExample(TrainerCallback):
             inputs = self.pick_random_example(eval_dataloader)
             pred = model(inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
+        inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
@@ -60,7 +61,7 @@ class ShowExample(TrainerCallback):
         dataset = dataloader.dataset
         rand_example_idx = randrange(L)
         batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
-        inputs = {} 
+        inputs = {}
         for k, v in batch.items():
             inputs[k] = v.cuda() if torch.cuda.is_available() else v
         return inputs
@@ -69,7 +70,6 @@ class ShowExample(TrainerCallback):
         pred_idx = [e.item() for e in pred_idx]
         input_ids = [e.item() for e in inputs["input_ids"]]
         labels = [e.item() for e in inputs["labels"]]
-        attention_mask = [e.item() for e in inputs["attention_mask"]]
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
@@ -115,6 +115,7 @@ class ShowExampleLM(ShowExample):
             colored += self.tokenizer.decode(input_id)
         return colored
 
+
 class ShowExampleTextGeneration(ShowExampleLM):
 
     COLOR_CHAR = {
@@ -130,7 +131,7 @@ class ShowExampleTextGeneration(ShowExampleLM):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
             pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=config.max_length[1])
-        pred_idx =  pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
+        pred_idx = pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
@@ -138,7 +139,6 @@ class ShowExampleTextGeneration(ShowExampleLM):
         pred_idx = [e.item() for e in pred_idx]
         input_ids = [e.item() for e in inputs["input_ids"]]
         labels = [e.item() for e in inputs["labels"]]
-        attention_mask = [e.item() for e in inputs["attention_mask"]]
         colored = ""
         input_str = self.tokenizer.decode(input_ids, skip_special_tokens=True)
         generated_str = self.tokenizer.decode(pred_idx, skip_special_tokens=True)
