@@ -14,6 +14,11 @@ services:
     - celery
     - flower
 #    runtime: nvidia
+    deploy: &gpus
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     volumes: &volumes
     - .:/app
     - ./data:/data
@@ -33,6 +38,7 @@ services:
   tensorboard:
     image: smtag
 #    runtime: nvidia
+    deploy: *gpus
     ports:
     - 6007:6007
     volumes:
