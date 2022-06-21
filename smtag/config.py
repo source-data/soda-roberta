@@ -90,4 +90,5 @@ class Config:
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
 
+# Default config for token classification / Roberta
 config = Config()
