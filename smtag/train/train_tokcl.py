@@ -20,7 +20,7 @@ from ..models.experimental import (
 from ..data_collator import DataCollatorForMaskedTokenClassification
 from ..trainer import MyTrainer
 from ..metrics import MetricsTOKCL
-from ..show import ShowExampleTOCKL
+from ..show import ShowExampleTOKCL
 from ..tb_callback import MyTensorBoardCallback
 from ..config import config
 from .. import LM_MODEL_PATH, TOKCL_MODEL_PATH, CACHE, RUNS_DIR
@@ -163,7 +163,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
-            callbacks=[ShowExampleTOCKL(tokenizer)]
+            callbacks=[ShowExampleTOKCL(tokenizer)]
         )
     elif model_type == "GraphRepresentation":
         trainer = MyTrainer(
@@ -173,7 +173,7 @@ def train(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
-            callbacks=[ShowExampleTOCKL(tokenizer)]
+            callbacks=[ShowExampleTOKCL(tokenizer)]
         )
     else:
         raise ValueError(f"{model_type} is not implemented!")
