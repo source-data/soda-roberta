@@ -6,7 +6,9 @@ Update the `.env.example` and save as `.env`. Recommended:
     TOKCL_MODEL_PATH="/tokcl_models"
     CACHE="/cache"
     RUNS_DIR="/runs"
-    DUMMY_DIR="/dummy"
+    RUNTIME=""
+
+Specify `RUNTIME="nvidia"` on a NVIDIA DGX GPU station.
 
 Install `git-lfs` (https://git-lfs.github.com/).
 
@@ -136,7 +138,7 @@ Four tasks (or data configurations) are supported:
 To train a conventional masked language model:
 
     python -m smtag.cli.lm.train \
-    smtag.loader.loader_lm.py \
+    loader/loader_lm.py \
     MLM \
     --data_dir /data/json/oapmc_abstracts
 

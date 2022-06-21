@@ -13,7 +13,12 @@ services:
     - tensorboard
     - celery
     - flower
-    runtime: nvidia
+#    runtime: nvidia
+    deploy: &gpus
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     volumes: &volumes
     - .:/app
     - ./data:/data
@@ -21,7 +26,7 @@ services:
     - ./tokcl_models:${TOKCL_MODEL_PATH}
     - ./cache:${CACHE}
     - ./runs:${RUNS_DIR}
-    - ./dummy:${DUMMY_DIR}
+    # - ./dummy:${DUMMY_DIR}
     env_file:
     - ./.env
     ports:
@@ -32,7 +37,8 @@ services:
 
   tensorboard:
     image: smtag
-    runtime: nvidia
+#    runtime: nvidia
+    deploy: *gpus
     ports:
     - 6007:6007
     volumes:

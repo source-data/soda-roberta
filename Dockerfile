@@ -10,7 +10,8 @@ RUN apt-get update \
 && pip install nltk==3.5 \
 && pip install scikit-learn==0.24.0 \
 # && pip install transformers==4.1.1 \
-&& pip install transformers==4.15.0 \
+# && pip install transformers==4.15.0 \
+&& pip install transformers==4.20.0 \
 # && pip install datasets==1.3.0 \
 && pip install datasets==1.17.0 \
 && pip install seqeval==1.2.2 \
