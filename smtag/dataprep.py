@@ -392,6 +392,7 @@ class PreparatorTOKCL:
         # _, last_pos = tokenized.offset_mapping[-2]  # end of last non special token
         if pos >= len(inner_text):
             token_idx = len(tokenized.input_ids)
+            # testing connection
             return token_idx
         elif inner_text[pos] != ' ':  # usual case, not in a space, all fine
             token_idx = tokenized.char_to_token(pos)
