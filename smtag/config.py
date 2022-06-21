@@ -24,6 +24,7 @@ class Config:
     model_type: str = "Autoencoder"  # "VAE" #  "Twin"
     nlp: English = field(default=spacy.load("en_core_web_sm"))
     tokenizer: InitVar[Union[RobertaTokenizerFast, BartTokenizerFast, ByT5Tokenizer]] = None
+    fast: bool = True
     split_ratio: InitVar[Dict[str, float]] = None
     asynchr: bool = True
     twin_delimiter: str = "###tt9HHSlkWoUM###"  # to split concatenated twin examples
@@ -41,7 +42,7 @@ class Config:
             "max_test": 10_000
         } if split_ratio is None else split_ratio
         # a specific tokenizer can be provided for example when training a model from scratch
-        self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(self.from_pretrained)
+        self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(self.from_pretrained, fast=self.fast)
 
 
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
@@ -57,11 +58,20 @@ class Config:
 
 # config for QandA 
 config = Config(
-    max_length=[256, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-    from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-    model_type="Autoencoder"
+    max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    from_pretrained= "facebook/bart-base", #"facebook/opt-1.3b", #"facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
+    # fast=False, # for OPT model
+    model_type="Autoencoder",
     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 )
+
+# config for AndQ 
+# config = Config(
+#     max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained="facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
+#     model_type="Autoencoder",
+#     asynchr=True  # we need ordered examples while async returns results in non deterministic way
+# )
 
 # config for VAE
 # config = Config(

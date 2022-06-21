@@ -19,7 +19,8 @@ from transformers import (
     Trainer,
     IntervalStrategy,
     RobertaForMaskedLM, RobertaConfig,
-    AutoModel, AutoModelForMaskedLM, AutoTokenizer,
+    OPTForCausalLM, OPTConfig,
+    AutoModel, AutoModelForMaskedLM, AutoTokenizer, AutoModelForSeq2SeqLM,
     TrainingArguments,
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
@@ -40,7 +41,7 @@ from ..data_collator import (
 
 from ..trainer import MyTrainer
 from ..show import (
-    ShowExampleLM, ShowExampleTwinLM,
+    ShowExampleLM, ShowExampleTwinLM, ShowExampleTextGeneration,
 )
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -96,18 +97,19 @@ def train(
         cache_dir=CACHE
     )
 
-    if data_config_name in ["DET", "NOUN", "VERB", "SMALL"]:
+    targeted_masking_tasks = ["DET", "NOUN", "VERB", "SMALL", "GENEPROD_INTERVENTION", "GENEPROD_OBSERVATION", "GENEPROD"]
+    if data_config_name in targeted_masking_tasks:
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
                 mlm_probability=1.0
             )
-        # elif config.model_type in ["VAE", "Twin"]:
-        #     data_collator = DataCollatorForTargetedMasking(
-        #         tokenizer=tokenizer,
-        #         mlm_probability=0.5,
-        #         pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
-        #     )
+        elif config.model_type in ["VAE"]:
+            data_collator = DataCollatorForTargetedMasking(
+                tokenizer=tokenizer,
+                mlm_probability=1.0,
+                pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
+            )
         else:
             raise ValueError(f"unsupported config.model_type: {model_type} for targeted language modeling")
     elif data_config_name == "MLM":
@@ -122,13 +124,13 @@ def train(
                 mlm=True,
                 pad_to_multiple_of=config.max_length
             )
-        elif config.model_type in ["Twin"]:
-            data_collator = MyDataCollatorForTwinLanguageModeling(
-                tokenizer=tokenizer,
-                mlm=True,
-                pad_to_multiple_of=config.max_length,
-                max_length_list=config.max_length
-            )
+        # elif config.model_type in ["Twin"]:
+        #     data_collator = MyDataCollatorForTwinLanguageModeling(
+        #         tokenizer=tokenizer,
+        #         mlm=True,
+        #         pad_to_multiple_of=config.max_length,
+        #         max_length_list=config.max_length
+        #     )
         else:
             raise ValueError(f"unsupported config.model_type: {model_type} for MLM")
     elif data_config_name == "SEQ2SEQ":
@@ -143,10 +145,24 @@ def train(
                 max_length_list=config.max_length
             )
         elif model_type == "VAE":  # for debuging, maybe not necessary
-            data_collator = MyDataCollatorForSeq2Seq(
+            data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
+    elif data_config_name in ["QandA", "AandQ", "MULTITASK", "NEXT"]:
+        if data_config_name in ["NEXT"] and model_type == "Autoencoder":
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                max_length = sum(config.max_length),
+                pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
+            )
+        elif model_type == "Autoencoder":
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=config.max_length[0]
+            )
+        else:
+            raise NotImplementedError(f"{data_config_name} is not implemented for {model_type}")
     elif data_config_name == "NOLM":
         if model_type == "Twin":
             data_collator = MyDataCollatorForTwinSeq2Seq(
@@ -163,7 +179,14 @@ def train(
 
     if model_type == "Autoencoder":
         if config.from_pretrained:
-            model = AutoModelForMaskedLM.from_pretrained(from_pretrained)
+            if data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
+                if 'facebook/opt' in config.from_pretrained:
+                    opt_model_config = OPTConfig()
+                    model = OPTForCausalLM(config=opt_model_config)
+                else:
+                    model = AutoModelForSeq2SeqLM.from_pretrained(config.from_pretrained)
+            else:
+                model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
         else:
             model_config = RobertaConfig(
                 vocab_size=tokenizer.vocab_size,
@@ -179,11 +202,11 @@ def train(
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
-                z_dim=1024,
+                z_dim=256,
                 gamma=10,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length,
-                residuals=data_config_name in ["MLM", "DET", "NOUN", "VERB", "SMALL"],
+                residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
                 latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(
@@ -235,7 +258,7 @@ def train(
                         gamma=1.0,  # weight of lm loss as compared to z_loss
                         sampling_iterations=200,
                         seq_length=config.max_length[i],
-                        residuals=False,
+                        residuals=data_config_name in ["MLM"],
                         latent_var_loss=None  # "kl" or "mmd" or None
                     )
                     for i in range(num_models)
@@ -265,6 +288,17 @@ def train(
     if model_type in ["Twin"]:
         show_callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name in ["SEQ2SEQ", "MLM"] else None
         trainer = MyTrainer(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=compute_metrics_lm,
+            callbacks=show_callbacks
+        )
+    elif data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
+        show_callbacks = [ShowExampleTextGeneration(tokenizer)]
+        trainer = Trainer(
             model=model,
             args=training_args,
             data_collator=data_collator,

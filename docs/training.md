@@ -136,7 +136,7 @@ Four tasks (or data configurations) are supported:
 To train a conventional masked language model:
 
     python -m smtag.cli.lm.train \
-    smtag.loader.loader_lm.py \
+    loader/loader_lm.py \
     MLM \
     --data_dir /data/json/oapmc_abstracts
 
