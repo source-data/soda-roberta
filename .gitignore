@@ -9,6 +9,7 @@ runs/
 .Trash*
 ~*
 
+/data
 
 
 # Byte-compiled / optimized / DLL files

@@ -83,22 +83,21 @@ Navigate to to the PubMed Central Open Access subset directory and initiate the 
     mget *.xml.gz
     exit
 
-
 Expand the files:
 
     gunzip *.gz
 
-## Extraction of individual articles 
+## Extraction of individual articles
 
-Extract articles from the JATS XML files but keep the XML so that sub-sections (eg figures or abstracts) can be extracted later.
-
-    python -m smtag.cli.lm.extract /data/xml/oapmc /data/xml/oapmc_articles --xpath .//article --keep-xml
-
-Randomly split aticles into train, eval, test sets. 
+Randomly split aticles into train, eval, test sets.
 
 Note: it is better to do this now rather than later, so that these subsets remain as independent as possible. It is important to do so when several examples (i.e. figure legends) are extracted per xml document, otherwise accuracy metrics may be over optimistic (i.e. examples extracted from the same article should NOT be distributed across train, eval and test).
 
-    python -m smtag.cli.prepro.split /data/xml/oapmc_articles
+    python -m smtag.cli.prepro.split /data/xml/oapmc
+
+Extract articles from the JATS XML files but keep the XML so that sub-sections (eg figures or abstracts) can be extracted later.
+
+    python -m smtag.cli.prepro.extract /data/xml/oapmc /data/xml/oapmc_articles --xpath .//article --keep_xml
 
 Extract text from the abstracts:
 
@@ -114,7 +113,6 @@ Note: it is possible to combine several XPath expressions with the `|` operator 
     --inclusion_probability=0.5 
 
 Note: the option --inclusion_probability allows to determine the probability with wich each example is actually included; this is useful when the dataset is huge and only a random subset is needed.
-
 
 ## Tokenize and prepare dataset
 
@@ -144,7 +142,6 @@ To train a conventional masked language model:
 
 Note:   default, the model is saved in /lm_models so that it can be used for subsequent fine tuning for token classification
 
-
 # Fine tuning of pre-trained language model
 
 Now that we have a language model, we fine tune for token classification and text segmentation based on the SourceData dataset.
@@ -163,7 +160,7 @@ Download the SourceData raw dataset:
 
 Note that the latest dataset can be prepared from the SourceData REST API using:
 
-    python -m smtag.cli.prepo.get_sd  # takes a very long time!!
+    python -m smtag.cli.prepro.get_sd  # takes a very long time!!
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 
