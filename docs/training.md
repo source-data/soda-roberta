@@ -164,23 +164,21 @@ Note that the latest dataset can be prepared from the SourceData REST API using:
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 
-    python -m common.split /data/xml/sourcedata/ --extension xml
-    python -m common.split /data/xml/panelization_compendium --extension xml
+    python -m smtag.cli.prepro.split /data/xml/sourcedata/ --extension xml
+    python -m smtag.cli.prepro.split /data/xml/panelization_compendium --extension xml
 
 Extract the examples for NER and ROLES using an XPAth that identifies individual panel legends within figure legends:
 
-    mkdir /data/xml/sd_panels
-    python -m common.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
 
 Using an XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
-    mkdir /data/xml/sd_panelization
-    python -m common.extract /data/xml/panelization_compendium /data/xml/sd_panelization --xpath .//fig --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panelization --xpath .//fig --keep_xml
 
-Prepare the datasets for NER, ROLES and PANELIZATION:
+Prepare the datasets for NER, ROLES and PANELIZATION. This step generates the data. This step will generate `JSONlines` files for the `train`, `test`, and `eval` splits. They will be word pre-tokenized and wth IOB labels for each word. This way of organizing the data is compatible with the best practices for token classification in the 🤗 framework. Note that it is important at this point to have the `config.py` file properly configured.
 
     mkdir /data/json/sd_panels
-    python -m tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
     mkdir /data/json/sd_panelization
     python -m tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization
 
