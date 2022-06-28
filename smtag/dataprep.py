@@ -249,12 +249,12 @@ class PreparatorTOKCL:
             The path to the source file.
         dest_file_path (Path):
             The path of the destination file where the files with the encoded labeled examples should be saved.
+        tokenizer (RobertaTokenizerFast):
+            The pre-trained tokenizer to use for processing the inner text.
         code_maps (List[CodeMap)]:
             A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
         max_length (int):
             Maximum number of token in one example. Examples will be truncated.
-        subsets (List[str]):
-            Files with the data splits to be used.
     """
     def __init__(
         self,
