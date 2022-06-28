@@ -50,6 +50,7 @@ if __name__ == "__main__":
         masked_data_collator,
         data_dir,
         no_cache,
+        tokenizer,
     )
 
     trainer()

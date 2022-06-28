@@ -40,6 +40,7 @@ class TrainTokenClassification:
                 masked_data_collator: bool = False,
                 data_dir: str = "",
                 no_cache: bool = True,
+                tokenizer: str = None,
                 ):
 
         self.training_args = deepcopy(training_args)
@@ -52,21 +53,26 @@ class TrainTokenClassification:
         self.no_cache = no_cache
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.config = config
+        self.tokenizer_pretrained = tokenizer.name_or_path
         self.training_args.logging_dir = f"{RUNS_DIR}/tokcl-{self.task}-{self.from_pretrained}-{datetime.now().isoformat().replace(':','-')}"
         self.training_args.output_dir = os.path.join(training_args.output_dir,f"{self.task}_{self.from_pretrained}")
 
-        # if not self.output_dir.exists():
-        #     self.output_dir.mkdir()
-        #     logger.info(f"Created {self.output_dir}.")
-
-        # self.training_args.output_dir = str(self.output_dir)
-
     def __call__(self):
         # Define the tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
-                                                        is_pretokenized=True, 
-                                                        add_prefix_space=True
-                                                        )
+        try:
+            logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
+                                                            is_pretokenized=True, 
+                                                            add_prefix_space=True
+                                                            )
+        except OSError:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
+                                                            is_pretokenized=True, 
+                                                            add_prefix_space=True
+                                                            )
+            if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
+                self.get_roberta = True
+
         # Load the dataset either from 🤗 or from local
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
 
@@ -161,10 +167,11 @@ class TrainTokenClassification:
 
         logger.info(f"Training model for token classification {self.from_pretrained}.")
         self.trainer.train()
+
         # trainer.save_model(training_args.output_dir)
 
         # Define do_test
-        if self.training_args.do_test:
+        if self.training_args.do_predict:
             logger.info(f"Testing on {len(self.test_dataset)}.")
             self.trainer.args.prediction_loss_only = False
             pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
@@ -314,7 +321,7 @@ class TrainTokenClassification:
         }
 
     def _max_position_embeddings(self) -> int:
-        if any(x in self.from_pretrained for x in ["roberta", "gpt2"]):
+        if any(x in self.from_pretrained for x in ["roberta", "gpt2"]) or self.get_roberta:
             return config.max_length + 2
         else:
             return config.max_length
