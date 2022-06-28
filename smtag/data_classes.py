@@ -35,6 +35,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     save_steps: int = field(default=1000)
     save_total_limit: Optional[int] = field(default=None)
     seed: int = field(default=42)
+    select_labels: bool = field(default=False)
 
     # Optimization parameters
     gradient_accumulation_steps: int = field(default=1)

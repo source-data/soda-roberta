@@ -9,7 +9,8 @@ from transformers import (
     AutoModelForTokenClassification, AutoTokenizer,
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
-    BartModel, DefaultFlowCallback, EarlyStoppingCallback
+    BartModel, DefaultFlowCallback, EarlyStoppingCallback,
+    AutoConfig
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode, DatasetDict
@@ -65,6 +66,7 @@ class TrainTokenClassification:
                                                             is_pretokenized=True, 
                                                             add_prefix_space=True
                                                             )
+            self.get_roberta = False
         except OSError:
             self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
                                                             is_pretokenized=True, 
@@ -99,11 +101,19 @@ class TrainTokenClassification:
                                                                     label2id=self.label2id,
                                                                     classifier_dropout=self.training_args.classifier_dropout,
                                                                     max_length=self.config.max_length)
+    # Checking the hyperparameter tuning
+        config = AutoConfig.from_pretrained(
+            self.from_pretrained, num_labels=len(list(self.label2id.keys())), 
+        )        
+        def get_model():
+            return AutoModelForTokenClassification.from_pretrained(self.from_pretrained,config=config)
 
+    
+    
         # Define the trainer
         if self.model_type == "Autoencoder":
             self.trainer = Trainer(
-                model=self.model,
+                # model=self.model,
                 args=self.training_args,
                 data_collator=self.data_collator,
                 train_dataset=self.train_dataset,
@@ -111,9 +121,10 @@ class TrainTokenClassification:
                 compute_metrics=self.compute_metrics,
                 callbacks=[DefaultFlowCallback,
                         EarlyStoppingCallback(early_stopping_patience=2,
-                                                early_stopping_threshold=0.0)]
+                                                early_stopping_threshold=0.0)],
+                model_init=get_model
             )
-            self.model_config = self.model.config
+            self.model_config = get_model
 
 
         elif self.model_type == "GraphRepresentation":
@@ -166,8 +177,12 @@ class TrainTokenClassification:
         self.trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 
         logger.info(f"Training model for token classification {self.from_pretrained}.")
-        self.trainer.train()
-
+        # self.trainer.train()
+        self.best_model = self.trainer.hyperparameter_search(
+                                        direction="maximize", 
+                                        backend="ray", 
+                                        n_trials=10 # number of trials
+                                    )
         # trainer.save_model(training_args.output_dir)
 
         # Define do_test
