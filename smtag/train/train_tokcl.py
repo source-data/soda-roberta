@@ -28,6 +28,12 @@ from .. import LM_MODEL_PATH, TOKCL_MODEL_PATH, CACHE, RUNS_DIR
 import logging
 from smtag.data_classes import TrainingArgumentsTOKCL
 import os
+from transformers.trainer_utils import BestRun
+from ray.tune.schedulers import PopulationBasedTraining, pbt
+from ray import tune
+from ray.tune import CLIReporter
+
+from smtag import data_collator
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -42,7 +48,7 @@ class TrainTokenClassification:
                 data_dir: str = "",
                 no_cache: bool = True,
                 tokenizer: str = None,
-                ):
+               ):
 
         self.training_args = deepcopy(training_args)
         self.loader_path = loader_path
@@ -55,25 +61,10 @@ class TrainTokenClassification:
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.config = config
         self.tokenizer_pretrained = tokenizer.name_or_path
-        self.training_args.logging_dir = f"{RUNS_DIR}/tokcl-{self.task}-{self.from_pretrained}-{datetime.now().isoformat().replace(':','-')}"
-        self.training_args.output_dir = os.path.join(training_args.output_dir,f"{self.task}_{self.from_pretrained}")
 
     def __call__(self):
         # Define the tokenizer
-        try:
-            logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
-                                                            is_pretokenized=True, 
-                                                            add_prefix_space=True
-                                                            )
-            self.get_roberta = False
-        except OSError:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
-                                                            is_pretokenized=True, 
-                                                            add_prefix_space=True
-                                                            )
-            if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
-                self.get_roberta = True
+        self.tokenizer = self._get_tokenizer()
 
         # Load the dataset either from 🤗 or from local
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
@@ -101,19 +92,11 @@ class TrainTokenClassification:
                                                                     label2id=self.label2id,
                                                                     classifier_dropout=self.training_args.classifier_dropout,
                                                                     max_length=self.config.max_length)
-    # Checking the hyperparameter tuning
-        config = AutoConfig.from_pretrained(
-            self.from_pretrained, num_labels=len(list(self.label2id.keys())), 
-        )        
-        def get_model():
-            return AutoModelForTokenClassification.from_pretrained(self.from_pretrained,config=config)
-
-    
     
         # Define the trainer
         if self.model_type == "Autoencoder":
             self.trainer = Trainer(
-                # model=self.model,
+                model=self.model,
                 args=self.training_args,
                 data_collator=self.data_collator,
                 train_dataset=self.train_dataset,
@@ -121,10 +104,8 @@ class TrainTokenClassification:
                 compute_metrics=self.compute_metrics,
                 callbacks=[DefaultFlowCallback,
                         EarlyStoppingCallback(early_stopping_patience=2,
-                                                early_stopping_threshold=0.0)],
-                model_init=get_model
+                                                early_stopping_threshold=0.0)]
             )
-            self.model_config = get_model
 
 
         elif self.model_type == "GraphRepresentation":
@@ -168,7 +149,7 @@ class TrainTokenClassification:
             raise ValueError(f"unknown model type: {self.model_type}.")
 
         print(f"\nTraining arguments for model type {self.model_type}:")
-        print(self.model_config)
+        print(self.model.config)
         print(self.training_args)
 
 
@@ -177,12 +158,7 @@ class TrainTokenClassification:
         self.trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
 
         logger.info(f"Training model for token classification {self.from_pretrained}.")
-        # self.trainer.train()
-        self.best_model = self.trainer.hyperparameter_search(
-                                        direction="maximize", 
-                                        backend="ray", 
-                                        n_trials=10 # number of trials
-                                    )
+        self.trainer.train()
         # trainer.save_model(training_args.output_dir)
 
         # Define do_test
@@ -191,6 +167,24 @@ class TrainTokenClassification:
             self.trainer.args.prediction_loss_only = False
             pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
             print(f"{pred.metrics}")
+
+    def _get_tokenizer(self):
+        try:
+            logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
+            tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
+                                                            is_pretokenized=True, 
+                                                            add_prefix_space=True
+                                                            )
+            self.get_roberta = False
+        except OSError:
+            tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
+                                                            is_pretokenized=True, 
+                                                            add_prefix_space=True
+                                                            )
+            if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
+                self.get_roberta = True
+        return tokenizer
+
 
     def _data_loader(self) -> Tuple[DatasetDict, DatasetDict, DatasetDict]:
         """
@@ -340,3 +334,117 @@ class TrainTokenClassification:
             return config.max_length + 2
         else:
             return config.max_length
+
+
+class HpSearchForTokenClassification(TrainTokenClassification):
+    def __init__(self,
+                smoke_test: bool = False,
+                gpus_per_trial: int = 0,
+                hp_tune_samples: int = 8,
+                hp_search_config: dict = {},
+                hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining(),
+                hp_search_reporter: tune.progress_reporter.CLIReporter = CLIReporter(),
+                **kw
+            ):
+        self.smoke_test = smoke_test
+        self.gpus_per_trial = gpus_per_trial
+        self.hp_tune_samples = hp_tune_samples
+        self.hp_search_config = hp_search_config
+        self.hp_search_scheduler = hp_search_scheduler
+        self.hp_search_reporter = hp_search_reporter
+        super(HpSearchForTokenClassification, self).__init__(**kw)
+        self.training_args.logging_dir = f"{RUNS_DIR}/tokcl-{self.task}-{self.from_pretrained}-{datetime.now().isoformat().replace(':','-')}"
+        self.training_args.output_dir = os.path.join(
+                                                self.training_args.output_dir,
+                                                f"{self.task}_{self.from_pretrained}"
+                                                )
+        self.model_name = self.from_pretrained if not self.smoke_test else "sshleifer/tiny-distilroberta-base"
+
+    def _get_model(self):
+        """Model initializer function. This is just a call to be used by the
+        automated hyperparameter search.
+
+        Returns:
+            AutoModelForTokenClassification: Any of the AutoModelForTokenClassification available in 🤗.
+        """
+                # Checking the hyperparameter tuning
+        config = AutoConfig.from_pretrained(
+            self.model_name, 
+            num_labels=len(list(self.label2id.keys())), 
+        )        
+        return AutoModelForTokenClassification.from_pretrained(
+            self.model_name,
+            config=config
+            )
+
+    def _run_hyperparam_search(self) -> BestRun:
+        """Runs the hyperparameter search to find the best hyper parameters
+        for the model. It uses the Ray backend.
+
+        Returns:
+            trainer_utils.BestRun: All the information about the best model run.
+        """
+        # Define the tokenizer
+        self.tokenizer = self._get_tokenizer()
+
+        # Load the dataset either from 🤗 or from local
+        self.train_dataset, self.eval_dataset, _ = self._data_loader()
+
+        # Get the data labels
+        self.id2label, self.label2id = self._get_data_labels()
+        logger.info("\nTraining with {len(self.train_dataset)} examples.")
+        logger.info(f"Evaluating on {len(self.eval_dataset)} examples.")
+        if self.training_args.do_predict:
+            logger.info(f"Testing on {len(self.test_dataset)} examples.")
+
+        # Define the data Collator
+        self.data_collator = self._get_data_collator()
+
+        # Define the metrics to be computed
+        self.compute_metrics = MetricsTOKCL(label_list=list(self.label2id.keys()))
+
+        training_args = TrainingArguments(
+            output_dir=os.path.join(self.training_args.output_dir,f"hp_tuning_{self.task}_{self.from_pretrained}"),
+            learning_rate=1e-5,  # config
+            do_train=True,
+            do_eval=True,
+            no_cuda=self.gpus_per_trial <= 0,
+            evaluation_strategy="epoch",
+            save_strategy="epoch",
+            load_best_model_at_end=True,
+            num_train_epochs=2,  # config
+            max_steps=-1,
+            per_device_train_batch_size=16,  # config
+            per_device_eval_batch_size=16,  # config
+            warmup_steps=0,
+            weight_decay=0.1,  # config
+            logging_dir="./logs",
+            skip_memory_metrics=True,
+            report_to="none",
+        )
+        trainer = Trainer(
+            model_init=self._get_model,
+            args=training_args,
+            data_collator=self.data_collator,
+            train_dataset=self.train_dataset,
+            eval_dataset=self.eval_dataset,
+            compute_metrics=self.compute_metrics,
+        )
+
+        logger.info(f"Hyperparameter search will take place.")
+        best_model =  trainer.hyperparameter_search(
+                                hp_space=lambda _: self.hp_search_config,
+                                backend="ray",
+                                n_trials=self.hp_tune_samples,
+                                resources_per_trial={"cpu": 1, "gpu": self.gpus_per_trial},
+                                scheduler=self.hp_search_scheduler,
+                                keep_checkpoints_num=1,
+                                checkpoint_score_attr="training_iteration",
+                                stop={"training_iteration": 1} if self.smoke_test else None,
+                                progress_reporter=self.hp_search_reporter,
+                                local_dir="~/ray_results/",
+                                name="tune_transformer_pbt",
+                                log_to_file=True,
+                            )
+
+        return best_model
