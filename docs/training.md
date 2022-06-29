@@ -237,7 +237,7 @@ A default call to the hyperparameter search can be done with the following comma
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task NER \
         --from_pretrained "EMBO/bio-lm" \
-        --disable_tqdm False \
+        --disable_tqdm True \
         --hyperparameter_search \
         --hp_gpus_per_trial 1 \
         --hp_tune_samples 16
