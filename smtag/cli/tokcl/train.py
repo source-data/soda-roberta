@@ -42,6 +42,12 @@ if __name__ == "__main__":
     parser.add_argument("--hp_tune_samples", 
                         default=8, 
                         help="Total number of samples to generate for hp_search.")
+    parser.add_argument("--hp_experiment_name", 
+                        default="tune_transformer_pbt", 
+                        help="Name for the experiment to be stored in the system.")
+    parser.add_argument("--hp_local_folder", 
+                        default="/app/data/ray_results/", 
+                        help="Generic folder where the data will be stored.")
                                
     training_args, args = parser.parse_args_into_dataclasses()
     no_cache = args.no_cache
@@ -50,17 +56,19 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     from_pretrained = args.from_pretrained
     model_type = config.model_type
-    tokenizer = config.tokenizer  # tokenizer has to be the same application-wide
-    masked_data_collator = args.masked_data_collator  # tokenizer has to be the same application-wide
-    hyperparameter_search = args.hyperparameter_search  # tokenizer has to be the same application-wide
-    hp_gpus_per_trial = int(args.hp_gpus_per_trial)  # tokenizer has to be the same application-wide
-    hp_tune_samples = int(args.hp_tune_samples)  # tokenizer has to be the same application-wide
+    tokenizer = config.tokenizer  
+    masked_data_collator = args.masked_data_collator  
+    hyperparameter_search = args.hyperparameter_search  
+    hp_gpus_per_trial = int(args.hp_gpus_per_trial)  
+    hp_tune_samples = int(args.hp_tune_samples) 
+    hp_experiment_name = args.hp_experiment_name  
+    hp_local_folder = args.hp_local_folder  
     if hyperparameter_search:
-        smoke_test = args.smoke_test  # tokenizer has to be the same application-wide
-        hp_search_config = config.hp_search_config  # tokenizer has to be the same application-wide
+        smoke_test = args.smoke_test  
+        hp_search_config = config.hp_search_config  
         hp_search_config["max_steps"] = 1 if smoke_test else -1
-        hp_search_scheduler = config.hp_search_scheduler  # tokenizer has to be the same application-wide
-        hp_search_reporter = config.hp_search_reporter  # tokenizer has to be the same application-wide
+        hp_search_scheduler = config.hp_search_scheduler  
+        hp_search_reporter = config.hp_search_reporter  
 
         hp_search = HpSearchForTokenClassification(
             training_args=training_args,
@@ -78,6 +86,8 @@ if __name__ == "__main__":
             hp_search_config=hp_search_config,
             hp_search_scheduler=hp_search_scheduler,
             hp_search_reporter=hp_search_reporter,
+            hp_experiment_name=hp_experiment_name,
+            hp_local_dir=hp_local_folder, 
         )
 
         best_model = hp_search._run_hyperparam_search()

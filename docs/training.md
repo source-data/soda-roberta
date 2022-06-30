@@ -240,7 +240,7 @@ A default call to the hyperparameter search can be done with the following comma
         --disable_tqdm True \
         --hyperparameter_search \
         --hp_gpus_per_trial 1 \
-        --hp_tune_samples 16
+        --hp_tune_samples 32
 
 ```
 

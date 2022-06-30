@@ -344,6 +344,8 @@ class HpSearchForTokenClassification(TrainTokenClassification):
                 hp_search_config: dict = {},
                 hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining(),
                 hp_search_reporter: tune.progress_reporter.CLIReporter = CLIReporter(),
+                hp_experiment_name: str = "tune_transformer_pbt",
+                hp_local_dir: str = "/app/ray_results/",
                 **kw
             ):
         self.smoke_test = smoke_test
@@ -352,6 +354,8 @@ class HpSearchForTokenClassification(TrainTokenClassification):
         self.hp_search_config = hp_search_config
         self.hp_search_scheduler = hp_search_scheduler
         self.hp_search_reporter = hp_search_reporter
+        self.hp_experiment_name = hp_experiment_name
+        self.hp_local_dir = hp_local_dir
         super(HpSearchForTokenClassification, self).__init__(**kw)
         self.training_args.logging_dir = f"{RUNS_DIR}/tokcl-{self.task}-{self.from_pretrained}-{datetime.now().isoformat().replace(':','-')}"
         self.training_args.output_dir = os.path.join(
@@ -442,8 +446,8 @@ class HpSearchForTokenClassification(TrainTokenClassification):
                                 checkpoint_score_attr="training_iteration",
                                 stop={"training_iteration": 1} if self.smoke_test else None,
                                 progress_reporter=self.hp_search_reporter,
-                                local_dir="~/ray_results/",
-                                name="tune_transformer_pbt",
+                                local_dir=self.hp_local_dir,
+                                name=self.hp_experiment_name,
                                 log_to_file=True,
                             )
 
