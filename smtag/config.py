@@ -119,9 +119,9 @@ HP_SEARCH_SCHEDULER = PopulationBasedTraining(
         perturbation_interval=1,
         hyperparam_mutations={
             "weight_decay": tune.uniform(0.0, 0.15),
-            "learning_rate": tune.loguniform(1e-4, 1e-6),
+            "learning_rate": tune.loguniform(1e-6, 1e-4),
             "per_device_train_batch_size": [4, 8, 16, 32],
-            "adam_beta1": tune.choice([0.75, 0.8, 0.85, 0.9, 0.95]),
+            "adam_beta1": [0.75, 0.8, 0.85, 0.9, 0.95, 0.975, 0.99],
             # "adam_beta2": tune.uniform(0.90, 0.99),
             "adam_epsilon": tune.loguniform(1e-10, 1e-6),
             "adafactor": [True, False],
