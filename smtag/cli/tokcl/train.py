@@ -6,6 +6,7 @@ from ...train.train_tokcl import TrainTokenClassification, HpSearchForTokenClass
 from smtag.data_classes import TrainingArgumentsTOKCL
 from ...config import config
 import logging
+from ray import tune
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -69,6 +70,9 @@ if __name__ == "__main__":
         hp_search_config["max_steps"] = 1 if smoke_test else -1
         hp_search_scheduler = config.hp_search_scheduler  
         hp_search_reporter = config.hp_search_reporter  
+        if ('large' in from_pretrained) or ('Megatron345m' in from_pretrained):
+            hp_search_config["per_device_train_batch_size"] = tune.choice([4, 8, 16])
+            hp_search_config["per_device_eval_batch_size"] = 32
 
         hp_search = HpSearchForTokenClassification(
             training_args=training_args,

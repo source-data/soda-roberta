@@ -425,6 +425,7 @@ class HpSearchForTokenClassification(TrainTokenClassification):
             logging_dir="./logs",
             skip_memory_metrics=True,
             report_to="none",
+            disable_tqdm=self.training_args.disable_tqdm
         )
         trainer = Trainer(
             model_init=self._get_model,
