@@ -107,8 +107,8 @@ HP_SEARCH_CONFIG = {
         "num_train_epochs": tune.choice([2, 3, 4, 5]),
         "lr_scheduler": tune.choice(["cosine", "linear", "constant"]),
         # "max_steps": 1 if smoke_test else -1,  # Used for smoke test.
-        "adam_beta1": tune.uniform(0.85, 0.95),
-        "adam_beta2": tune.uniform(0.900, 0.999),
+        "adam_beta1": tune.choice([0.75, 0.8, 0.85, 0.9, 0.95]),
+        "adam_beta2": tune.uniform(0.950, 0.999),
         "adam_epsilon": tune.loguniform(1e-10, 1e-6),
    }
 
@@ -121,7 +121,7 @@ HP_SEARCH_SCHEDULER = PopulationBasedTraining(
             "weight_decay": tune.uniform(0.0, 0.15),
             "learning_rate": tune.loguniform(1e-4, 1e-6),
             "per_device_train_batch_size": [4, 8, 16, 32],
-            "adam_beta1": tune.uniform(0.85, 0.95),
+            "adam_beta1": tune.choice([0.75, 0.8, 0.85, 0.9, 0.95]),
             # "adam_beta2": tune.uniform(0.90, 0.99),
             "adam_epsilon": tune.loguniform(1e-10, 1e-6),
             "adafactor": [True, False],
