@@ -11,7 +11,9 @@ from transformers import (
 import spacy
 from spacy.lang.en import English
 from typing import Dict, Union
-
+from ray.tune.schedulers import PopulationBasedTraining, pbt
+from ray import tune
+from ray.tune import CLIReporter
 
 @dataclass
 class Config:
@@ -28,6 +30,9 @@ class Config:
     split_ratio: InitVar[Dict[str, float]] = None
     asynchr: bool = True
     twin_delimiter: str = "###tt9HHSlkWoUM###"  # to split concatenated twin examples
+    hp_search_config: dict = None
+    hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining()
+    hp_search_reporter: tune.progress_reporter.CLIReporter = CLIReporter()
 
     def __post_init__(
         self,
@@ -83,12 +88,67 @@ class Config:
 # )
 
 # config for nomral language model
+# config = Config(
+#     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained="roberta-base",  # leave empty if training a language model from scratch
+#     model_type="Autoencoder",
+#     asynchr=True  # we need ordered examples while async returns results in non deterministic way
+# )
+
+# # Default config for token classification / Roberta
+# config = Config()
+
+
+# Configuration for hyperparameter tuning
+#####################################################################
+HP_SEARCH_CONFIG = {
+        "per_device_train_batch_size": tune.choice([4, 8, 16, 32]),
+        "per_device_eval_batch_size": 64,
+        "num_train_epochs": tune.choice([2, 3, 4, 5]),
+        # "lr_scheduler": tune.choice(["cosine", "linear", "constant"]),
+        # "max_steps": 1 if smoke_test else -1,  # Used for smoke test.
+        "adam_beta1": tune.choice([0.75, 0.8, 0.85, 0.9, 0.95]),
+        # "adam_beta2": tune.uniform(0.950, 0.999),
+        "adam_epsilon": tune.loguniform(1e-10, 1e-6),
+   }
+
+HP_SEARCH_SCHEDULER = PopulationBasedTraining(
+        time_attr="training_iteration",
+        metric="eval_f1",
+        mode="max",
+        perturbation_interval=1,
+        hyperparam_mutations={
+            "weight_decay": tune.uniform(0.0, 0.15),
+            "learning_rate": tune.loguniform(1e-6, 1e-4),
+            "per_device_train_batch_size": [4, 8, 16, 32],
+            "adam_beta1": [0.75, 0.8, 0.85, 0.9, 0.95, 0.975, 0.99],
+            # "adam_beta2": tune.uniform(0.90, 0.99),
+            "adam_epsilon": tune.loguniform(1e-10, 1e-6),
+            "adafactor": [True, False],
+        },
+    )
+
+HP_SEARCH_REPORTER = CLIReporter(
+    parameter_columns={
+        "weight_decay": "w_decay",
+        "learning_rate": "lr",
+        # "lr_scheduler": "lr_schedule",
+        "per_device_train_batch_size": "train_bs/gpu",
+        "adam_beta1": "adam_beta1",
+        # "adam_beta2": "adam_beta2",
+        "adam_epsilon": "adam_epsilon",
+        "adafactor": "adafactor",
+    },
+    metric_columns=["eval_accuracy_score", "eval_precision", "eval_recall", "eval_f1", "epoch", "eval_runtime"],
+)
+
 config = Config(
     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="roberta-base",  # leave empty if training a language model from scratch
     model_type="Autoencoder",
-    asynchr=True  # we need ordered examples while async returns results in non deterministic way
+    asynchr=True,  # we need ordered examples while async returns results in non deterministic way
+    hp_search_config=HP_SEARCH_CONFIG,
+    hp_search_scheduler=HP_SEARCH_SCHEDULER,
+    hp_search_reporter=HP_SEARCH_REPORTER
 )
 
-# # Default config for token classification / Roberta
-# config = Config()

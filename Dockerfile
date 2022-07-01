@@ -24,7 +24,9 @@ RUN apt-get update \
 && python -m spacy download en_core_web_sm \
 # apparently need separate installation for progress bar stuff in jupyter
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
-&& pip install ipywidgets
+&& pip install ipywidgets \
+&& pip install ray==1.13.0 \
+&& pip install ray[tune] 
 # optional for plotting
 RUN pip install plotly 
 
