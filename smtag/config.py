@@ -105,10 +105,10 @@ HP_SEARCH_CONFIG = {
         "per_device_train_batch_size": tune.choice([4, 8, 16, 32]),
         "per_device_eval_batch_size": 64,
         "num_train_epochs": tune.choice([2, 3, 4, 5]),
-        "lr_scheduler": tune.choice(["cosine", "linear", "constant"]),
+        # "lr_scheduler": tune.choice(["cosine", "linear", "constant"]),
         # "max_steps": 1 if smoke_test else -1,  # Used for smoke test.
         "adam_beta1": tune.choice([0.75, 0.8, 0.85, 0.9, 0.95]),
-        "adam_beta2": tune.uniform(0.950, 0.999),
+        # "adam_beta2": tune.uniform(0.950, 0.999),
         "adam_epsilon": tune.loguniform(1e-10, 1e-6),
    }
 
@@ -132,10 +132,10 @@ HP_SEARCH_REPORTER = CLIReporter(
     parameter_columns={
         "weight_decay": "w_decay",
         "learning_rate": "lr",
-        "lr_scheduler": "lr_schedule",
+        # "lr_scheduler": "lr_schedule",
         "per_device_train_batch_size": "train_bs/gpu",
         "adam_beta1": "adam_beta1",
-        "adam_beta2": "adam_beta2",
+        # "adam_beta2": "adam_beta2",
         "adam_epsilon": "adam_epsilon",
         "adafactor": "adafactor",
     },
