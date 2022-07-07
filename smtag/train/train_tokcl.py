@@ -10,7 +10,7 @@ from transformers import (
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
     BartModel, DefaultFlowCallback, EarlyStoppingCallback,
-    AutoConfig
+    AutoConfig, BertTokenizerFast
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, GenerateMode, DatasetDict
@@ -169,20 +169,24 @@ class TrainTokenClassification:
             print(f"{pred.metrics}")
 
     def _get_tokenizer(self):
-        try:
-            logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
-            tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
-                                                            is_pretokenized=True, 
-                                                            add_prefix_space=True
-                                                            )
-            self.get_roberta = False
-        except OSError:
-            tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
-                                                            is_pretokenized=True, 
-                                                            add_prefix_space=True
-                                                            )
-            if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
-                self.get_roberta = True
+        if "Megatron" in self.from_pretrained:
+            tokenizer = BertTokenizerFast.from_pretrained(self.from_pretrained, 
+                                                            is_pretokenized=True)
+        else:
+            try:
+                logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
+                tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
+                                                                is_pretokenized=True, 
+                                                                add_prefix_space=True
+                                                                )
+                self.get_roberta = False
+            except OSError:
+                tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
+                                                                is_pretokenized=True, 
+                                                                add_prefix_space=True
+                                                                )
+                if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
+                    self.get_roberta = True
         return tokenizer
 
 
@@ -340,6 +344,7 @@ class HpSearchForTokenClassification(TrainTokenClassification):
     def __init__(self,
                 smoke_test: bool = False,
                 gpus_per_trial: int = 0,
+                cpus_per_trial: int = 0,
                 hp_tune_samples: int = 8,
                 hp_search_config: dict = {},
                 hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining(),
@@ -350,6 +355,7 @@ class HpSearchForTokenClassification(TrainTokenClassification):
             ):
         self.smoke_test = smoke_test
         self.gpus_per_trial = gpus_per_trial
+        self.cpus_per_trial = cpus_per_trial
         self.hp_tune_samples = hp_tune_samples
         self.hp_search_config = hp_search_config
         self.hp_search_scheduler = hp_search_scheduler
@@ -441,7 +447,7 @@ class HpSearchForTokenClassification(TrainTokenClassification):
                                 hp_space=lambda _: self.hp_search_config,
                                 backend="ray",
                                 n_trials=self.hp_tune_samples,
-                                resources_per_trial={"cpu": 1, "gpu": self.gpus_per_trial},
+                                resources_per_trial={"cpu": self.cpus_per_trial, "gpu": self.gpus_per_trial},
                                 scheduler=self.hp_search_scheduler,
                                 keep_checkpoints_num=1,
                                 checkpoint_score_attr="training_iteration",

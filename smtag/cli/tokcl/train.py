@@ -7,6 +7,7 @@ from smtag.data_classes import TrainingArgumentsTOKCL
 from ...config import config
 import logging
 from ray import tune
+from ray.tune.schedulers import PopulationBasedTraining, pbt
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -40,6 +41,9 @@ if __name__ == "__main__":
     parser.add_argument("--hp_gpus_per_trial", 
                         default=1, 
                         help="Number of GPUs to use per each trial. Only for hp search")
+    parser.add_argument("--hp_cpus_per_trial", 
+                        default=1, 
+                        help="Number of GPUs to use per each trial. Only for hp search")
     parser.add_argument("--hp_tune_samples", 
                         default=8, 
                         help="Total number of samples to generate for hp_search.")
@@ -61,6 +65,7 @@ if __name__ == "__main__":
     masked_data_collator = args.masked_data_collator  
     hyperparameter_search = args.hyperparameter_search  
     hp_gpus_per_trial = int(args.hp_gpus_per_trial)  
+    hp_cpus_per_trial = int(args.hp_cpus_per_trial)  
     hp_tune_samples = int(args.hp_tune_samples) 
     hp_experiment_name = args.hp_experiment_name  
     hp_local_folder = args.hp_local_folder  
@@ -71,8 +76,34 @@ if __name__ == "__main__":
         hp_search_scheduler = config.hp_search_scheduler  
         hp_search_reporter = config.hp_search_reporter  
         if ('large' in from_pretrained) or ('Megatron345m' in from_pretrained):
-            hp_search_config["per_device_train_batch_size"] = tune.choice([4, 8, 16])
+            hp_search_config["per_device_train_batch_size"] = 4
             hp_search_config["per_device_eval_batch_size"] = 32
+
+            hp_search_config = {
+                    "per_device_train_batch_size": tune.choice([4, 8]),
+                    "per_device_eval_batch_size": 64,
+                    "num_train_epochs": tune.choice([2, 3]),
+                    # "lr_scheduler": tune.choice(["cosine", "linear", "constant"]),
+                    # "max_steps": 1 if smoke_test else -1,  # Used for smoke test.
+                    "adam_beta1": tune.choice([0.85, 0.9, 0.95]),
+                    # "adam_beta2": tune.uniform(0.950, 0.999),
+                    "adam_epsilon": tune.loguniform(1e-10, 1e-6),
+            }
+
+            hp_search_scheduler = PopulationBasedTraining(
+                    time_attr="training_iteration",
+                    metric="eval_f1",
+                    mode="max",
+                    perturbation_interval=1,
+                    hyperparam_mutations={
+                        "weight_decay": tune.uniform(0.0, 0.15),
+                        "learning_rate": tune.loguniform(1e-6, 1e-4),
+                        "adam_beta1": [0.85, 0.9, 0.95],
+                        "adam_epsilon": tune.loguniform(1e-10, 1e-6),
+                        "adafactor": [True, False],
+                    },
+                )
+
 
         hp_search = HpSearchForTokenClassification(
             training_args=training_args,
@@ -86,6 +117,7 @@ if __name__ == "__main__":
             tokenizer=tokenizer,
             smoke_test=args.smoke_test,
             gpus_per_trial=hp_gpus_per_trial,
+            cpus_per_trial=hp_cpus_per_trial,
             hp_tune_samples=hp_tune_samples,
             hp_search_config=hp_search_config,
             hp_search_scheduler=hp_search_scheduler,

@@ -239,8 +239,7 @@ A default call to the hyperparameter search can be done with the following comma
         --from_pretrained "EMBO/bio-lm" \
         --disable_tqdm True \
         --hyperparameter_search \
-        --hp_gpus_per_trial 1 \
-        --hp_tune_samples 32
+        --hp_experiment_name "EMBO_bio-lm_NER" --hp_gpus_per_trial 1 --hp_tune_samples 16 
 
 ```
 
