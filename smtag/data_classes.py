@@ -1,7 +1,7 @@
-from transformers import TrainingArguments, IntervalStrategy
+from transformers import TrainingArguments, IntervalStrategy, PretrainedConfig, Seq2SeqTrainingArguments
 from dataclasses import dataclass, field
 from typing import List, Optional
-from smtag import TOKCL_MODEL_PATH
+from smtag import TOKCL_MODEL_PATH, SEQ2SEQ_MODEL_PATH
 
 
 @dataclass
@@ -9,20 +9,20 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     output_dir: str = field(default=TOKCL_MODEL_PATH)
     # Main Hyperparameters to tune
     learning_rate: float = field(default=1e-4)
-    lr_schedule: str = field(default='linear')
+    lr_schedule: str = field(default='cosine')
     per_device_train_batch_size: int = field(default=16)
     per_device_eval_batch_size: int = field(default=64)
-    num_train_epochs: float = field(default=1.)
-    masking_probability: float = field(default=None)
+    num_train_epochs: float = field(default=3.)
+    masking_probability: float = field(default=1.0)
     classifier_dropout: float = field(default=0.25)
-    replacement_probability: float = field(default=None)
+    replacement_probability: float = field(default=0.0)
     max_steps: int = field(default=-1)
     warmup_ratio: float = field(default=0.0)
     warmup_steps: int = field(default=0)
 
     # Logging and evaluation strategy
     evaluation_strategy: IntervalStrategy = field(default="steps")
-    eval_steps: int = field(default=1000)
+    eval_steps: int = field(default=500)
     prediction_loss_only: bool = field(default=False)
     eval_accumulation_steps: Optional[int] = field(default=None)
     log_level: Optional[str] = field(default="passive")
@@ -42,16 +42,16 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     weight_decay: float = field(default=0.0)
     adam_beta1: float = field(default=0.9)
     adam_beta2: float = field(default=0.999)
-    adam_epsilon: float = field(default=1e-8)
+    adam_epsilon: float = field(default=1e-10)
     max_grad_norm: float = field(default=1.0)
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    adafactor: bool = field(default=True, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
 
     # Folders and identifications
     overwrite_output_dir: bool = field(default=True)
     do_train: bool = field(default=False)
     do_eval: bool = field(default=False)
     do_predict: bool = field(default=False)
-    run_name: Optional[str] = field(default="Seq2Seq")
+    run_name: Optional[str] = field(default="sd-lm-SMALL-NER")
 
     # Other params 
     disable_tqdm: Optional[bool] = field(default=None)
@@ -68,3 +68,46 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     # hub_strategy: HubStrategy = field(default="every_save")
     # hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     # gradient_checkpointing: bool = field(default=False)
+
+@dataclass
+class ModelConfigSeq2Seq(PretrainedConfig):
+    max_length: int = field(default=512)
+    min_length: int = field(default=16)
+    early_stopping: bool = field(default=False)
+    num_beams: int = field(default=1)
+    num_beam_groups: int = field(default=1)
+    diversity_penalty: float = field(default=0.0)
+    temperature: float = field(default=1.0)
+    top_k: int = field(default=50)
+    top_p: float = field(default=1.)
+    num_return_sequences: int = field(default=1)
+    output_scores: bool = field(default=False)
+    length_penalty: float = field(default=2.)
+    repetition_penalty: float = field(default=2.)
+    no_repeat_ngram_size: int = field(default=5)
+    return_dict_in_generate: bool = field(default=False)
+
+
+
+@dataclass
+class TrainingArgumentsSeq2Seq(Seq2SeqTrainingArguments):
+    output_dir: str = field(default=SEQ2SEQ_MODEL_PATH)
+    run_name: Optional[str] = field(default="Seq2Seq")
+    generation_max_length: int = field(default=128)
+
+@dataclass
+class Gpt3ModelParam:
+    model: str = field(default="text-davinci-002")
+    suffix: str = field(default=None)
+    temperature: float = field(default=0.8)
+    max_tokens: int = field(default=1024)
+    top_p: float = field(default=1)
+    n: int = field(default=1)
+    stream: bool = field(default=False)
+    echo: bool = field(default=False)
+    frequency_penalty: float = field(default=0)
+    presence_penalty: float = field(default=0)
+    stop: str = field(default="[END]")
+    best_of: int = 1
+    logit_bias: dict = field(default=None)
+

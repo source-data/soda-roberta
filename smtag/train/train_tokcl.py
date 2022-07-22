@@ -48,6 +48,7 @@ class TrainTokenClassification:
                 data_dir: str = "",
                 no_cache: bool = True,
                 tokenizer: str = None,
+                add_prefix_space: bool = False,
                ):
 
         self.training_args = deepcopy(training_args)
@@ -61,6 +62,7 @@ class TrainTokenClassification:
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.config = config
         self.tokenizer_pretrained = tokenizer.name_or_path
+        self.add_prefix_space = add_prefix_space
 
     def __call__(self):
         # Define the tokenizer
@@ -104,7 +106,8 @@ class TrainTokenClassification:
                 compute_metrics=self.compute_metrics,
                 callbacks=[DefaultFlowCallback,
                         EarlyStoppingCallback(early_stopping_patience=2,
-                                                early_stopping_threshold=0.0)]
+                                                early_stopping_threshold=0.0),
+                            ShowExampleTOKCL(self.tokenizer)]
             )
 
 
@@ -177,13 +180,13 @@ class TrainTokenClassification:
                 logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
                 tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained, 
                                                                 is_pretokenized=True, 
-                                                                add_prefix_space=True
+                                                                add_prefix_space=self.add_prefix_space
                                                                 )
                 self.get_roberta = False
             except OSError:
                 tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
                                                                 is_pretokenized=True, 
-                                                                add_prefix_space=True
+                                                                add_prefix_space=self.add_prefix_space
                                                                 )
                 if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
                     self.get_roberta = True
@@ -198,14 +201,19 @@ class TrainTokenClassification:
             (DatasetDict, DatasetDict, DatasetDict)
         """
         logger.info(f"Obtaining data from the HuggingFace 🤗 Hub: load_dataset('{self.loader_path}',' {self.task}')")
-        data = load_dataset(self.loader_path, self.task)
-        tokenized_data = data.map(
-            self._tokenize_and_align_labels,
-            batched=True)
-        if self.masked_data_collator:
-            tokenized_data.remove_columns_(['words'])
+        data = load_dataset(self.loader_path, self.task, ignore_verifications=True)
+        if self.loader_path == "EMBO/sd-nlp":
+            tokenized_data = deepcopy(data)
+            if not self.masked_data_collator:
+                tokenized_data.remove_columns_(['tag_mask'])
         else:
-            tokenized_data.remove_columns_(['words', 'attention_mask', 'tag_mask'])
+            tokenized_data = data.map(
+                self._tokenize_and_align_labels,
+                batched=True)
+            if self.masked_data_collator:
+                tokenized_data.remove_columns_(['words'])
+            else:
+                tokenized_data.remove_columns_(['words', 'attention_mask', 'tag_mask'])
         return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
 
@@ -218,10 +226,11 @@ class TrainTokenClassification:
         Returns:
             `datasets.DatasetDict` with entries tokenized to the `AutoTokenizer`
         """
+        
         tokenized_inputs = self.tokenizer(examples['words'],
-                                          truncation=True,
-                                          is_split_into_words=True,
-                                          max_length=self.config.max_length)
+                                        truncation=True,
+                                        is_split_into_words=True,
+                                        max_length=self.config.max_length)
 
         all_labels = examples['labels']
         new_labels = []
@@ -317,7 +326,7 @@ class TrainTokenClassification:
         elif self.task in ["GENEPROD_ROLES", "SMALL_MOL_ROLES"]:
             self.masking_probability = 1.0 if self.training_args.masking_probability is None else float(self.training_args.masking_probability)
             # pure contextual learning, all entities are masked
-            self.replacement_probability = .0 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
+            self.replacement_probability = 0.0 if self.training_args.replacement_probability is None else float(self.training_args.replacement_probability)
         else:
             self.masking_probability = 0.0
             self.replacement_probability = 0.0

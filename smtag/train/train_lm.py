@@ -308,7 +308,7 @@ def train(
             callbacks=show_callbacks
         )
     else:
-        trainer = MyTrainer(
+        trainer = Trainer(
             model=model,
             args=training_args,
             data_collator=data_collator,

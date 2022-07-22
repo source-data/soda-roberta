@@ -75,7 +75,7 @@ class ShowExample(TrainerCallback):
             input_id = input_ids[i]
             label_idx = pred_idx[i]
             true_label = labels[i]
-            colored += self._correct_incorrect(input_id, label_idx, true_label)
+            colored += self._correct_incorrect(input_id, label_idx, true_label) + " "
         print(f"\n\n{colored}\n\n")
 
     def _correct_incorrect(self, input_id: int, label_idx: int, true_label: int) -> str:
@@ -126,11 +126,14 @@ class ShowExampleTextGeneration(ShowExampleLM):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.max_length = kwargs.get('max_sentence_length', None)
+        if not self.max_length:
+            self.max_length = config.max_length[1]
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=config.max_length[1])
+            pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=self.max_length)
         pred_idx = pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)

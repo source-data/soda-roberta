@@ -26,7 +26,7 @@ RUN apt-get update \
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
 && pip install ipywidgets \
 && pip install ray==1.13.0 \
-&& pip install ray[tune] 
+&& pip install ray tune 
 # optional for plotting
 RUN pip install plotly 
 

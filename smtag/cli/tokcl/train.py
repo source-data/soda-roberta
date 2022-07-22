@@ -26,6 +26,9 @@ if __name__ == "__main__":
     parser.add_argument("--from_pretrained", 
                         default=LM_MODEL_PATH, 
                         help="The pretrained model to fine tune.")
+    parser.add_argument("--add_prefix_space", 
+                        action="store_true", 
+                        help="Set to true if uing roberta with word splitted lists.")
     parser.add_argument("--masked_data_collator", 
                         action="store_true", 
                         help="Whether to randomly mask tokens in the data collator or not.")
@@ -60,6 +63,7 @@ if __name__ == "__main__":
     task = args.task
     data_dir = args.data_dir
     from_pretrained = args.from_pretrained
+    add_prefix_space = args.add_prefix_space
     model_type = config.model_type
     tokenizer = config.tokenizer  
     masked_data_collator = args.masked_data_collator  
@@ -138,6 +142,7 @@ if __name__ == "__main__":
             data_dir=data_dir,
             no_cache=no_cache,
             tokenizer=tokenizer,
+            add_prefix_space=add_prefix_space
         )
 
         trainer()
