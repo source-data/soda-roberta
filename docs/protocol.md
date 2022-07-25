@@ -963,3 +963,122 @@ CONTROLLED_VAR       0.97      0.98      0.98      3294
 {'test_loss': 0.0021583831403404474, 'test_accuracy_score': 0.9994463844109921, 'test_precision': 0.9585615622767325, 'test_recall': 0.9613088129925962, 'test_f1': 0.9599332220367278, 'test_runtime': 55.7043, 'te
 st_samples_per_second': 147.655, 'test_steps_per_second': 0.592}
 ```
+
+## BERT base cased 
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "bert-base-cased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict 
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "bert-base-cased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "bert-base-cased_PANELIZATION"
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "bert-base-cased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "bert-base-cased_SMALL_MOL_ROLES"
+
+```
+
+## BERT base uncased 
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "bert-base-uncased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "bert-base-uncased_GENEPROD_ROLES"
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "bert-base-uncased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "bert-base-uncased_PANELIZATION"
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "bert-base-uncased" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "bert-base-uncased_SMALL_MOL_ROLES"
+
+```
