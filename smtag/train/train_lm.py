@@ -29,8 +29,8 @@ from transformers.integrations import TensorBoardCallback
 from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    LatentEncoder, VAEForLM, Twin, TwinLM,
-    LatentConfig, VAEConfigLM, TwinConfig
+    LatentEncoder, VAEForLM, Twin, TwinLM, GraphVAEForLM,
+    LatentConfig, VAEConfigLM, TwinConfig, GraphVAEConfigLM,
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -144,7 +144,7 @@ def train(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
             )
-        elif model_type == "VAE":  # for debuging, maybe not necessary
+        elif model_type in ["VAE", "GVAE"]:  # for debuging, maybe not necessary
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
@@ -153,7 +153,7 @@ def train(
         if data_config_name in ["NEXT"] and model_type == "Autoencoder":
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
-                max_length = sum(config.max_length),
+                max_length=sum(config.max_length),
                 pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
             )
         elif model_type == "Autoencoder":
@@ -210,6 +210,30 @@ def train(
                 latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(
+                pretrained=pretrained,
+                config=model_config
+            )
+        else:
+            raise ValueError("Training VAE from scratch is not implemented.")
+    elif model_type == "GVAE":
+        if config.from_pretrained:
+            pretrained = AutoModel.from_pretrained(from_pretrained)
+            model_config = GraphVAEConfigLM(
+                freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                hidden_features=256,
+                # z_dim is calculated
+                alpha=1.0,
+                beta=1.0,
+                gamma=10,  # weight of lm loss as compared to z_loss
+                sampling_iterations=200,
+                num_nodes=5,
+                num_entity_features=64,
+                sample_num_interactions=20,
+                seq_length=config.max_length,
+                residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
+                latent_var_loss="mmd"
+            )
+            model = GraphVAEForLM(
                 pretrained=pretrained,
                 config=model_config
             )
