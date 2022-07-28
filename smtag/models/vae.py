@@ -31,10 +31,10 @@ def compute_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     tiled_y = y.expand(x_size, y_size, dim)
     try:
         kernel_input = (tiled_x - tiled_y).pow(2).mean(2) / float(dim)
-    except RuntimeError:
+    except RuntimeError as e:
         print(f"tiled_x.device={tiled_x.device}")
         print(f"tiled_y.device={tiled_y.device}")
-        raise Exception()
+        raise e
     return torch.exp(-kernel_input)  # (x_size, y_size)
 
 
@@ -201,6 +201,7 @@ class LatentConfig(BartConfig):
 class GraphLatentConfig(LatentConfig):
     def __init__(
         self,
+        mlp_num_layers: int = 1,
         num_nodes: int = 5,
         num_entity_features: int = 32,
         sample_num_interactions: int = 20,
@@ -210,6 +211,7 @@ class GraphLatentConfig(LatentConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.mlp_num_layers = mlp_num_layers
         self.num_nodes = num_nodes
         self.num_entity_features = num_entity_features
         self.sample_num_interactions = sample_num_interactions
@@ -250,6 +252,7 @@ class TwinConfig(BartConfig):
 class GraphVAEConfigLM(VAEConfigLM):
     def __init__(
         self,
+        mlp_num_layers: int = 1,
         num_nodes: int = 5,
         num_entity_features: int = 32,
         sample_num_interactions: int = 20,
@@ -259,6 +262,7 @@ class GraphVAEConfigLM(VAEConfigLM):
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.mlp_num_layers = mlp_num_layers
         self.num_nodes = num_nodes
         self.num_entity_features = num_entity_features
         self.sample_num_interactions = sample_num_interactions
@@ -752,10 +756,11 @@ class GraphEncoder(nn.Module):
 
         self.freeze_pretrained = self.config.freeze_pretrained
         self.model = pretrained
-        self.mlp_graph_sigma = MLP(3, self.num_nodes ** 2)
-        self.mlp_graph_rho = MLP(3, self.num_nodes ** 2)
-        self.mlp_entity_sigma = MLP(3, self.num_nodes * self.num_entity_features)
-        self.mlp_entity_rho = MLP(3, self.num_nodes * self.num_entity_features)
+        self.mlp_num_layers = self.config.mlp_num_layers
+        self.mlp_graph_sigma = MLP(self.mlp_num_layers, self.num_nodes ** 2)
+        self.mlp_graph_rho = MLP(self.mlp_num_layers, self.num_nodes ** 2)
+        self.mlp_entity_sigma = MLP(self.mlp_num_layers, self.num_nodes * self.num_entity_features)
+        self.mlp_entity_rho = MLP(self.mlp_num_layers, self.num_nodes * self.num_entity_features)
         # freeze the pretrained model
         if self.freeze_pretrained in ['both', 'encoder']:
             for param in self.model.parameters():
@@ -815,6 +820,7 @@ class GraphEncoder(nn.Module):
         adj = self.to_adj_matrix(adj)
         adj = self.norm_adj(adj)
         adj = self.act_fct(adj)
+        adj_matrix_representation = adj
         adj = adj.view(-1, self.num_nodes, self.num_nodes)
 
         # entities
@@ -822,6 +828,7 @@ class GraphEncoder(nn.Module):
         entities = self.to_entity_embed(entities)
         entities = self.norm_entities(entities)
         entities = self.act_fct(entities)
+        entities_representation = entities
         entities = entities.view(-1, self.num_entity_features, self.num_nodes)
 
         # permutation sets
@@ -848,7 +855,7 @@ class GraphEncoder(nn.Module):
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
-        representation = [z_graph, z_entities]
+        representation = [adj_matrix_representation, entities_representation]
         z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
         z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
         z = torch.cat([z_graph, z_entities], -1)
@@ -868,6 +875,9 @@ class GraphEncoder(nn.Module):
     def compute_loss_on_latent_var(self, z_graph, z_entities):
         with torch.no_grad():
             edge_sample, entity_sample = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_entity_features, self.sampling_iterations)
+            if torch.cuda.is_available():
+                edge_sample = edge_sample.cuda()
+                entity_sample = entity_sample.cuda()
         adj_matrix_distro_loss = self.alpha * mmd(
             edge_sample.view(self.sampling_iterations, self.num_nodes ** 2),
             z_graph.view(-1, self.num_nodes ** 2)
@@ -875,15 +885,18 @@ class GraphEncoder(nn.Module):
         # adj_matrix_distro_loss = torch.zeros(batch_size) #
         # adj_matrix_distro_loss.requires_grad = True
         # adj_matrix_distro_loss = adj_matrix_distro_loss.cuda()
-        ############
         entity_distro_loss = self.beta * mmd(
             entity_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
             z_entities.view(-1,  self.num_nodes * self.num_entity_features)
         )
-        ############
 
-        # L_adj_sparse = z_1.abs().mean()
-        # L_node_sparse = z_2.abs().mean()
+        diag = z_graph.diagonal()
+        loss_diag = diag ** 2
+        loss_diag = loss_diag.sum() / (self.num_nodes ** 2)  # num elements of diag scales as n
+
+        L_adj_sparse = z_graph.abs().mean()
+        L_node_sparse = z_entities.abs().mean()
+
         # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
         # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
         # # naive (me...):
@@ -897,7 +910,7 @@ class GraphEncoder(nn.Module):
         # mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
         # trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
         # L_dag = self.gamma * (trace - d).mean()
-        #
+
         # Zheng et al 2018 DAG with NOTEARS
         # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
         # Section 3.2 The general case: Weighted adjacency matrices
@@ -910,13 +923,15 @@ class GraphEncoder(nn.Module):
         # M = np.eye(d) + W * W / d
         # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
         # h = (E.T * M).sum() - d
-        loss = adj_matrix_distro_loss + entity_distro_loss  # + L_dag + L_adj_sparse + L_node_sparse
+
+        loss = adj_matrix_distro_loss + entity_distro_loss  + L_adj_sparse + L_node_sparse + loss_diag
         supp_data = {
             "adj_distro_loss": adj_matrix_distro_loss,
             "nodes_distro_loss": entity_distro_loss,
-            # "L_adj_sparse": L_adj_sparse,
+            "L_adj_sparse": L_adj_sparse,
             # "L_dag": L_dag,
-            # "L_node_sparse": L_node_sparse,
+            "L_node_sparse": L_node_sparse,
+            "loss_diag": loss_diag,
         }
         return loss, supp_data
 
