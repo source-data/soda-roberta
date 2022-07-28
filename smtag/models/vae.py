@@ -1,4 +1,7 @@
+import pdb
 from dataclasses import dataclass
+from itertools import permutations, product
+from random import sample, gauss
 from typing import List, Dict, Union
 import torch
 from torch import nn
@@ -48,6 +51,45 @@ def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
     if torch.cuda.is_available():
         x = x.cuda()
     return x
+
+
+def sample_node_subset(max_num_nodes: int, avg_num_nodes: float = 3.0, sigma: float = 0) -> List[int]:
+    num_nodes = min(max_num_nodes, round(gauss(avg_num_nodes, sigma)))
+    node_subset = sample(list(range(max_num_nodes)), k=num_nodes)
+    return node_subset
+
+
+def sample_edges(max_num_nodes, node_subset, avg_num_interactions, sigma: float = 0):
+    all_pairwise_interactions = list(product(node_subset, node_subset))
+    adj_matrix = torch.zeros(max_num_nodes, max_num_nodes)
+    max_num_interactions = len(node_subset) ** 2
+    num_interactions = min(round(gauss(mu=avg_num_interactions, sigma=sigma)), max_num_interactions)
+    pairwise_interactions = sample(all_pairwise_interactions, k=num_interactions)
+    adj_matrix[list(zip(*pairwise_interactions))] = 1.0
+    return adj_matrix
+
+
+def sample_node_labels(max_num_nodes, node_subset, node_features=10):
+    v = torch.zeros(max_num_nodes, node_features)
+    p = torch.full_like(v[node_subset], 0.5)
+    sample = torch.bernoulli(p)
+    v[node_subset] = sample
+    return v
+
+
+def sample_graph(max_num_nodes, num_entities, num_interactions, num_entity_features, iterations=10):
+    # TODO: plot distribution of mmd distance bewteen random pairs
+    edges = []
+    node_embeddings = []
+    for i in range(iterations):
+        node_subset = sample_node_subset(max_num_nodes, avg_num_nodes=num_entities)
+        adj_matrix = sample_edges(max_num_nodes, node_subset, num_interactions)
+        edges.append(adj_matrix.unsqueeze(0))
+        labeled_nodes = sample_node_labels(max_num_nodes, node_subset, num_entity_features)
+        node_embeddings.append(labeled_nodes.unsqueeze(0))
+    edges = torch.cat(edges, 0)
+    node_embeddings = torch.cat(node_embeddings, 0)
+    return edges, node_embeddings
 
 
 def compute_mmd_loss(z: torch.Tensor, iterations: int) -> torch.Tensor:
@@ -156,6 +198,27 @@ class LatentConfig(BartConfig):
         self.latent_var_loss = latent_var_loss
 
 
+class GraphLatentConfig(LatentConfig):
+    def __init__(
+        self,
+        num_nodes: int = 5,
+        num_entity_features: int = 32,
+        sample_num_interactions: int = 20,
+        sample_num_entities: int = 5,
+        alpha: float = 1.0,
+        beta: float = 1.0,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.num_nodes = num_nodes
+        self.num_entity_features = num_entity_features
+        self.sample_num_interactions = sample_num_interactions
+        self.sample_num_entities = sample_num_entities
+        self.z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)  # concat vectorized adj matrix and entity embeddings, overrides z_dim
+        self.alpha = alpha
+        self.beta = beta
+
+
 class VAEConfig(LatentConfig):
     def __init__(self, residuals: bool = False, **kwargs):
         super().__init__(**kwargs)
@@ -183,6 +246,26 @@ class TwinConfig(BartConfig):
         self.lambd_a = lambd_a  # not a typo; weight on off diagonal terms of twin loss
         self.mu = mu  # weight twin z loss vs the other losses
 
+
+class GraphVAEConfigLM(VAEConfigLM):
+    def __init__(
+        self,
+        num_nodes: int = 5,
+        num_entity_features: int = 32,
+        sample_num_interactions: int = 20,
+        sample_num_entities: int = 5,
+        alpha: float = 1.0,
+        beta: float = 1.0,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.num_nodes = num_nodes
+        self.num_entity_features = num_entity_features
+        self.sample_num_interactions = sample_num_interactions
+        self.sample_num_entities = sample_num_entities
+        self.z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)  # concat vectorized adj matrix and entity embeddings, overrides z_dim
+        self.alpha = alpha
+        self.beta = beta
 
 @dataclass
 class LatentEncoderOutput(ModelOutput):
@@ -405,14 +488,14 @@ class VAE(nn.Module):
 
     def __init__(
         self,
-        pretrained: BartForConditionalGeneration,
+        encoder: LatentEncoder,
+        decoder: LatentDecoder,
         config: LatentConfig
     ):
         super().__init__()
         self.config = config
-        # from the pretrained model
-        self.encoder = LatentEncoder(pretrained.get_encoder(), config)
-        self.decoder = LatentDecoder(pretrained.get_decoder(), config)
+        self.encoder = encoder
+        self.decoder = decoder
         self.z_dim = self.encoder.z_dim
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
@@ -436,13 +519,25 @@ class VAE(nn.Module):
 
 class VAEForLM(VAE):
 
-    def __init__(self, pretrained: BartModel, config: VAEConfigLM, **kwargs):
-        super().__init__(pretrained, config, **kwargs)
-        self.config = config
-        self.gamma = config.gamma
-        self.model = VAE(pretrained, config)
-        self.z_dim = self.model.z_dim
+    def __init__(self, pretrained: BartForConditionalGeneration, config: VAEConfigLM, **kwargs):
+        model = self._build_model(pretrained, config)
+        super().__init__(
+            model.encoder,
+            model.decoder,
+            config,
+            **kwargs
+        )
+        self.gamma = self.config.gamma
+        self.model = model
         self.lm_head = nn.Linear(pretrained.config.d_model, pretrained.shared.num_embeddings, bias=False)
+
+    @staticmethod
+    def _build_model(pretrained, config):
+        return VAE(
+            LatentEncoder(pretrained.get_encoder(), config),
+            LatentDecoder(pretrained.get_decoder(), config),
+            config
+        )
 
     def forward(self, input_ids=None, labels=None, **kwargs) -> VAEOutput:
         outputs = self.model(input_ids, **kwargs)
@@ -613,3 +708,229 @@ class TwinLM(Twin):
                 for i in range(len(input_ids))
             ]
         return outputs
+
+
+class MLP(nn.Module):
+    def __init__(self, num_layer: int, N: int):
+        super().__init__()
+        self.N = N
+        m = []
+        for i in range(num_layer):
+            m.append(nn.Linear(self.N, self.N))
+            m.append(nn.GELU())
+            m.append(nn.LayerNorm(self.N))
+        self.model = nn.Sequential(*m)
+
+    def forward(self, x):
+        y = x.view(-1, self.N)
+        y = self.model(y)
+        y = y.view_as(x)
+        return y
+
+
+def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torch.Tensor]:
+    assert adj.size(-1) == adj.size(-2), f"Expecting square matrices but received {str(adj.size())}."  # check it is a square matrix in its last dimensions
+    assert adj.size(-1) == entities.size(-1),  f"Expecting same number of nodes and entties, got {adj.size()} and {entities.size()}"
+    d = adj.size(-1)
+    indices_permutations = list(permutations(range(d)))
+    perm_adj = [adj[:, :, indices][:, indices, :] for indices in indices_permutations]
+    perm_entities = [entities[:, :, indices] for indices in indices_permutations]
+    return perm_adj, perm_entities
+
+
+class GraphEncoder(nn.Module):
+
+    def __init__(
+        self,
+        pretrained,
+        config: GraphLatentConfig
+    ):
+        super().__init__()
+        self.config = config
+        self.num_nodes = self.config.num_nodes
+        self.num_entity_features = self.config.num_entity_features
+
+        self.freeze_pretrained = self.config.freeze_pretrained
+        self.model = pretrained
+        self.mlp_graph_sigma = MLP(3, self.num_nodes ** 2)
+        self.mlp_graph_rho = MLP(3, self.num_nodes ** 2)
+        self.mlp_entity_sigma = MLP(3, self.num_nodes * self.num_entity_features)
+        self.mlp_entity_rho = MLP(3, self.num_nodes * self.num_entity_features)
+        # freeze the pretrained model
+        if self.freeze_pretrained in ['both', 'encoder']:
+            for param in self.model.parameters():
+                param.requires_grad_(False)
+        elif self.freeze_pretrained is None or self.freeze_pretrained == '':
+            pass
+        else:
+            raise ValueError(f"not sure what to freeze or not. Received freeze_pretrained={self.freeze_pretrained}")
+
+        self.d_encoder = self.model.config.d_model
+        self.seq_length = self.config.seq_length
+        self.pad_token_id = self.model.config.pad_token_id
+        # adj matrix
+        # latent vars
+        self.hidden_features = self.config.hidden_features
+        self.sampling_iterations = self.config.sampling_iterations
+        self.latent_var_loss = self.config.latent_var_loss
+        self.z_dim = self.config.z_dim
+        assert self.z_dim == (self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2), f"{self.z_dim} <> {(self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2)}"
+        self.alpha = self.config.alpha
+        self.beta = self.config.beta
+        # own layers
+        self.act_fct = nn.GELU()
+        self.vae_dropout = nn.Dropout(p=config.dropout)
+        self.fc_compress = nn.Linear(self.d_encoder, self.hidden_features)
+        self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
+        # latent adjascency matrix
+        self.to_adj_matrix = nn.Linear(self.seq_length * self.hidden_features, self.num_nodes ** 2)
+        self.norm_adj = nn.LayerNorm(self.num_nodes ** 2, elementwise_affine=False)
+        # latent entity embeeddings
+        self.to_entity_embed = nn.Linear(self.seq_length * self.hidden_features, self.num_nodes * self.num_entity_features)
+        self.norm_entities = nn.LayerNorm(self.num_nodes * self.num_entity_features, elementwise_affine=False)
+        # sampling param
+        self.sampling_iterations = self.config.sampling_iterations
+        self.sample_num_interactions = self.config.sample_num_interactions
+        self.sample_num_entities = self.config.sample_num_entities
+
+    def forward(self, input_ids=None, labels=None, **kwargs) -> LatentEncoderOutput:
+        # encoder
+        encoder_outputs: BaseModelOutput = self.model(input_ids=input_ids, **kwargs)
+        x = encoder_outputs.last_hidden_state  # -> B x L x H_enc
+        if self.freeze_pretrained in ['encoder', 'both']:
+            x.requires_grad_(True)
+        batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
+        assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
+
+        # compress
+        y = x  # keep x for later as residual
+        y = self.vae_dropout(y)
+        y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
+        y = self.norm_compress(y)
+        y = self.act_fct(y)
+        y = y.view(batch_size, (self.seq_length * self.hidden_features))
+
+        # adj matrix
+        adj = self.vae_dropout(y)
+        adj = self.to_adj_matrix(adj)
+        adj = self.norm_adj(adj)
+        adj = self.act_fct(adj)
+        adj = adj.view(-1, self.num_nodes, self.num_nodes)
+
+        # entities
+        entities = self.vae_dropout(y)
+        entities = self.to_entity_embed(entities)
+        entities = self.norm_entities(entities)
+        entities = self.act_fct(entities)
+        entities = entities.view(-1, self.num_entity_features, self.num_nodes)
+
+        # permutation sets
+        permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
+        z_graph = self.mlp_graph_rho(
+            sum([
+                self.mlp_graph_sigma(x)
+                for x in permuted_adj
+            ])
+        )
+        z_entities = self.mlp_entity_rho(
+            sum([
+                self.mlp_entity_sigma(x)
+                for x in permuted_entities
+            ])
+        )
+
+        if self.latent_var_loss == "mmd":
+            loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
+        elif self.latent_var_loss is None:
+            loss = torch.tensor(0)
+            if torch.cuda.is_available():
+                loss = loss.cuda()
+        else:
+            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
+
+        representation = [z_graph, z_entities]
+        z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
+        z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        z = torch.cat([z_graph, z_entities], -1)
+
+        return LatentEncoderOutput(
+            loss=loss,
+            last_hidden_state=x,
+            z=z,
+            representation=representation,
+            supp_data={
+                "loss_z": loss,
+                "adj_distro_loss": supp_data["adj_distro_loss"],
+                "nodes_distro_loss": supp_data["nodes_distro_loss"],
+            }
+        )
+
+    def compute_loss_on_latent_var(self, z_graph, z_entities):
+        with torch.no_grad():
+            edge_sample, entity_sample = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_entity_features, self.sampling_iterations)
+        adj_matrix_distro_loss = self.alpha * mmd(
+            edge_sample.view(self.sampling_iterations, self.num_nodes ** 2),
+            z_graph.view(-1, self.num_nodes ** 2)
+        )
+        # adj_matrix_distro_loss = torch.zeros(batch_size) #
+        # adj_matrix_distro_loss.requires_grad = True
+        # adj_matrix_distro_loss = adj_matrix_distro_loss.cuda()
+        ############
+        entity_distro_loss = self.beta * mmd(
+            entity_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
+            z_entities.view(-1,  self.num_nodes * self.num_entity_features)
+        )
+        ############
+
+        # L_adj_sparse = z_1.abs().mean()
+        # L_node_sparse = z_2.abs().mean()
+        # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
+        # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
+        # # naive (me...):
+        # batch_size = z_1.size(0)
+        # d = self.num_nodes  # cosmetic
+        # W = z_1.view(batch_size, d, d)
+        # I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
+        # if torch.cuda.is_available():
+        #     W = W.cuda()
+        #     I = I.cuda()
+        # mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
+        # trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
+        # L_dag = self.gamma * (trace - d).mean()
+        #
+        # Zheng et al 2018 DAG with NOTEARS
+        # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
+        # Section 3.2 The general case: Weighted adjacency matrices
+        # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
+        # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
+        # L_dag = h.mean()
+        # in NOTEARS github code:
+        # A different formulation, slightly faster at the cost odf numerical stability
+        # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
+        # M = np.eye(d) + W * W / d
+        # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
+        # h = (E.T * M).sum() - d
+        loss = adj_matrix_distro_loss + entity_distro_loss  # + L_dag + L_adj_sparse + L_node_sparse
+        supp_data = {
+            "adj_distro_loss": adj_matrix_distro_loss,
+            "nodes_distro_loss": entity_distro_loss,
+            # "L_adj_sparse": L_adj_sparse,
+            # "L_dag": L_dag,
+            # "L_node_sparse": L_node_sparse,
+        }
+        return loss, supp_data
+
+
+class GraphVAEForLM(VAEForLM):
+
+    def __init__(self, pretrained: BartForConditionalGeneration, config: GraphVAEConfigLM, **kwargs):
+        super().__init__(pretrained, config, **kwargs)
+
+
+    @staticmethod
+    def _build_model(pretrained, config):
+        return VAE(
+            GraphEncoder(pretrained.get_encoder(), config),
+            LatentDecoder(pretrained.get_decoder(), config),
+            config
+        )

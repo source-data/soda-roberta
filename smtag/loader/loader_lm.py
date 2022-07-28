@@ -233,12 +233,12 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     }
                 elif self.config.name == "MULTITASK":
                     p = random()
-                    if p <=0.5:
-                        Q =  data['input_ids'][0]
-                        A =  data['input_ids'][1]
+                    if p <= 0.5:
+                        Q = data['input_ids'][0]
+                        A = data['input_ids'][1]
                     else:
-                        Q =  data['input_ids'][1]
-                        A =  data['input_ids'][0]
+                        Q = data['input_ids'][1]
+                        A = data['input_ids'][0]
                     yield id_, {
                         "input_ids": Q,
                         "labels": A,
