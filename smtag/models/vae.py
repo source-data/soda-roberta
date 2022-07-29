@@ -825,19 +825,7 @@ class GraphEncoder(nn.Module):
         entities = entities.view(-1, self.num_entity_features, self.num_nodes)
 
         # permutation sets
-        permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
-        z_graph = self.mlp_graph_rho(
-            sum([
-                self.mlp_graph_sigma(x)
-                for x in permuted_adj
-            ])
-        )
-        z_entities = self.mlp_entity_rho(
-            sum([
-                self.mlp_entity_sigma(x)
-                for x in permuted_entities
-            ])
-        )
+        z_graph, z_entities = self.to_permuation_independent_set(adj, entities)
 
         if self.latent_var_loss == "mmd":
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
@@ -865,22 +853,41 @@ class GraphEncoder(nn.Module):
             }
         )
 
+    def to_permutation_independent_set(self, adj, entities):
+        # should this be with torch.no_grad() when using in loss mmd?
+        permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
+        z_graph = self.mlp_graph_rho(
+            sum([
+                self.mlp_graph_sigma(x)
+                for x in permuted_adj
+            ])
+        )
+        z_entities = self.mlp_entity_rho(
+            sum([
+                self.mlp_entity_sigma(x)
+                for x in permuted_entities
+            ])
+        )
+        return z_graph, z_entities
+
     def compute_loss_on_latent_var(self, z_graph, z_entities):
         with torch.no_grad():
-            edge_sample, entity_sample = sample_graph(self.num_nodes, self.sample_num_entities, self.sample_num_interactions, self.num_entity_features, self.sampling_iterations)
+            edge_sample, entity_sample = sample_graph(
+                self.num_nodes,
+                self.sample_num_entities,
+                self.sample_num_interactions,
+                self.num_entity_features,
+                self.sampling_iterations
+            )
+            z_graph_sample, z_entities_sample = self.to_permutation_independent_set(edge_sample, entity_sample)
         adj_matrix_distro_loss = self.alpha * mmd(
-            edge_sample.view(self.sampling_iterations, self.num_nodes ** 2),
+            z_graph_sample.view(self.sampling_iterations, self.num_nodes ** 2),
             z_graph.view(-1, self.num_nodes ** 2)
         )
-        # adj_matrix_distro_loss = torch.zeros(batch_size) #
-        # adj_matrix_distro_loss.requires_grad = True
-        # adj_matrix_distro_loss = adj_matrix_distro_loss.cuda()
-        ############
         entity_distro_loss = self.beta * mmd(
-            entity_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
+            z_entities_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
             z_entities.view(-1,  self.num_nodes * self.num_entity_features)
         )
-        ############
 
         # L_adj_sparse = z_1.abs().mean()
         # L_node_sparse = z_2.abs().mean()
