@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from transformers import (
     BartConfig,
-    BartForConditionalGeneration,
+    BartForConditionalGeneration, BartPretrainedModel,
     BartModel,
 )
 from transformers.models.bart.modeling_bart import shift_tokens_right
@@ -15,6 +15,7 @@ from transformers.modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions
 )
+from transformers.modeling_utils import PreTrainedModel
 from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
@@ -70,10 +71,10 @@ def sample_edges(max_num_nodes, node_subset, avg_num_interactions, sigma: float 
 
 
 def sample_node_labels(max_num_nodes, node_subset, node_features=10):
-    v = torch.zeros(max_num_nodes, node_features)
-    p = torch.full_like(v[node_subset], 0.5)
+    v = torch.zeros(node_features, max_num_nodes)
+    p = torch.full_like(v[:, node_subset], 0.5)
     sample = torch.bernoulli(p)
-    v[node_subset] = sample
+    v[:, node_subset] = sample
     return v
 
 
@@ -488,7 +489,7 @@ class LatentDecoder(nn.Module):
         )
 
 
-class VAE(nn.Module):
+class VAE(BartModel):
 
     def __init__(
         self,
@@ -496,7 +497,7 @@ class VAE(nn.Module):
         decoder: LatentDecoder,
         config: LatentConfig
     ):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.encoder = encoder
         self.decoder = decoder
@@ -517,7 +518,7 @@ class VAE(nn.Module):
             last_hidden_state=last_hidden_state,
             z=encoder_outputs.z,
             representation=encoder_outputs.representation,
-            supp_data={"loss_z": loss}
+            supp_data={"loss_z": loss_z, **encoder_outputs.supp_data}
         )
 
 
@@ -742,14 +743,14 @@ def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torc
     return perm_adj, perm_entities
 
 
-class GraphEncoder(nn.Module):
+class GraphEncoder(BartPretrainedModel):
 
     def __init__(
         self,
         pretrained,
         config: GraphLatentConfig
     ):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.num_nodes = self.config.num_nodes
         self.num_entity_features = self.config.num_entity_features
@@ -832,7 +833,7 @@ class GraphEncoder(nn.Module):
         entities = entities.view(-1, self.num_entity_features, self.num_nodes)
 
         # permutation sets
-        z_graph, z_entities = self.to_permuation_independent_set(adj, entities)
+        z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
 
         if self.latent_var_loss == "mmd":
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
@@ -855,12 +856,11 @@ class GraphEncoder(nn.Module):
             representation=representation,
             supp_data={
                 "loss_z": loss,
-                "adj_distro_loss": supp_data["adj_distro_loss"],
-                "nodes_distro_loss": supp_data["nodes_distro_loss"],
+                **supp_data
             }
         )
 
-    def to_permutation_independent_set(self, adj, entities):
+    def to_permutation_independent_set(self, adj, entities, with_grad: bool = True):
         # should this be with torch.no_grad() when using in loss mmd?
         permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
         z_graph = self.mlp_graph_rho(
@@ -886,7 +886,10 @@ class GraphEncoder(nn.Module):
                 self.num_entity_features,
                 self.sampling_iterations
             )
-            z_graph_sample, z_entities_sample = self.to_permutation_independent_set(edge_sample, entity_sample)
+            if torch.cuda.is_available():
+                edge_sample = edge_sample.cuda()
+                entity_sample = entity_sample.cuda()
+            z_graph_sample, z_entities_sample = self.to_permutation_independent_set(edge_sample.detach(), entity_sample.detach())
 
         adj_matrix_distro_loss = self.alpha * mmd(
             z_graph_sample.view(self.sampling_iterations, self.num_nodes ** 2),
