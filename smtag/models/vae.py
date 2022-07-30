@@ -734,7 +734,7 @@ class MLP(nn.Module):
 
 def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torch.Tensor]:
     assert adj.size(-1) == adj.size(-2), f"Expecting square matrices but received {str(adj.size())}."  # check it is a square matrix in its last dimensions
-    assert adj.size(-1) == entities.size(-1),  f"Expecting same number of nodes and entties, got {adj.size()} and {entities.size()}"
+    assert adj.size(-1) == entities.size(-1),  f"Expecting same number of nodes as entties, got {adj.size()} and {entities.size()}"
     d = adj.size(-1)
     indices_permutations = list(permutations(range(d)))
     perm_adj = [adj[:, :, indices][:, indices, :] for indices in indices_permutations]
