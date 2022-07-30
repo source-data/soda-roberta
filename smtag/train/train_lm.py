@@ -156,7 +156,7 @@ def train(
                 max_length=sum(config.max_length),
                 pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
             )
-        elif model_type == "Autoencoder":
+        elif model_type in ["Autoencoder", "VAE", "GVAE"]:
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length[0]
@@ -225,12 +225,12 @@ def train(
                 mlp_num_layers=1,
                 alpha=1.0,
                 beta=1.0,
-                gamma=10,  # weight of lm loss as compared to z_loss
+                gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
                 num_nodes=5,
                 num_entity_features=64,
                 sample_num_interactions=10,
-                seq_length=config.max_length,
+                seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
                 latent_var_loss="mmd"
             )
@@ -239,7 +239,7 @@ def train(
                 config=model_config
             )
         else:
-            raise ValueError("Training VAE from scratch is not implemented.")
+            raise ValueError("Training GVAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
             num_models = 1

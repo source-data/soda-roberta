@@ -79,7 +79,7 @@ class Config:
 # config for VAE, SEQ2GRAPH2SEQ
 
 config = Config(
-    max_length=64, #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length=[256, 256],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
     model_type="GVAE",  # "VAE" #  "Twin"  # "Autoencoder"
     asynchr=True #True  # we need ordered examples while async returns results in non deterministic way
