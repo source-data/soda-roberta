@@ -16,8 +16,8 @@ from transformers.models.bart.modeling_bart import (
 from transformers.modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqModelOutput, Seq2SeqLMOutput
 )
-from transformers.modeling_utils import PreTrainedModel
 from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
@@ -274,35 +274,25 @@ class GraphVAEConfigLM(VAEConfigLM):
         self.alpha = alpha
         self.beta = beta
 
+
 @dataclass
-class LatentEncoderOutput(ModelOutput):
+class LatentEncoderOutput(BaseModelOutput):
     loss: torch.Tensor = None
-    last_hidden_state: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
 @dataclass
-class LatentDecoderOutput(ModelOutput):
+class VAEOutput(Seq2SeqModelOutput):
     loss: torch.Tensor = None
-    last_hidden_state: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
 @dataclass
-class VAEOutput(ModelOutput):
-    loss: torch.Tensor = None
-    last_hidden_state: torch.Tensor = None
-    latent_variable: torch.Tensor = None
-    representation: torch.Tensor = None
-    supp_data: Dict[str, torch.Tensor] = None
-
-
-@dataclass
-class VAELMOutput(ModelOutput):
+class VAELMOutput(Seq2SeqLMOutput):
     loss: torch.Tensor = None
     logits: torch.Tensor = None
     latent_variable: torch.Tensor = None
@@ -368,7 +358,17 @@ class LatentEncoder(BartEncoder):
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
         self.norm_z = nn.LayerNorm(self.z_dim, elementwise_affine=False)
 
-    def forward(self, input_ids=None, labels=None, **kwargs) -> LatentEncoderOutput:
+    def forward(
+        self,
+        input_ids=None,
+        **kwargs,
+        # attention_mask=None,
+        # head_mask=None,
+        # inputs_embeds=None,
+        # output_attentions=None,
+        # output_hidden_states=None,
+        # return_dict=None,
+    ) -> LatentEncoderOutput:
         # encoder
         encoder_outputs: BaseModelOutput = self.model(input_ids=input_ids, **kwargs)
         x = encoder_outputs.last_hidden_state  # -> B x L x H_enc
@@ -413,18 +413,13 @@ class LatentEncoder(BartEncoder):
 
         return LatentEncoderOutput(
             loss=loss,
-            last_hidden_state=x,
             latent_variable=z,
             representation=representation,
-            supp_data={"loss_z": loss}
+            supp_data={"loss_z": loss},
+            last_hidden_state=encoder_outputs.hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions
         )
-        # return BaseModelOutputWithPastAndCrossAttentions(
-        #     last_hidden_state=hidden_states,
-        #     past_key_values=next_cache,
-        #     hidden_states=all_hidden_states,
-        #     attentions=all_self_attns,
-        #     cross_attentions=all_cross_attentions,
-        # )
 
 
 class LatentDecoder(BartDecoder):
@@ -465,11 +460,20 @@ class LatentDecoder(BartDecoder):
     def forward(
         self,
         input_ids=None,
-        encoder_hidden_states = None,
-        latent_variable = None,
-        **kwargs
-    ) -> LatentDecoderOutput:
-        x = encoder_hidden_states
+        encoder_hidden_states=None,  # to be able to have residuals
+        latent_variable=None,  # hallmark of VAE
+        **kwargs,
+        # attention_mask=None,
+        # encoder_attention_mask=None,
+        # head_mask=None,
+        # cross_attn_head_mask=None,
+        # past_key_values=None,
+        # inputs_embeds=None,
+        # use_cache=None,
+        # output_attentions=None,
+        # output_hidden_states=None,
+        # return_dict=None,
+    ):
         z = latent_variable
         batch_size, z_dim = z.size()
         # decompress
@@ -479,32 +483,25 @@ class LatentDecoder(BartDecoder):
         y = y.view(batch_size, self.seq_length, self.hidden_features)  # -> B x L x H
         y = self.fc_decompress(y)  # -> B x L x H_dec
         if self.residuals:
-            y = x + y  # resnet style
+            y = encoder_hidden_states + y  # resnet style
         # decoder
-        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
+        decoder_outputs = self.model(
             input_ids=input_ids,
+            encoder_hidden_states=y,
             ##### TESTING #####
-            encoder_hidden_states=encoder_hidden_states, # TESTING
-            # encoder_hidden_states=y,
-            ####################
+            # encoder_hidden_states=encoder_hidden_states, # FOR TESTING
+            ###################
             **kwargs
         )
 
-        last_hidden_state = decoder_outputs.last_hidden_state
+        return decoder_outputs
 
-        return LatentDecoderOutput(
-            last_hidden_state=last_hidden_state
-        )
-
-        # return Seq2SeqModelOutput(
+        # return LatentDecoderOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
         #     past_key_values=decoder_outputs.past_key_values,
-        #     decoder_hidden_states=decoder_outputs.hidden_states,
-        #     decoder_attentions=decoder_outputs.attentions,
+        #     hidden_states=decoder_outputs.hidden_states,
+        #     attentions=decoder_outputs.attentions,
         #     cross_attentions=decoder_outputs.cross_attentions,
-        #     encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-        #     encoder_hidden_states=encoder_outputs.hidden_states,
-        #     encoder_attentions=encoder_outputs.attentions,
         # )
 
 
@@ -575,7 +572,7 @@ class VAE(BartModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_outputs.last_hidden_state,
-            # latent_variable=encoder_outputs.latent_variable,
+            latent_variable=encoder_outputs.latent_variable,
             attention_mask=decoder_attention_mask,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
@@ -588,16 +585,21 @@ class VAE(BartModel):
             return_dict=return_dict,
         )
 
-        last_hidden_state = decoder_outputs.last_hidden_state
-
-        loss_z = None # encoder_outputs.loss
+        loss_z = encoder_outputs.loss
 
         return VAEOutput(
             loss=loss_z,
-            last_hidden_state=last_hidden_state,
-            # latent_variable=encoder_outputs.latent_variable,
+            latent_variable=encoder_outputs.latent_variable,
             representation=encoder_outputs.representation,
-            supp_data={"loss_z": loss_z, **encoder_outputs.supp_data}
+            supp_data={"loss_z": loss_z, **encoder_outputs.supp_data},
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
 
@@ -693,19 +695,15 @@ class VAEForLM(BartForConditionalGeneration):
             logits=logits,
             latent_variable=outputs.latent_variable,
             representation=outputs.representation,
-            supp_data=supp_data
+            supp_data=supp_data,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
-        # return Seq2SeqSequenceClassifierOutput(
-        #     loss=loss,
-        #     logits=logits,
-        #     past_key_values=outputs.past_key_values,
-        #     decoder_hidden_states=outputs.decoder_hidden_states,
-        #     decoder_attentions=outputs.decoder_attentions,
-        #     cross_attentions=outputs.cross_attentions,
-        #     encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-        #     encoder_hidden_states=outputs.encoder_hidden_states,
-        #     encoder_attentions=outputs.encoder_attentions,
-        # )
 
 
 class Twin(nn.Module):
