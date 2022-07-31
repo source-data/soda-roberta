@@ -130,7 +130,8 @@ class ShowExampleTextGeneration(ShowExampleLM):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=config.max_length[1])
+            max_length = config.max_length[1] if isinstance(config.max_length, list) else config.max_length
+            pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=max_length)
         pred_idx = pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)

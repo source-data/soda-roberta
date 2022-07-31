@@ -21,6 +21,7 @@ from transformers import (
     RobertaForMaskedLM, RobertaConfig,
     # OPTForCausalLM, OPTConfig,
     AutoModel, AutoModelForMaskedLM, AutoTokenizer, AutoModelForSeq2SeqLM,
+    BartForConditionalGeneration,
     TrainingArguments,
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
@@ -144,7 +145,7 @@ def train(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
             )
-        elif model_type in ["VAE", "GVAE"]:  # for debuging, maybe not necessary
+        elif model_type in ["VAE", "GVAE", "Generator"]:  # for debuging, maybe not necessary
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
@@ -156,7 +157,7 @@ def train(
                 max_length=sum(config.max_length),
                 pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
             )
-        elif model_type in ["Autoencoder", "VAE", "GVAE"]:
+        elif model_type in ["Autoencoder", "VAE", "GVAE", "Generator"]:
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length[0]
@@ -196,6 +197,11 @@ def train(
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
+    elif model_type == "Generator":
+        if config.from_pretrained:
+            model = BartForConditionalGeneration.from_pretrained(from_pretrained)
+        else:
+            raise ValueError("No Generator from scratch possible.")
     elif model_type == "VAE":
         if config.from_pretrained:
             pretrained = AutoModel.from_pretrained(from_pretrained)
@@ -205,12 +211,12 @@ def train(
                 **pretrained_config_dict,
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
-                z_dim=256,
+                z_dim=1024,
                 gamma=10,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
-                seq_length=config.max_length,
+                seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
-                latent_var_loss="kl"  # "kl" or "mmd" or None
+                latent_var_loss=None  # "kl" or "mmd" or None
             )
             model = VAEForLM(
                 pretrained=pretrained,
@@ -328,7 +334,7 @@ def train(
             compute_metrics=compute_metrics_lm,
             callbacks=show_callbacks
         )
-    elif data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
+    elif data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
         show_callbacks = [ShowExampleTextGeneration(tokenizer)]
         trainer = Trainer(
             model=model,

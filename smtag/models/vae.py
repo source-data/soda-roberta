@@ -467,7 +467,7 @@ class LatentDecoder(nn.Module):
         # decoder
         decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
             input_ids=input_ids,
-            encoder_hidden_states=y,
+            encoder_hidden_states=y, #TESTING
             **kwargs
         )
 
@@ -543,7 +543,20 @@ class VAE(BartModel):
                 return_dict=return_dict,
             )
 
-        decoder_outputs = self.decoder(input_ids=decoder_input_ids, encoder_outputs=encoder_outputs)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         last_hidden_state = decoder_outputs.last_hidden_state
 
