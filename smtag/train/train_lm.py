@@ -218,8 +218,12 @@ def train(
     elif model_type == "GVAE":
         if config.from_pretrained:
             pretrained = AutoModel.from_pretrained(from_pretrained)
+            # convert BartConfig into dict so that we have all its fields as mapping
+            pretrained_config_dict = pretrained.config.to_dict()
             model_config = GraphVAEConfigLM(
+                **pretrained_config_dict,  # initialize with all values from pretrained.config before updating
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 hidden_features=256,
                 # z_dim is calculated
                 mlp_num_layers=1,
