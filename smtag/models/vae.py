@@ -416,7 +416,7 @@ class LatentEncoder(BartEncoder):
             latent_variable=z,
             representation=representation,
             supp_data={"loss_z": loss},
-            last_hidden_state=encoder_outputs.hidden_states,
+            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions
         )
@@ -617,10 +617,10 @@ class VAEForLM(BartForConditionalGeneration):
     @staticmethod
     def _build_model(pretrained, config):
         return VAE(
-            # LatentEncoder(pretrained.get_encoder(), config),
-            # LatentDecoder(pretrained.get_decoder(), config),
-            pretrained.get_encoder(),
-            pretrained.get_decoder(),
+            LatentEncoder(pretrained.get_encoder(), config),
+            LatentDecoder(pretrained.get_decoder(), config),
+            # pretrained.get_encoder(),
+            # pretrained.get_decoder(),
             config
         )
 
