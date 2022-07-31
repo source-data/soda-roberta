@@ -465,14 +465,8 @@ class LatentDecoder(nn.Module):
         if self.residuals:
             y = x + y  # resnet style
         # decoder
-        # shifting to right shuuld be done by VAEforLM
-        decoder_input_ids = shift_tokens_right(
-            input_ids,
-            self.pad_token_id,
-            self.decoder_start_token_id
-        )
         decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
-            input_ids=decoder_input_ids,
+            input_ids=input_ids,
             encoder_hidden_states=y,
             **kwargs
         )

@@ -199,7 +199,10 @@ def train(
     elif model_type == "VAE":
         if config.from_pretrained:
             pretrained = AutoModel.from_pretrained(from_pretrained)
+            # convert BartConfig into dict so that we have all its fields as mapping
+            pretrained_config_dict = pretrained.config.to_dict()
             model_config = VAEConfigLM(
+                **pretrained_config_dict,
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
                 z_dim=256,
