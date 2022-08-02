@@ -413,7 +413,7 @@ class LatentEncoder(BartEncoder):
             loss = compute_kl_loss(z_mean, z_logvar)
             # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
         elif self.latent_var_loss is None:
-            loss = torch.tensor(0)
+            loss = dtorch.tensor(0)
             if torch.cuda.is_available():
                 loss = loss.cuda()
         else:
@@ -469,7 +469,7 @@ class LatentDecoder(BartDecoder):
     def forward(
         self,
         input_ids=None,
-        encoder_hidden_states=None,  # to be able to have residuals
+        encoder_hidden_states=None,
         latent_variable=None,  # hallmark of VAE
         attention_mask=None,
         encoder_attention_mask=None,
@@ -483,7 +483,7 @@ class LatentDecoder(BartDecoder):
         return_dict=None,
     ):
         z = latent_variable
-        batch_size, z_dim = z.size()  # THIS IS WRONG!!!
+        batch_size, z_dim = z.size()
         # decompress
         y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
@@ -496,7 +496,7 @@ class LatentDecoder(BartDecoder):
         decoder_outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            encoder_hidden_states=y,
+            encoder_hidden_states=y, # TRY FOR TESTING: encoder_hidden_states
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -555,7 +555,6 @@ class VAE(BartModel):
         return_dict=None,
     ) -> VAEOutput:
 
-        # IS THIS OK? FROM BART
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -570,7 +569,7 @@ class VAE(BartModel):
                 input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
-        # skip encoder if texts generation has already produced encoder outputs from query-context
+        # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -750,7 +749,7 @@ class VAEForLM(BartForConditionalGeneration):
             encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
                 0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
             )
-            # MODIFIED FROM generation_utils.GenerationMixin._expand_inputs_for_generation()
+            # MODIFIED FROM generation_utils.GenerationMixin._expand_inputs_for_generation
             encoder_outputs["latent_variable"] = encoder_outputs.latent_variable.index_select(
                 0, expanded_return_idx.to(encoder_outputs.latent_variable.device)
             )
