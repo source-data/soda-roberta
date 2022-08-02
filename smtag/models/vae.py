@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from itertools import permutations, product
 from random import sample, gauss
-from typing import List, Dict, Union
+from typing import List, Dict, Tuple, Union, Any
 import torch
 from torch import nn
 from transformers import (
@@ -277,10 +277,18 @@ class GraphVAEConfigLM(VAEConfigLM):
 
 @dataclass
 class LatentEncoderOutput(BaseModelOutput):
+    # redefine them to preserve order
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states = None
+    attentions = None
     loss: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
+    # inherited
+    # last_hidden_state: torch.FloatTensor = None
+    # hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -412,13 +420,13 @@ class LatentEncoder(BartEncoder):
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
         return LatentEncoderOutput(
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
             loss=loss,
             latent_variable=z,
             representation=representation,
             supp_data={"loss_z": loss},
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
         )
 
 
@@ -456,26 +464,26 @@ class LatentDecoder(BartDecoder):
         self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
         self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
         self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
+        self.post_init()
 
     def forward(
         self,
         input_ids=None,
         encoder_hidden_states=None,  # to be able to have residuals
         latent_variable=None,  # hallmark of VAE
-        **kwargs,
-        # attention_mask=None,
-        # encoder_attention_mask=None,
-        # head_mask=None,
-        # cross_attn_head_mask=None,
-        # past_key_values=None,
-        # inputs_embeds=None,
-        # use_cache=None,
-        # output_attentions=None,
-        # output_hidden_states=None,
-        # return_dict=None,
+        attention_mask=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         z = latent_variable
-        batch_size, z_dim = z.size()
+        batch_size, z_dim = z.size()  # THIS IS WRONG!!!
         # decompress
         y = self.fc_z_2(z)  # -> B x (L * H)
         y = self.norm_decompress(y)
@@ -487,15 +495,20 @@ class LatentDecoder(BartDecoder):
         # decoder
         decoder_outputs = self.model(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             encoder_hidden_states=y,
-            ##### TESTING #####
-            # encoder_hidden_states=encoder_hidden_states, # FOR TESTING
-            ###################
-            **kwargs
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         return decoder_outputs
-
         # return LatentDecoderOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
         #     past_key_values=decoder_outputs.past_key_values,
@@ -571,7 +584,7 @@ class VAE(BartModel):
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
             latent_variable=encoder_outputs.latent_variable,
             attention_mask=decoder_attention_mask,
             encoder_attention_mask=attention_mask,
@@ -585,13 +598,14 @@ class VAE(BartModel):
             return_dict=return_dict,
         )
 
-        loss_z = encoder_outputs.loss
-
         return VAEOutput(
-            loss=loss_z,
+            loss=encoder_outputs.loss,
             latent_variable=encoder_outputs.latent_variable,
             representation=encoder_outputs.representation,
-            supp_data={"loss_z": loss_z, **encoder_outputs.supp_data},
+            supp_data={
+                "loss_z": encoder_outputs.loss,
+                **encoder_outputs.supp_data
+            },
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -678,7 +692,7 @@ class VAEForLM(BartForConditionalGeneration):
 
         # trainable language model head
         logits = self.lm_head(outputs.last_hidden_state) #+ self.final_logits_bias
-        supp_data = outputs.supp_data
+        supp_data = outputs.supp_data if outputs.supp_data is not None else {}
 
         # calculate composite loss
         if labels is not None:
@@ -704,6 +718,44 @@ class VAEForLM(BartForConditionalGeneration):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    @staticmethod
+    def _expand_inputs_for_generation(
+        input_ids: torch.LongTensor,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        attention_mask: torch.LongTensor = None,
+        encoder_outputs: ModelOutput = None,
+        **model_kwargs
+    ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
+        """Text generation will sample several examples.
+        The inputs and encoder_outputs need therefore to be exanded in dim 0 to expand_size.
+        The method from the inherited GenerationMixin parent class is overriden to also expand the latent variable!
+        """
+        expanded_return_idx = (
+            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
+        )
+        input_ids = input_ids.index_select(0, expanded_return_idx)
+
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+
+        if is_encoder_decoder:
+            if encoder_outputs is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
+                0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
+            )
+            # MODIFIED FROM generation_utils.GenerationMixin._expand_inputs_for_generation()
+            encoder_outputs["latent_variable"] = encoder_outputs.latent_variable.index_select(
+                0, expanded_return_idx.to(encoder_outputs.latent_variable.device)
+            )
+            model_kwargs["encoder_outputs"] = encoder_outputs
+        return input_ids, model_kwargs
 
 
 class Twin(nn.Module):
@@ -878,7 +930,7 @@ def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torc
     return perm_adj, perm_entities
 
 
-class GraphEncoder(BartPretrainedModel):
+class GraphEncoder(BartEncoder):
 
     def __init__(
         self,
@@ -934,7 +986,7 @@ class GraphEncoder(BartPretrainedModel):
         self.sample_num_interactions = self.config.sample_num_interactions
         self.sample_num_entities = self.config.sample_num_entities
 
-    def forward(self, input_ids=None, labels=None, **kwargs) -> LatentEncoderOutput:
+    def forward(self, input_ids=None, **kwargs) -> LatentEncoderOutput:
         # encoder
         encoder_outputs: BaseModelOutput = self.model(input_ids=input_ids, **kwargs)
         x = encoder_outputs.last_hidden_state  # -> B x L x H_enc
@@ -974,6 +1026,7 @@ class GraphEncoder(BartPretrainedModel):
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
+            supp_data = {}
             if torch.cuda.is_available():
                 loss = loss.cuda()
         else:
@@ -985,8 +1038,10 @@ class GraphEncoder(BartPretrainedModel):
         z = torch.cat([z_graph, z_entities], -1)
 
         return LatentEncoderOutput(
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
             loss=loss,
-            last_hidden_state=x,
             latent_variable=z,
             representation=representation,
             supp_data={
