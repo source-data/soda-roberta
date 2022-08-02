@@ -1161,8 +1161,8 @@ class GraphVAEForLM(VAEForLM):
         pretrained_decoder = pretrained.get_decoder()
         pretrained_embedding = pretrained.get_input_embeddings()
         return VAE(
-            LatentEncoder(pretrained_encoder, config),
-            GraphLatentDecoder(pretrained_decoder, config),
+            GraphEncoder(pretrained_encoder, config),
+            LatentDecoder(pretrained_decoder, config),
             pretrained_embedding,
             config
         )
