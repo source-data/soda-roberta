@@ -204,7 +204,7 @@ def train(
             raise ValueError("No Generator from scratch possible.")
     elif model_type == "VAE":
         if config.from_pretrained:
-            pretrained = AutoModel.from_pretrained(from_pretrained)
+            pretrained = BartForConditionalGeneration.from_pretrained(from_pretrained)
             # convert BartConfig into dict so that we have all its fields as mapping
             pretrained_config_dict = pretrained.config.to_dict()
             model_config = VAEConfigLM(
@@ -226,7 +226,7 @@ def train(
             raise ValueError("Training VAE from scratch is not implemented.")
     elif model_type == "GVAE":
         if config.from_pretrained:
-            pretrained = AutoModel.from_pretrained(from_pretrained)
+            pretrained = BartForConditionalGeneration.from_pretrained(from_pretrained)
             # convert BartConfig into dict so that we have all its fields as mapping
             pretrained_config_dict = pretrained.config.to_dict()
             model_config = GraphVAEConfigLM(

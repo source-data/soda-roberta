@@ -413,7 +413,7 @@ class LatentEncoder(BartEncoder):
             loss = compute_kl_loss(z_mean, z_logvar)
             # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
         elif self.latent_var_loss is None:
-            loss = dtorch.tensor(0)
+            loss = torch.tensor(0)
             if torch.cuda.is_available():
                 loss = loss.cuda()
         else:
@@ -464,7 +464,7 @@ class LatentDecoder(BartDecoder):
         self.fc_z_2 = nn.Linear(self.z_dim, self.seq_length * self.hidden_features)
         self.norm_decompress = nn.LayerNorm(self.seq_length * self.hidden_features, elementwise_affine=False)
         self.fc_decompress = nn.Linear(self.hidden_features, self.d_decoder)
-        self.post_init()
+        # self.post_init()
 
     def forward(
         self,
@@ -522,19 +522,22 @@ class VAE(BartModel):
 
     def __init__(
         self,
-        encoder: LatentEncoder,
-        decoder: LatentDecoder,
+        pretrained_encoder: LatentEncoder,
+        pretrained_decoder: LatentDecoder,
+        pretrained_embedding: nn.Embedding,
         config: LatentConfig,
     ):
         super().__init__(config)
         self.config = config
         # replace encoder and decoder by LatentEncoder and LatentDecorer
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder = pretrained_encoder
+        self.decoder = pretrained_decoder
+        # link back to the shared embed_tokens coming from the pretrained encoder/decoder
+        self.shared = pretrained_embedding  
         self.z_dim = self.config.z_dim
 
         # Re-Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()
 
     def forward(
         self,
@@ -569,6 +572,13 @@ class VAE(BartModel):
                 input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -597,6 +607,10 @@ class VAE(BartModel):
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            import pdb; pdb.set_trace()
+            return decoder_outputs + encoder_outputs
+
         return VAEOutput(
             loss=encoder_outputs.loss,
             latent_variable=encoder_outputs.latent_variable,
@@ -622,18 +636,19 @@ class VAEForLM(BartForConditionalGeneration):
         super().__init__(config)
         self.gamma = self.config.gamma
         self.model: VAE = self._build_model(pretrained, config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(pretrained.config.d_model, pretrained.shared.num_embeddings, bias=False)
+        self.lm_head = pretrained.lm_head
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()
 
     @staticmethod
     def _build_model(pretrained, config):
+        pretrained_encoder = pretrained.get_encoder()
+        pretrained_decoder = pretrained.get_decoder()
+        pretrained_embedding = pretrained.get_input_embeddings()
         return VAE(
-            LatentEncoder(pretrained.get_encoder(), config),
-            LatentDecoder(pretrained.get_decoder(), config),
-            # pretrained.get_encoder(),
-            # pretrained.get_decoder(),
+            LatentEncoder(pretrained_encoder, config),
+            LatentDecoder(pretrained_decoder, config),
+            pretrained_embedding,
             config
         )
 
@@ -1140,11 +1155,14 @@ class GraphVAEForLM(VAEForLM):
     def __init__(self, pretrained: BartForConditionalGeneration, config: GraphVAEConfigLM, **kwargs):
         super().__init__(pretrained, config, **kwargs)
 
-
     @staticmethod
     def _build_model(pretrained, config):
+        pretrained_encoder = pretrained.get_encoder()
+        pretrained_decoder = pretrained.get_decoder()
+        pretrained_embedding = pretrained.get_input_embeddings()
         return VAE(
-            GraphEncoder(pretrained.get_encoder(), config),
-            LatentDecoder(pretrained.get_decoder(), config),
+            LatentEncoder(pretrained_encoder, config),
+            GraphLatentDecoder(pretrained_decoder, config),
+            pretrained_embedding,
             config
         )
