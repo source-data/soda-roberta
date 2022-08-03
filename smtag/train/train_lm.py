@@ -334,16 +334,15 @@ def train(
             compute_metrics=compute_metrics_lm,
             callbacks=show_callbacks
         )
-    elif data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
-        show_callbacks = [ShowExampleTextGeneration(tokenizer)]
-        trainer = Trainer(
+    elif model_type in {"VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
+        trainer = MyTrainer(
             model=model,
             args=training_args,
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=show_callbacks
+            callbacks=[ShowExampleTextGeneration(tokenizer)]
         )
     else:
         trainer = MyTrainer(
