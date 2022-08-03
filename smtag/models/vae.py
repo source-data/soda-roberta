@@ -109,7 +109,7 @@ def compute_kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     return kl.sum()
 
 
-def monte_carlo_kl_divergence(self, z, mu, std):
+def monte_carlo_kl_divergence(z, mu, std):
     # https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
     # this has the advantage that one can choose the distribution, and in particular, mu and std
     # --------------------------
@@ -359,7 +359,7 @@ class LatentEncoder(BartEncoder):
         self.norm_compress = nn.LayerNorm(self.hidden_features, elementwise_affine=False)
         if self.latent_var_loss == "mmd" or self.latent_var_loss is None:   # infoVAE
             self.fc_z_1 = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
-        elif self.latent_var_loss == "kl":   # classical VAE
+        elif self.latent_var_loss == "kl" or "kl-mc":   # classical VAE
             self.fc_z_mean = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
             self.fc_z_logvar = nn.Linear(self.seq_length * self.hidden_features, self.z_dim)
         else:
@@ -412,12 +412,21 @@ class LatentEncoder(BartEncoder):
         elif self.latent_var_loss == "kl":
             loss = compute_kl_loss(z_mean, z_logvar)
             # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
+        elif self.latent_var_loss == "kl-mc":
+            z_mean = self.fc_z_mean(y)  # -> B x Z
+            z_logvar = self.fc_z_logvar(y)  # -> B x Z
+            z_std = torch.exp(0.5 * z_logvar)
+            q = torch.distributions.Normal(z_mean, z_std)
+            z = q.rsample()
+            loss = monte_carlo_kl_divergence(z, z_mean, z_std)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
             if torch.cuda.is_available():
                 loss = loss.cuda()
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
+
+        supp_data = {"loss_z": loss}
 
         return LatentEncoderOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -426,7 +435,7 @@ class LatentEncoder(BartEncoder):
             loss=loss,
             latent_variable=z,
             representation=representation,
-            supp_data={"loss_z": loss},
+            supp_data=supp_data,
         )
 
 
@@ -615,10 +624,7 @@ class VAE(BartModel):
             loss=encoder_outputs.loss,
             latent_variable=encoder_outputs.latent_variable,
             representation=encoder_outputs.representation,
-            supp_data={
-                "loss_z": encoder_outputs.loss,
-                **encoder_outputs.supp_data
-            },
+            supp_data=encoder_outputs.supp_data,
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1010,7 +1016,6 @@ class GraphEncoder(BartEncoder):
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
 
         # compress
-        y = x  # keep x for later as residual
         y = self.vae_dropout(y)
         y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
@@ -1022,16 +1027,16 @@ class GraphEncoder(BartEncoder):
         adj = self.to_adj_matrix(adj)
         adj = self.norm_adj(adj)
         adj = self.act_fct(adj)
-        adj_matrix_representation = adj
         adj = adj.view(-1, self.num_nodes, self.num_nodes)
+        adj_matrix_representation = adj
 
         # entities
         entities = self.vae_dropout(y)
         entities = self.to_entity_embed(entities)
         entities = self.norm_entities(entities)
         entities = self.act_fct(entities)
-        entities_representation = entities
         entities = entities.view(-1, self.num_entity_features, self.num_nodes)
+        entities_representation = entities
 
         # permutation sets
         z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
@@ -1040,7 +1045,7 @@ class GraphEncoder(BartEncoder):
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
-            supp_data = {}
+            supp_data = {"loss_z": loss}
             if torch.cuda.is_available():
                 loss = loss.cuda()
         else:
@@ -1058,10 +1063,7 @@ class GraphEncoder(BartEncoder):
             loss=loss,
             latent_variable=z,
             representation=representation,
-            supp_data={
-                "loss_z": loss,
-                **supp_data
-            }
+            supp_data=supp_data,
         )
 
     def to_permutation_independent_set(self, adj, entities, with_grad: bool = True):
@@ -1081,35 +1083,39 @@ class GraphEncoder(BartEncoder):
         )
         return z_graph, z_entities
 
-    def compute_loss_on_latent_var(self, z_graph, z_entities):
-        with torch.no_grad():
-            edge_sample, entity_sample = sample_graph(
-                self.num_nodes,
-                self.sample_num_entities,
-                self.sample_num_interactions,
-                self.num_entity_features,
-                self.sampling_iterations
+    def compute_loss_on_latent_var(self, z_graph, z_entities, include=['mmd_sampling', 'diag', 'sparse']):
+        losses = {}
+        if 'mmd_sampling' in include:
+            with torch.no_grad():
+                edge_sample, entity_sample = sample_graph(
+                    self.num_nodes,
+                    self.sample_num_entities,
+                    self.sample_num_interactions,
+                    self.num_entity_features,
+                    self.sampling_iterations
+                )
+                if torch.cuda.is_available():
+                    edge_sample = edge_sample.cuda()
+                    entity_sample = entity_sample.cuda()
+                z_graph_sample, z_entities_sample = self.to_permutation_independent_set(edge_sample.detach(), entity_sample.detach())
+
+            losses['adj_matrix_distro_loss'] = self.alpha * mmd(
+                z_graph_sample.view(self.sampling_iterations, self.num_nodes ** 2),
+                z_graph.view(-1, self.num_nodes ** 2)
             )
-            if torch.cuda.is_available():
-                edge_sample = edge_sample.cuda()
-                entity_sample = entity_sample.cuda()
-            z_graph_sample, z_entities_sample = self.to_permutation_independent_set(edge_sample.detach(), entity_sample.detach())
+            losses['entity_distro_loss'] = self.beta * mmd(
+                z_entities_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
+                z_entities.view(-1,  self.num_nodes * self.num_entity_features)
+            )
 
-        adj_matrix_distro_loss = self.alpha * mmd(
-            z_graph_sample.view(self.sampling_iterations, self.num_nodes ** 2),
-            z_graph.view(-1, self.num_nodes ** 2)
-        )
-        entity_distro_loss = self.beta * mmd(
-            z_entities_sample.view(self.sampling_iterations, self.num_nodes * self.num_entity_features),
-            z_entities.view(-1,  self.num_nodes * self.num_entity_features)
-        )
+        if 'diag' in include:
+            diag = z_graph.diagonal()
+            loss_diag = diag ** 2
+            losses['diag_loss'] = loss_diag.sum() / (self.num_nodes ** 2)  # num elements of diag scales as n
 
-        diag = z_graph.diagonal()
-        loss_diag = diag ** 2
-        loss_diag = loss_diag.sum() / (self.num_nodes ** 2)  # num elements of diag scales as n
-
-        L_adj_sparse = z_graph.abs().mean()
-        L_node_sparse = z_entities.abs().mean()
+        if 'sparse' in include:
+            losses['loss_adj_sparse'] = z_graph.abs().mean()
+            losses['loss_node_sparse'] = z_entities.abs().mean()
 
         # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
         # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
@@ -1138,14 +1144,10 @@ class GraphEncoder(BartEncoder):
         # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
         # h = (E.T * M).sum() - d
 
-        loss = adj_matrix_distro_loss + entity_distro_loss  + L_adj_sparse + L_node_sparse + loss_diag
+        loss = sum(losses.values())
         supp_data = {
-            "adj_distro_loss": adj_matrix_distro_loss,
-            "nodes_distro_loss": entity_distro_loss,
-            "L_adj_sparse": L_adj_sparse,
-            # "L_dag": L_dag,
-            "L_node_sparse": L_node_sparse,
-            "loss_diag": loss_diag,
+            "loss_z": loss,
+            **losses,
         }
         return loss, supp_data
 
