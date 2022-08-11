@@ -131,3 +131,11 @@ runs/
 Untitled.ipynb
 
 seq2seq_models/*
+
+data/
+
+seq2seq_models/
+
+sd-ner-v2/
+
+test_seq2seq_metrics/
