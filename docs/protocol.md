@@ -759,7 +759,7 @@ _samples_per_second': 45.417, 'test_steps_per_second': 0.189}
 python -m smtag.cli.tokcl.train \
     --loader_path "EMBO/sd-nlp-non-tokenized" \
     --task SMALL_MOL_ROLES \
-    --from_pretrained "michiyasunaga/BioLinkBERT-base" \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
     --add_prefix_space \
     --num_train_epochs 2.0 \
     --disable_tqdm False \
@@ -778,6 +778,31 @@ CONTROLLED_VAR       0.98      0.98      0.98      3294
 
 {'test_loss': 0.001487505272962153, 'test_accuracy_score': 0.9996381741843666, 'test_precision': 0.965673420738975, 'test_recall': 0.9672874880611271, 'test_f1': 0.9664797805081714, 'test_runtime': 51.8547, 'test
 _samples_per_second': 158.616, 'test_steps_per_second': 0.636}
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-base" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --masked_data_collator \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict 
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.98      0.98      0.98      3294
+  MEASURED_VAR       0.92      0.92      0.92       894
+
+     micro avg       0.96      0.97      0.97      4188
+     macro avg       0.95      0.95      0.95      4188
+  weighted avg       0.97      0.97      0.97      4188
+
+{'test_loss': 0.0012178965844213963, 'test_accuracy_score': 0.9996466877329697, 'test_precision': 0.9649666348903718, 'test_recall': 0.9668099331423113, 'test_f1': 0.9658874045801527
+, 'test_runtime': 52.6042, 'test_samples_per_second': 156.356, 'test_steps_per_second': 0.627}
 
 ```
 
@@ -982,6 +1007,16 @@ python -m smtag.cli.tokcl.train \
     --do_train \
     --do_eval \
     --do_predict 
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.89      0.89      0.89      7233
+  MEASURED_VAR       0.90      0.91      0.91      8716
+
+     micro avg       0.89      0.90      0.90     15949
+     macro avg       0.89      0.90      0.90     15949
+  weighted avg       0.89      0.90      0.90     15949
+
 ```
 
 ### PANELIZATION
@@ -1000,6 +1035,14 @@ python -m smtag.cli.tokcl.train \
     --do_eval \
     --do_predict \
     --run_name "bert-base-cased_PANELIZATION"
+
+              precision    recall  f1-score   support
+
+ PANEL_START       0.86      0.87      0.87      7497
+
+   micro avg       0.86      0.87      0.87      7497
+   macro avg       0.86      0.87      0.87      7497
+weighted avg       0.86      0.87      0.87      7497
 
 ```
 
@@ -1020,6 +1063,15 @@ python -m smtag.cli.tokcl.train \
     --do_eval \
     --do_predict \
     --run_name "bert-base-cased_SMALL_MOL_ROLES"
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.96      0.98      0.97      3292
+  MEASURED_VAR       0.90      0.85      0.87       893
+
+     micro avg       0.94      0.95      0.95      4185
+     macro avg       0.93      0.91      0.92      4185
+  weighted avg       0.94      0.95      0.95      4185
 
 ```
 
@@ -1042,6 +1094,19 @@ python -m smtag.cli.tokcl.train \
     --do_eval \
     --do_predict \
     --run_name "bert-base-uncased_GENEPROD_ROLES"
+
+                    precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.89      0.90      0.90      7237
+  MEASURED_VAR       0.91      0.92      0.92      8718
+
+     micro avg       0.90      0.91      0.91     15955
+     macro avg       0.90      0.91      0.91     15955
+  weighted avg       0.90      0.91      0.91     15955
+
+{'test_loss': 0.01473652757704258, 'test_accuracy_score': 0.9946272341596362, 'test_precision': 0.9044566164571144, 'test_recall': 0.9107489815104983, 'test_f1': 0.9075918928203367, 'te
+st_runtime': 58.4083, 'test_samples_per_second': 140.819, 'test_steps_per_second': 0.565}
+
 ```
 
 ### PANELIZATION
@@ -1060,6 +1125,16 @@ python -m smtag.cli.tokcl.train \
     --do_eval \
     --do_predict \
     --run_name "bert-base-uncased_PANELIZATION"
+              precision    recall  f1-score   support
+
+ PANEL_START       0.89      0.93      0.91      7662
+
+   micro avg       0.89      0.93      0.91      7662
+   macro avg       0.89      0.93      0.91      7662
+weighted avg       0.89      0.93      0.91      7662
+
+{'test_loss': 0.0073542520403862, 'test_accuracy_score': 0.9973646825133705, 'test_precision': 0.8870465029298092, 'test_recall': 0.9286087183503002, 'test_f1': 0.9073519097111523, 'tes
+t_runtime': 34.3427, 'test_samples_per_second': 55.849, 'test_steps_per_second': 0.233}
 
 ```
 
@@ -1081,4 +1156,631 @@ python -m smtag.cli.tokcl.train \
     --do_predict \
     --run_name "bert-base-uncased_SMALL_MOL_ROLES"
 
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.97      0.97      0.97      3292
+  MEASURED_VAR       0.90      0.88      0.89       893
+
+     micro avg       0.95      0.95      0.95      4185
+     macro avg       0.93      0.93      0.93      4185
+  weighted avg       0.95      0.95      0.95      4185
+
+{'test_loss': 0.002427967032417655, 'test_accuracy_score': 0.9993344463076643, 'test_precision': 0.9507260176148536, 'test_recall': 0.9543608124253286, 'test_f1': 0.9525399475316003, 't
+est_runtime': 57.9758, 'test_samples_per_second': 141.87, 'test_steps_per_second': 0.569}
+
 ```
+
+## BioBERT base cased 
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "dmis-lab/biobert-base-cased-v1.2" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "biobert-base-cased_GENEPROD_ROLES"
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.89      0.90      0.90      7231
+  MEASURED_VAR       0.91      0.92      0.92      8715
+
+     micro avg       0.90      0.91      0.91     15946
+     macro avg       0.90      0.91      0.91     15946
+  weighted avg       0.90      0.91      0.91     15946
+
+{'test_loss': 0.016174716874957085, 'test_accuracy_score': 0.994354416656227, 'test_precision': 0.9041394335511983, 'test_recall': 0.9108867427568043, 'test_f1': 0.9075005466870764, 'te
+st_runtime': 60.9812, 'test_samples_per_second': 134.878, 'test_steps_per_second': 0.541}
+
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "dmis-lab/biobert-base-cased-v1.2" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "biobert-base-cased_PANELIZATION"
+              precision    recall  f1-score   support
+
+ PANEL_START       0.90      0.94      0.92      7524
+
+   micro avg       0.90      0.94      0.92      7524
+   macro avg       0.90      0.94      0.92      7524
+weighted avg       0.90      0.94      0.92      7524
+
+{'test_loss': 0.006445760373026133, 'test_accuracy_score': 0.9977361996297587, 'test_precision': 0.8950094756790903, 'test_recall': 0.9415204678362573, 'test_f1': 0.917676015285964, 'te
+st_runtime': 35.1944, 'test_samples_per_second': 54.497, 'test_steps_per_second': 0.227}
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "dmis-lab/biobert-base-cased-v1.2" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "biobert-base-cased_SMALL_MOL_ROLES"
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.97      0.98      0.98      3291
+  MEASURED_VAR       0.92      0.90      0.91       893
+
+     micro avg       0.96      0.96      0.96      4184
+     macro avg       0.94      0.94      0.94      4184
+  weighted avg       0.96      0.96      0.96      4184
+
+{'test_loss': 0.002317107282578945, 'test_accuracy_score': 0.9994356758250315, 'test_precision': 0.9586403613025909, 'test_recall': 0.9639101338432122, 'test_f1': 0.961268025265165, 
+'test_runtime': 60.1791, 'test_samples_per_second': 136.675, 'test_steps_per_second': 0.548}
+    
+
+```
+## PubMedBERT base abstracts
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "PMB-abstract_GENEPROD_ROLES"
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.91      0.93      0.92      7241
+  MEASURED_VAR       0.94      0.93      0.93      8720
+
+     micro avg       0.93      0.93      0.93     15961
+     macro avg       0.93      0.93      0.93     15961
+  weighted avg       0.93      0.93      0.93     15961
+
+{'test_loss': 0.010013540275394917, 'test_accuracy_score': 0.9965061913097907, 'test_precision': 0.9263980006248047, 'test_recall': 0.9289518200613996, 'test_f1': 0.9276731527247701,
+ 'test_runtime': 51.6423, 'test_samples_per_second': 159.269, 'test_steps_per_second': 0.639}
+
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "PMB-abstract_PANELIZATION"
+
+              precision    recall  f1-score   support
+
+ PANEL_START       0.92      0.95      0.94      7990
+
+   micro avg       0.92      0.95      0.94      7990
+   macro avg       0.92      0.95      0.94      7990
+weighted avg       0.92      0.95      0.94      7990
+
+{'test_loss': 0.0046697696670889854, 'test_accuracy_score': 0.9983040486528002, 'test_precision': 0.922292374939291, 'test_recall': 0.9506883604505632, 'test_f1': 0.9362751140145446,
+ 'test_runtime': 31.5726, 'test_samples_per_second': 60.749, 'test_steps_per_second': 0.253}
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "PMB-abstract_SMALL_MOL_ROLES"
+    
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.98      0.98      0.98      3294
+  MEASURED_VAR       0.93      0.93      0.93       894
+
+     micro avg       0.97      0.97      0.97      4188
+     macro avg       0.96      0.95      0.96      4188
+  weighted avg       0.97      0.97      0.97      4188
+
+{'test_loss': 0.0013107596896588802, 'test_accuracy_score': 0.9997016588644609, 'test_precision': 0.9692270992366412, 'test_recall': 0.970152817574021, 'test_f1': 0.969689737470167, 'test_runtime': 50.9966, 'test_samples_per_second': 161.285, 'test_steps_per_second':
+ 0.647}
+
+```
+
+## BioMegatron
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "EMBO/BioMegatron345mUncased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.000025 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mUncased_GENEPROD_ROLES"
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.90      0.91      0.91      7237
+  MEASURED_VAR       0.92      0.93      0.92      8718
+
+     micro avg       0.91      0.92      0.92     15955
+     macro avg       0.91      0.92      0.92     15955
+  weighted avg       0.91      0.92      0.92     15955
+
+{'test_loss': 0.013211735524237156, 'test_accuracy_score': 0.995750123629387, 'test_precision': 0.9079660182221128, 'test_recall': 0.9244124099028518, 'test_f1': 0.916115407310786, '
+test_runtime': 101.4736, 'test_samples_per_second': 81.056, 'test_steps_per_second': 0.325}
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "EMBO/BioMegatron345mCased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.000025 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mCased_GENEPROD_ROLES"
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.90      0.93      0.91      7233
+  MEASURED_VAR       0.93      0.93      0.93      8716
+
+     micro avg       0.91      0.93      0.92     15949
+     macro avg       0.91      0.93      0.92     15949
+  weighted avg       0.92      0.93      0.92     15949
+
+{'test_loss': 0.012827829457819462, 'test_accuracy_score': 0.9956606382274786, 'test_precision': 0.9148436534420962, 'test_recall': 0.9282086651200703, 'test_f1': 0.9214777006629111,
+ 'test_runtime': 106.6473, 'test_samples_per_second': 77.123, 'test_steps_per_second': 0.309}
+
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "EMBO/BioMegatron345mCased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --learning_rate 0.000025 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mCased_PANELIZATION"
+
+              precision    recall  f1-score   support
+
+ PANEL_START       0.92      0.94      0.93      7497
+
+   micro avg       0.92      0.94      0.93      7497
+   macro avg       0.92      0.94      0.93      7497
+weighted avg       0.92      0.94      0.93      7497
+
+{'test_loss': 0.005305187776684761, 'test_accuracy_score': 0.9982626238458275, 'test_precision': 0.9200883575883576, 'test_recall': 0.9445111377884488, 'test_f1': 0.932139801224248, 
+'test_runtime': 47.7397, 'test_samples_per_second': 40.176, 'test_steps_per_second': 0.168}
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "EMBO/BioMegatron345mUncased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --learning_rate 0.000025 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mUncased_PANELIZATION"
+
+              precision    recall  f1-score   support
+
+ PANEL_START       0.92      0.95      0.93      7662
+
+   micro avg       0.92      0.95      0.93      7662
+   macro avg       0.92      0.95      0.93      7662
+weighted avg       0.92      0.95      0.93      7662
+
+{'test_loss': 0.005312655121088028, 'test_accuracy_score': 0.9982788611704027, 'test_precision': 0.9185589242674109, 'test_recall': 0.9450535108326807, 'test_f1': 0.9316178835638469,
+ 'test_runtime': 46.814, 'test_samples_per_second': 40.971, 'test_steps_per_second': 0.171}
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "EMBO/BioMegatron345mCased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.000025 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mCased_SMALL_MOL_ROLES"
+
+                    precision    recall  f1-score   support                                                                                                                                                             
+                                                                                                                                                                                                                    
+CONTROLLED_VAR       0.97      0.98      0.98      3292                                                                                                                                                             
+  MEASURED_VAR       0.93      0.91      0.92       893
+
+     micro avg       0.96      0.97      0.96      4185
+     macro avg       0.95      0.94      0.95      4185
+  weighted avg       0.96      0.97      0.96      4185
+
+{'test_loss': 0.0023707891814410686, 'test_accuracy_score': 0.9995577055015167, 'test_precision': 0.9626368396001904, 'test_recall': 0.966547192353644, 'test_f1': 0.9645880529390723, 'test_runtime': 106.1585, 'te
+st_samples_per_second': 77.479, 'test_steps_per_second': 0.311}
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "EMBO/BioMegatron345mUncased" \
+    --per_device_train_batch_size 8 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.000025 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "BioMegatron345mUnased_SMALL_MOL_ROLES"
+
+                precision    recall  f1-score   support                                                                                                                                                             
+                                                                                                                                                                                                                    
+CONTROLLED_VAR       0.97      0.98      0.98      3292                                                                                                                                                             
+  MEASURED_VAR       0.93      0.90      0.91       893                                                                                                                                                             
+                                                                                                                                                                                                                    
+     micro avg       0.96      0.96      0.96      4185
+     macro avg       0.95      0.94      0.94      4185
+  weighted avg       0.96      0.96      0.96      4185
+
+{'test_loss': 0.0020676676649600267, 'test_accuracy_score': 0.9995624945001964, 'test_precision': 0.9602759276879163, 'test_recall': 0.9646356033452808, 'test_f1': 0.9624508284658481, 'test_runtime': 101.3689, 't
+est_samples_per_second': 81.139, 'test_steps_per_second': 0.326}
+
+```
+
+## Runs of the biomed-roberta-base model
+
+### NER
+
+```bsh
+   python -m smtag.cli.tokcl.train \
+      --loader_path "EMBO/sd-nlp-non-tokenized" \
+      --task NER \
+      --from_pretrained "allenai/biomed_roberta_base" \
+      --disable_tqdm True \
+      --hyperparameter_search \
+      --add_prefix_space \
+      --hp_experiment_name "EMBO_bio-lm_NER" \
+      --hp_gpus_per_trial 1 \
+      --hp_tune_samples 16 
+
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "allenai/biomed_roberta_base" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+```
+
+### GENEPROD ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "allenai/biomed_roberta_base" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict 
+                precision    recall  f1-score   support                                                                                                                                                                             
+
+CONTROLLED_VAR       0.90      0.91      0.90      7238
+  MEASURED_VAR       0.92      0.92      0.92      8718
+
+     micro avg       0.91      0.92      0.91     15956
+     macro avg       0.91      0.92      0.91     15956
+  weighted avg       0.91      0.92      0.91     15956
+
+{'test_loss': 0.014319841749966145, 'test_accuracy_score': 0.9948686518640704, 'test_precision': 0.9091983332296785, 'test_recall': 0.9162070694409626, 'test_f1': 0.9126892461370375, 'test_runtime': 56.8217, 'test_samples_per_se
+cond': 144.751, 'test_steps_per_second': 0.581}
+
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "allenai/biomed_roberta_base" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --learning_rate 0.0001 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+              precision    recall  f1-score   support
+
+ PANEL_START       0.91      0.95      0.93      7724
+
+   micro avg       0.91      0.95      0.93      7724
+   macro avg       0.91      0.95      0.93      7724
+weighted avg       0.91      0.95      0.93      7724
+
+{'test_loss': 0.005609080661088228, 'test_accuracy_score': 0.9980552696355838, 'test_precision': 0.9092260061919505, 'test_recall': 0.9505437597099948, 'test_f1': 0.9294259130324705, 'test_runtime': 34.1154, 'test_samples_per_se
+cond': 56.221, 'test_steps_per_second': 0.234}
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "allenai/biomed_roberta_base" \
+    --per_device_train_batch_size 16 \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+                precision    recall  f1-score   support                                                                                                                                                                             
+
+CONTROLLED_VAR       0.98      0.98      0.98      3294
+  MEASURED_VAR       0.91      0.91      0.91       893
+
+     micro avg       0.96      0.97      0.96      4187
+     macro avg       0.95      0.95      0.95      4187
+  weighted avg       0.96      0.97      0.96      4187
+
+{'test_loss': 0.002258655149489641, 'test_accuracy_score': 0.9995081774949588, 'test_precision': 0.9623719933317456, 'test_recall': 0.9651301647957965, 'test_f1': 0.9637491056522774, 'test_runtime': 55.9045, 'test_samples_per_se
+cond': 147.126, 'test_steps_per_second': 0.59}
+
+```
+
+### Trainning model to send to production
+
+We now finally train BioLinkBERT to be sent into the EEB and improve the quality of our graph.
+
+### NER
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --output_dir "sd-ner-v2" \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --add_prefix_space \
+    --evaluation_strategy "epoch" \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.00005 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "sd-ner-v2" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-ner-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+            precision    recall  f1-score support
+CELL           0.71      0.79      0.75      4948 
+EXP_ASSAY      0.59      0.60      0.60      9885  
+GENEPROD       0.79      0.89      0.84     21865                                                                       
+ORGANISM       0.72      0.85      0.78      3464  
+SMALL_MOLECULE 0.72      0.81      0.76      6431
+SUBCELLULAR    0.72      0.77      0.74      3850 
+TISSUE         0.68      0.76      0.72      2975 
+
+micro avg       0.72      0.80      0.76
+macro avg       0.70      0.78      0.74     53418 
+weighted avg    0.72      0.80      0.76     53418 
+{'test_loss': 0.16807569563388824, 'test_accuracy_score': 0.9427137503742414, 'test_precision': 0.7242540660382148, 'test_recall': 0.8011157287805608, 'test_f1': 0.7607484111817252, 'test_runtime': 88.1851, 'test_samples_per_second': 93.27, 'test_steps_per_second': 0.374}
+
+### GENEPROD_ROLES
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.00005 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "sd-geneprod-roles-v2" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-geneprod-roles-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+                  precision recall    f1-score   support
+CONTROLLED_VAR    0.91      0.93      0.92       7241
+MEASURED_VAR      0.94      0.93      0.93       872
+micro avg         0.92      0.93      0.93       15961
+macro avg         0.92      0.93      0.93       15961
+weighted avg      0.92      0.93      0.93       15961
+{'test_loss': 0.011066839098930359, 'test_accuracy_score': 0.9961050515140637, 'test_precision': 0.9227847313033191, 'test_recall': 0.9284505983334378, 'test_f1': 0.9256089943785134, 'test_runtime': 86.746, 'test_samples_per_second': 94.817, 'test_steps_per_second': 0.38}```
+                                                                                                   
+
+```
+
+### PANELIZATION
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --add_prefix_space \
+    --learning_rate 0.00005 \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "biolinkBERT_PANELIZATION" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-panelization-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+```
+
+### SMALL_MOL_ROLES
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --per_device_train_batch_size 4 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "biolinkBERT_SMALL_MOL_ROLES" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-smallmol-roles-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+```
+

@@ -13,7 +13,7 @@ from transformers import (
     AutoConfig, BertTokenizerFast
 )
 from transformers.integrations import TensorBoardCallback
-from datasets import load_dataset, GenerateMode, DatasetDict
+from datasets import load_dataset, DatasetDict
 from ..models.experimental import (
     BecauseTokenClassification,
     BecauseConfigForTokenClassification,
@@ -92,7 +92,7 @@ class TrainTokenClassification:
                                                                     max_position_embeddings=self._max_position_embeddings(),
                                                                     id2label=self.id2label,
                                                                     label2id=self.label2id,
-                                                                    classifier_dropout=self.training_args.classifier_dropout,
+                                                                    # classifier_dropout=self.training_args.classifier_dropout,
                                                                     max_length=self.config.max_length)
     
         # Define the trainer
@@ -171,10 +171,15 @@ class TrainTokenClassification:
             pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
             print(f"{pred.metrics}")
 
+        if self.training_args.push_to_hub:
+            print(f"Uploading the model {self.trainer.model} and tokenizer {self.trainer.tokenizer} to HuggingFace")
+            self.trainer.push_to_hub(commit_message="End of training")
+
     def _get_tokenizer(self):
         if "Megatron" in self.from_pretrained:
             tokenizer = BertTokenizerFast.from_pretrained(self.from_pretrained, 
                                                             is_pretokenized=True)
+            self.get_roberta = False
         else:
             try:
                 logger.info(f"Loading the tokenizer for model {self.from_pretrained}")
@@ -202,18 +207,22 @@ class TrainTokenClassification:
         """
         logger.info(f"Obtaining data from the HuggingFace 🤗 Hub: load_dataset('{self.loader_path}',' {self.task}')")
         data = load_dataset(self.loader_path, self.task, ignore_verifications=True)
+
         if self.loader_path == "EMBO/sd-nlp":
             tokenized_data = deepcopy(data)
             if not self.masked_data_collator:
                 tokenized_data.remove_columns_(['tag_mask'])
         else:
+            if self.masked_data_collator:
+                columns_to_remove = ['words']
+            else:
+                columns_to_remove = ['words', 'tag_mask']
+            print(self.add_prefix_space)
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
-                batched=True)
-            if self.masked_data_collator:
-                tokenized_data.remove_columns_(['words'])
-            else:
-                tokenized_data.remove_columns_(['words', 'attention_mask', 'tag_mask'])
+                batched=True,
+                remove_columns=columns_to_remove)
+
         return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
 
@@ -301,9 +310,6 @@ class TrainTokenClassification:
     def _get_data_labels(self) -> Tuple[dict, dict]:
         num_labels = self.train_dataset.info.features['labels'].feature.num_classes
         label_list = self.train_dataset.info.features['labels'].feature.names
-        if self.task == "PANELIZATION":
-            num_labels = 3
-            label_list = ['O', 'B-PANEL_START', 'I-PANEL_START']
         id2label, label2id = {}, {}
         for class_, label in zip(range(num_labels), label_list):
             id2label[class_] = label

@@ -127,13 +127,14 @@ class ShowExampleTextGeneration(ShowExampleLM):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_length = kwargs.get('max_sentence_length', None)
+        self.model_config = kwargs.get('model_config', None)
         if not self.max_length:
             self.max_length = config.max_length[1]
 
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred_idx = model.generate(inputs["input_ids"], do_sample=True, top_k=40, max_length=self.max_length)
+            pred_idx = model.generate(inputs["input_ids"], **self.model_config)
         pred_idx = pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)

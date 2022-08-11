@@ -32,7 +32,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     logging_steps: int = field(default=100)
     logging_nan_inf_filter: str = field(default=True)
     save_strategy: IntervalStrategy = field(default="steps")
-    save_steps: int = field(default=1000)
+    save_steps: int = field(default=2000)
     save_total_limit: Optional[int] = field(default=None)
     seed: int = field(default=42)
     select_labels: bool = field(default=False)
@@ -71,29 +71,30 @@ class TrainingArgumentsTOKCL(TrainingArguments):
 
 @dataclass
 class ModelConfigSeq2Seq(PretrainedConfig):
-    max_length: int = field(default=512)
-    min_length: int = field(default=16)
-    early_stopping: bool = field(default=False)
+    max_length: int = field(default=128)
+    min_length: int = field(default=0)
+    do_sample: bool = field(default=True)
+    early_stopping: bool = field(default=True)
     num_beams: int = field(default=1)
     num_beam_groups: int = field(default=1)
     diversity_penalty: float = field(default=0.0)
     temperature: float = field(default=1.0)
-    top_k: int = field(default=50)
-    top_p: float = field(default=1.)
+    top_k: int = field(default=20)
+    top_p: float = field(default=0.90)
     num_return_sequences: int = field(default=1)
     output_scores: bool = field(default=False)
-    length_penalty: float = field(default=2.)
+    length_penalty: float = field(default=50.)
     repetition_penalty: float = field(default=2.)
     no_repeat_ngram_size: int = field(default=5)
     return_dict_in_generate: bool = field(default=False)
-
-
 
 @dataclass
 class TrainingArgumentsSeq2Seq(Seq2SeqTrainingArguments):
     output_dir: str = field(default=SEQ2SEQ_MODEL_PATH)
     run_name: Optional[str] = field(default="Seq2Seq")
-    generation_max_length: int = field(default=128)
+    generation_max_length: int = field(default=512)
+    predict_with_generate: bool = field(default=True)
+    generation_num_beams: int = field(default=None)
 
 @dataclass
 class Gpt3ModelParam:

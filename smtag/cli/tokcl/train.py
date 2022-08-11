@@ -128,6 +128,7 @@ if __name__ == "__main__":
             hp_search_reporter=hp_search_reporter,
             hp_experiment_name=hp_experiment_name,
             hp_local_dir=hp_local_folder, 
+            add_prefix_space=args.add_prefix_space
         )
 
         best_model = hp_search._run_hyperparam_search()

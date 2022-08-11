@@ -1,5 +1,5 @@
 from transformers import (
-    RobertaForTokenClassification, RobertaTokenizerFast
+    AutoModelForTokenClassification, AutoTokenizer
 )
 
 import json
@@ -288,17 +288,20 @@ class SmartTagger(Tagger):
 
     def __init__(
         self,
-        tokenizer_source: str = "roberta-base",
-        panelizer_source: str = "EMBO/sd-panelization",
-        ner_source: str = "EMBO/sd-ner",
-        geneprod_roles_source: str = "EMBO/sd-geneprod-roles",
-        small_mol_roles_source: str = "EMBO/sd-smallmol-roles"
+        tokenizer_source: str = "michiyasunaga/BioLinkBERT-large",
+        panelizer_source: str = "EMBO/sd-panelization-v2",
+        ner_source: str = "EMBO/sd-ner-v2",
+        geneprod_roles_source: str = "EMBO/sd-geneprod-roles-v2",
+        small_mol_roles_source: str = "EMBO/sd-smallmol-roles-v2"
 
     ):
         super().__init__(
-            RobertaTokenizerFast.from_pretrained(tokenizer_source),
-            RobertaForTokenClassification.from_pretrained(panelizer_source),
-            RobertaForTokenClassification.from_pretrained(ner_source),
-            RobertaForTokenClassification.from_pretrained(geneprod_roles_source),
-            RobertaForTokenClassification.from_pretrained(small_mol_roles_source)
+            AutoTokenizer.from_pretrained(tokenizer_source, 
+                                          is_pretokenized=True, 
+                                          add_prefix_space=self.add_prefix_space
+                                          ),
+            AutoModelForTokenClassification.from_pretrained(panelizer_source),
+            AutoModelForTokenClassification.from_pretrained(ner_source),
+            AutoModelForTokenClassification.from_pretrained(geneprod_roles_source),
+            AutoModelForTokenClassification.from_pretrained(small_mol_roles_source)
         )
