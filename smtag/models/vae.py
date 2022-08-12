@@ -50,7 +50,7 @@ def mmd(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 def sample_z(z_dim: int, iterations: int = 100) -> torch.Tensor:
-    x = torch.randn(iterations, z_dim)
+    x = torch.randn(iterations, z_dim)  # random numbers from a normal distribution with mean 0 and variance 1
     if torch.cuda.is_available():
         x = x.cuda()
     return x
@@ -106,7 +106,7 @@ def compute_mmd_loss(z: torch.Tensor, iterations: int) -> torch.Tensor:
 def compute_kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     # https://github.com/timbmg/Sentence-VAE/blob/master/train.py
     kl = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
-    return kl.sum()
+    return kl.sum()  # or kl mean()??
 
 
 def monte_carlo_kl_divergence(z, mu, std):
@@ -128,7 +128,7 @@ def monte_carlo_kl_divergence(z, mu, std):
 
     # sum over last dim to go from single dim distribution to multi-dim
     kl = kl.sum(-1)
-    return kl
+    return kl.mean()  # or kl.sum()?
 
 
 def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
@@ -396,28 +396,25 @@ class LatentEncoder(BartEncoder):
         if self.latent_var_loss == "mmd" or self.latent_var_loss is None:
             z = self.fc_z_1(y)  # -> B x Z  (example: 32 example x 128 dimensional latent var)
             z = self.norm_z(z)
+            loss = compute_mmd_loss(z, self.sampling_iterations)
             representation = z
         elif self.latent_var_loss == "kl":
             z_mean = self.fc_z_mean(y)  # -> B x Z
             z_logvar = self.fc_z_logvar(y)  # -> B x Z
             z_std = torch.exp(0.5 * z_logvar)
-            z = sample_z(self.z_dim, batch_size)
-            z = z + z_mean + z_std
+            # z = sample_z(self.z_dim, batch_size)
+            # z = z + z_mean + z_std
+            q = torch.distributions.Normal(z_mean, z_std)
+            z = q.rsample()
             representation = self.norm_z(z_mean)  # for twin cross correlation: take latent before sampling
-        else:
-            raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
-
-        if self.latent_var_loss == "mmd":
-            loss = compute_mmd_loss(z, self.sampling_iterations)
-        elif self.latent_var_loss == "kl":
             loss = compute_kl_loss(z_mean, z_logvar)
-            # loss = float(1/(1 + exp(-k * (step - x0))))  #  would need access to training_step, modify Trainer class
         elif self.latent_var_loss == "kl-mc":
             z_mean = self.fc_z_mean(y)  # -> B x Z
             z_logvar = self.fc_z_logvar(y)  # -> B x Z
-            z_std = torch.exp(0.5 * z_logvar)
+            z_std = torch.exp(0.5 * z_logvar / 2)
             q = torch.distributions.Normal(z_mean, z_std)
             z = q.rsample()
+            representation = self.norm_z(z_mean)  # for twin cross correlation: take latent before sampling
             loss = monte_carlo_kl_divergence(z, z_mean, z_std)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
@@ -985,7 +982,7 @@ class GraphEncoder(BartEncoder):
         # latent vars
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
-        self.latent_var_loss = self.config.latent_var_loss
+        self.latent_var_loss = self.config.latent_var_loss.split('-') if  self.config.latent_var_loss is not None else None
         self.z_dim = self.config.z_dim
         assert self.z_dim == (self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2), f"{self.z_dim} <> {(self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2)}"
         self.alpha = self.config.alpha
@@ -1016,7 +1013,7 @@ class GraphEncoder(BartEncoder):
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
 
         # compress
-        y = self.vae_dropout(y)
+        y = self.vae_dropout(x)
         y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
         y = self.act_fct(y)
@@ -1038,11 +1035,11 @@ class GraphEncoder(BartEncoder):
         entities = entities.view(-1, self.num_entity_features, self.num_nodes)
         entities_representation = entities
 
-        # permutation sets
+        # permutation-independent sets
         z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
 
-        if self.latent_var_loss == "mmd":
-            loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities)
+        if self.latent_var_loss:
+            loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities, self.latent_var_loss)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
             supp_data = {"loss_z": loss}
@@ -1083,9 +1080,9 @@ class GraphEncoder(BartEncoder):
         )
         return z_graph, z_entities
 
-    def compute_loss_on_latent_var(self, z_graph, z_entities, include=['mmd_sampling', 'diag', 'sparse']):
+    def compute_loss_on_latent_var(self, z_graph, z_entities, include=['mmd', 'diag', 'sparse']):
         losses = {}
-        if 'mmd_sampling' in include:
+        if 'mmd' in include:
             with torch.no_grad():
                 edge_sample, entity_sample = sample_graph(
                     self.num_nodes,
@@ -1117,32 +1114,34 @@ class GraphEncoder(BartEncoder):
             losses['loss_adj_sparse'] = z_graph.abs().mean()
             losses['loss_node_sparse'] = z_entities.abs().mean()
 
-        # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
-        # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
-        # # naive (me...):
-        # batch_size = z_1.size(0)
-        # d = self.num_nodes  # cosmetic
-        # W = z_1.view(batch_size, d, d)
-        # I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
-        # if torch.cuda.is_available():
-        #     W = W.cuda()
-        #     I = I.cuda()
-        # mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
-        # trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
-        # L_dag = self.gamma * (trace - d).mean()
+        if 'DAG' in include:
+            # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
+            # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
+            # # naive (me...):
+            d = self.num_nodes  # cosmetic
+            W = z_graph  # cosmetic
+            batch_size = W.size(0)
+            I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
+            if torch.cuda.is_available():
+                W = W.cuda()
+                I = I.cuda()
+            mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
+            trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
+            L_dag = trace - d
+            losses['DAG'] =  L_dag.mean()
 
-        # Zheng et al 2018 DAG with NOTEARS
-        # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
-        # Section 3.2 The general case: Weighted adjacency matrices
-        # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
-        # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
-        # L_dag = h.mean()
-        # in NOTEARS github code:
-        # A different formulation, slightly faster at the cost odf numerical stability
-        # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
-        # M = np.eye(d) + W * W / d
-        # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
-        # h = (E.T * M).sum() - d
+            # Zheng et al 2018 DAG with NOTEARS
+            # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
+            # Section 3.2 The general case: Weighted adjacency matrices
+            # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
+            # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
+            # L_dag = h.mean()
+            # in NOTEARS github code:
+            # A different formulation, slightly faster at the cost odf numerical stability
+            # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
+            # M = np.eye(d) + W * W / d
+            # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
+            # h = (E.T * M).sum() - d
 
         loss = sum(losses.values())
         supp_data = {

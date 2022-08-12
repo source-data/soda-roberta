@@ -211,8 +211,8 @@ def train(
                 **pretrained_config_dict,
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=768,
-                z_dim=2048,
-                gamma=1.0,  # weight of lm loss as compared to z_loss
+                z_dim=768,  # 2048,
+                gamma=10.0,  # mmd: 1E-3,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
@@ -233,19 +233,19 @@ def train(
                 **pretrained_config_dict,  # initialize with all values from pretrained.config before updating
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
-                hidden_features=256,
-                # z_dim is calculated by GraphVAEConfigLM rom the number of nodes and entity features
-                mlp_num_layers=1,
+                hidden_features=768,
+                # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
+                mlp_num_layers=3,
                 alpha=1.0,
                 beta=1.0,
                 gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
-                num_nodes=6,
+                num_nodes=4,
                 num_entity_features=64,
-                sample_num_interactions=10,
+                sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
-                latent_var_loss="mmd", #"mmd", None
+                latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
             )
             model = GraphVAEForLM(
                 pretrained=pretrained,
@@ -334,7 +334,7 @@ def train(
             compute_metrics=compute_metrics_lm,
             callbacks=show_callbacks
         )
-    elif model_type in {"VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
+    elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
         trainer = MyTrainer(
             model=model,
             args=training_args,

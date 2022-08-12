@@ -21,8 +21,10 @@ MATCH
 WITH DISTINCT
   p, subset,
   // use geneprod instead of gene or protein
-  apoc.text.replace(observation.type, "gene|protein", "geneprod") as obs_type, observation.text AS obs_text,
-  intervention.type AS interv_type, intervention.text AS interv_text,
+  apoc.text.replace(observation.type, "gene|protein", "geneprod") as obs_type,
+  observation.text AS obs_text,
+  apoc.text.replace(intervention.type, "gene|protein", "geneprod") as interv_type,
+  intervention.text AS interv_text,
   method.text AS method_text
 WITH DISTINCT
   p, subset,

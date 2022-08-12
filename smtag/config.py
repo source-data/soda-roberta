@@ -64,7 +64,7 @@ config = Config(
     max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained= "facebook/bart-base", #"facebook/opt-1.3b", #"facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
     # fast=False, # for OPT model
-    model_type="Generator",  # "Autoencoder", "VAE", "GVAE", "Generator"
+    model_type="GVAE",  # "Autoencoder", "VAE", "GVAE", "Generator"
     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 )
 
@@ -81,7 +81,7 @@ config = Config(
 # config = Config(
 #     max_length=64,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-#     model_type="Generator",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
+#     model_type="GVAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
 #     asynchr=True #True  # we need ordered examples while async returns results in non deterministic way
 # )
 
