@@ -795,7 +795,7 @@ class Twin(nn.Module):
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        outputs = self.twin_prediction(input_ids, attention_mask, **kwargs)
+        outputs = self.twin_encoding(input_ids, attention_mask, **kwargs)
 
         loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
 
