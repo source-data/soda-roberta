@@ -255,67 +255,53 @@ def train(
             raise ValueError("Training GVAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
-            num_models = 1
-            pretrained = [
-                AutoModel.from_pretrained(from_pretrained)
-                for i in range(num_models)
-            ]
+            pretrained = AutoModel.from_pretrained(from_pretrained)
+            pretrained_config_dict = pretrained.config.to_dict()
             if data_config_name == "NOLM":
-                latent_configs = [
-                    LatentConfig(
-                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
-                        hidden_features=256,
-                        z_dim=1024, #96,
-                        sampling_iterations=200,
-                        seq_length=config.max_length[i],
-                        latent_var_loss=None  # "kl" or "mmd" or None
-                    )
-                    for i in range(num_models)
-                ]
-                encoders = [
-                    LatentEncoder(
-                        pretrained_encoder=pretrained[i].get_encoder(),
-                        config=latent_configs[i]
-                    )
-                    for i in range(num_models)
-                ]
                 model_config = TwinConfig(
-                    lambd_a=1.0,  # weight off-diagonal vs diagonal
+                    **pretrained_config_dict,
+                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                    hidden_features=256,
+                    z_dim=1024,  # 96,
+                    sampling_iterations=200,
+                    seq_length=config.max_length[0],
+                    latent_var_loss=None,  # "kl" or "mmd" or None
+                    lambd=1.0,  # weight off-diagonal vs diagonal
                     mu=1.0,  # weight of twin_z_losss over other losses
                 )
                 model = Twin(
-                    encoders=encoders,
+                    pretrained=pretrained,
                     config=model_config
                 )
-            elif data_config_name in ["SEQ2SEQ", "MLM"]:
-                vae_configs = [
-                    VAEConfigLM(
-                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
-                        hidden_features=256,
-                        z_dim=96,
-                        gamma=1.0,  # weight of lm loss as compared to z_loss
-                        sampling_iterations=200,
-                        seq_length=config.max_length[i],
-                        residuals=data_config_name in ["MLM"],
-                        latent_var_loss=None  # "kl" or "mmd" or None
-                    )
-                    for i in range(num_models)
-                ]
-                models = [
-                    VAEForLM(
-                        pretrained=pretrained[i],
-                        config=vae_configs[i]
-                    )
-                    for i in range(num_models)
-                ]
-                model_config = TwinConfig(
-                    lambd_a=1.0,  # weight off-diagonal vs diagonal
-                    mu=1.0,  # weight of twin_z_losss over other losses
-                )
-                model = TwinLM(
-                    models=models,
-                    config=model_config
-                )
+            # elif data_config_name in ["SEQ2SEQ", "MLM"]:
+            #     vae_configs = [
+            #         VAEConfigLM(
+            #             freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+            #             hidden_features=256,
+            #             z_dim=96,
+            #             gamma=1.0,  # weight of lm loss as compared to z_loss
+            #             sampling_iterations=200,
+            #             seq_length=config.max_length[i],
+            #             residuals=data_config_name in ["MLM"],
+            #             latent_var_loss=None  # "kl" or "mmd" or None
+            #         )
+            #         for i in range(num_models)
+            #     ]
+            #     models = [
+            #         VAEForLM(
+            #             pretrained=pretrained[i],
+            #             config=vae_configs[i]
+            #         )
+            #         for i in range(num_models)
+            #     ]
+            #     model_config = TwinConfig(
+            #         lambd_a=1.0,  # weight off-diagonal vs diagonal
+            #         mu=1.0,  # weight of twin_z_losss over other losses
+            #     )
+            #     model = TwinLM(
+            #         models=models,
+            #         config=model_config
+            #     )
         else:
             raise ValueError("Training TwinVAE from scratch is not implemented.")
 

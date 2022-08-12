@@ -244,11 +244,11 @@ class VAEConfigForTokenClassification(LatentConfig):
         self.classifier_dropout = classifier_dropout
 
 
-class TwinConfig(BartConfig):
+class TwinConfig(LatentConfig):
 
-    def __init__(self, lambd_a: float = None, mu: float = 1.0, **kwargs):
+    def __init__(self, lambd: float = None, mu: float = 1.0, **kwargs):
         super().__init__(**kwargs)
-        self.lambd_a = lambd_a  # not a typo; weight on off diagonal terms of twin loss
+        self.lambd = lambd  # not a typo; weight on off diagonal terms of twin loss
         self.mu = mu  # weight twin z loss vs the other losses
 
 
@@ -417,9 +417,12 @@ class LatentEncoder(BartEncoder):
             representation = self.norm_z(z_mean)  # for twin cross correlation: take latent before sampling
             loss = monte_carlo_kl_divergence(z, z_mean, z_std)
         elif self.latent_var_loss is None:
+            z = self.fc_z_1(y)  # -> B x Z  (example: 32 example x 128 dimensional latent var)
+            z = self.norm_z(z)
             loss = torch.tensor(0)
             if torch.cuda.is_available():
                 loss = loss.cuda()
+            representation = z
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
@@ -539,11 +542,8 @@ class VAE(BartModel):
         self.encoder = pretrained_encoder
         self.decoder = pretrained_decoder
         # link back to the shared embed_tokens coming from the pretrained encoder/decoder
-        self.shared = pretrained_embedding  
+        self.shared = pretrained_embedding
         self.z_dim = self.config.z_dim
-
-        # Re-Initialize weights and apply final processing
-        # self.post_init()
 
     def forward(
         self,
@@ -614,7 +614,6 @@ class VAE(BartModel):
         )
 
         if not return_dict:
-            import pdb; pdb.set_trace()
             return decoder_outputs + encoder_outputs
 
         return VAEOutput(
@@ -640,8 +639,6 @@ class VAEForLM(BartForConditionalGeneration):
         self.gamma = self.config.gamma
         self.model: VAE = self._build_model(pretrained, config)
         self.lm_head = pretrained.lm_head
-        # Initialize weights and apply final processing
-        # self.post_init()
 
     @staticmethod
     def _build_model(pretrained, config):
@@ -779,15 +776,15 @@ class Twin(nn.Module):
 
     def __init__(
         self,
-        encoders: Union[LatentEncoder, List[LatentEncoder]],
+        pretrained: BartModel,
         config: TwinConfig
     ):
         super().__init__()
-        self.encoders = nn.ModuleList(encoders) if isinstance(encoders, list) else nn.ModuleList([encoders])
+        pretrained_encoder = pretrained.get_encoder()
+        self.encoder = LatentEncoder(pretrained_encoder, config)
         self.config = config
-        self.z_dims = [m.z_dim for m in self.encoders]
         self.mu = self.config.mu
-        self.lambd_a = self.config.lambd_a
+        self.lambd = self.config.lambd
 
     def forward(
         self,
@@ -795,21 +792,19 @@ class Twin(nn.Module):
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        outputs = self.twin_encoding(input_ids, attention_mask, **kwargs)
-
+        outputs: List[LatentEncoderOutput] = [
+            self.encoder(input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+            for i in range(len(input_ids))
+        ]
         loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
-
         representations = [out.representation for out in outputs]  # List[B X Z]
-
         supp_data = {
                 "loss_diag": loss_diag,
                 "loss_off_diag": loss_off_diag,
                 "loss_twin_z": loss_twin_z,
                 "img_correl": cross_correl.unsqueeze(0),
             }
-
         supp_data = self.update_supp_data(supp_data, outputs)
-
         return TwinOutput(
             loss=loss,
             last_hidden_state=[out.last_hidden_state for out in outputs],
@@ -817,40 +812,11 @@ class Twin(nn.Module):
             supp_data=supp_data
         )
 
-    def twin_encoding(
-        self,
-        input_ids: List[torch.Tensor] = None,
-        attention_mask: List[torch.Tensor] = None,
-        **kwargs
-    ) -> LatentEncoderOutput:
-
-        # note: there are no labels for encoder-only Twin models
-        if len(self.encoders) == 1:  # single model for all twin examples
-            outputs = [
-                self.encoders[0](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
-                for i in range(len(input_ids))
-            ]
-        else:  # one model trained for each type fo twin example
-            outputs = [
-                self.encoders[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
-                for i in range(len(input_ids))
-            ]
-        # return LatentEncoderOutput(
-        #     last_hidden_state=encoder_outputs.last_hidden_state,
-        #     hidden_states=encoder_outputs.hidden_states,
-        #     attentions=encoder_outputs.attentions,
-        #     loss=loss,
-        #     latent_variable=z,
-        #     representation=representation,
-        #     supp_data=supp_data,
-        # )
-        return outputs
-
     def all_losses(self, outputs):
-        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.representation for out in outputs])
+        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.latent_variable for out in outputs])
         losses = torch.stack([out.loss for out in outputs])
         losses = losses.sum()
-        loss_twin_z = self.mu * (loss_diag + self.lambd_a * loss_off_diag)
+        loss_twin_z = self.mu * (loss_diag + self.lambd * loss_off_diag)
         loss = losses + loss_twin_z
         return loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl
 
