@@ -26,7 +26,10 @@ RUN apt-get update \
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
 && pip install ipywidgets
 # optional for plotting
-RUN pip install plotly 
+RUN pip install plotly \
+&& dash=2.5.0 \
+&& jupyter-dash \
+&& pandas
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*1

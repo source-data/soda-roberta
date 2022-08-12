@@ -261,7 +261,7 @@ def train(
                 for i in range(num_models)
             ]
             if data_config_name == "NOLM":
-                vae_configs = [
+                latent_configs = [
                     LatentConfig(
                         freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                         hidden_features=256,
@@ -272,10 +272,10 @@ def train(
                     )
                     for i in range(num_models)
                 ]
-                models = [
+                encoders = [
                     LatentEncoder(
-                        pretrained=pretrained[i].get_encoder(),
-                        config=vae_configs[i]
+                        pretrained_encoder=pretrained[i].get_encoder(),
+                        config=latent_configs[i]
                     )
                     for i in range(num_models)
                 ]
@@ -284,7 +284,7 @@ def train(
                     mu=1.0,  # weight of twin_z_losss over other losses
                 )
                 model = Twin(
-                    models=models,
+                    encoders=encoders,
                     config=model_config
                 )
             elif data_config_name in ["SEQ2SEQ", "MLM"]:

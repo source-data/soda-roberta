@@ -24,6 +24,7 @@ services:
     - ./.env
     ports:
       - 8888:8888  # this allows to run jupyter notebook --port=8888 --ip=0.0.0.0 --allow-root
+      - 8050:8050  # jupyter dash
     working_dir: /app
     command: ["jupyter", "notebook", "--port=8888", "--ip=0.0.0.0", "--allow-root"]
 

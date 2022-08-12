@@ -20,7 +20,8 @@ RUN pip install datasets==1.17.0
 RUN pip install seqeval==1.2.2
 RUN pip install celery==5.0.5
 RUN pip install flower==0.9.7
-RUN pip install spacy==2.3.5
+RUN pip install spacy==3.4
+RUN pip install spacy[transformers]
 RUN pip install lxml==4.6.2
 RUN pip install neo4j==4.1.1
 # download language models for spacy
@@ -33,7 +34,10 @@ RUN pip install notebook
 RUN pip install ipywidgets
 
 # optional for plotting
-RUN pip install plotly 
+RUN pip install plotly
+RUN pip install dash==2.5.0
+RUN pip install jupyter-dash
+RUN pip install pandas
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*1

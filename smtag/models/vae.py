@@ -779,24 +779,23 @@ class Twin(nn.Module):
 
     def __init__(
         self,
-        models: Union[LatentEncoder, List[LatentEncoder]],
+        encoders: Union[LatentEncoder, List[LatentEncoder]],
         config: TwinConfig
     ):
         super().__init__()
-        self.models = nn.ModuleList(models) if isinstance(models, list) else nn.ModuleList([models])
+        self.encoders = nn.ModuleList(encoders) if isinstance(encoders, list) else nn.ModuleList([encoders])
         self.config = config
-        self.z_dims = [m.z_dim for m in self.models]
+        self.z_dims = [m.z_dim for m in self.encoders]
         self.mu = self.config.mu
         self.lambd_a = self.config.lambd_a
 
     def forward(
         self,
         input_ids: List[torch.Tensor] = None,
-        labels: List[torch.Tensor] = None,
         attention_mask: List[torch.Tensor] = None,
         **kwargs
     ):
-        outputs = self.twin_prediction(input_ids, labels, attention_mask, **kwargs)
+        outputs = self.twin_prediction(input_ids, attention_mask, **kwargs)
 
         loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
 
@@ -818,25 +817,33 @@ class Twin(nn.Module):
             supp_data=supp_data
         )
 
-    def twin_prediction(
+    def twin_encoding(
         self,
         input_ids: List[torch.Tensor] = None,
-        labels: List[torch.Tensor] = None,
         attention_mask: List[torch.Tensor] = None,
         **kwargs
-    ) -> Union[List[LatentEncoderOutput], List[VAELMOutput]]:
+    ) -> LatentEncoderOutput:
 
         # note: there are no labels for encoder-only Twin models
-        if len(self.models) == 1:  # single model for all twin examples
+        if len(self.encoders) == 1:  # single model for all twin examples
             outputs = [
-                self.models[0](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+                self.encoders[0](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
         else:  # one model trained for each type fo twin example
             outputs = [
-                self.models[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+                self.encoders[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
                 for i in range(len(input_ids))
             ]
+        # return LatentEncoderOutput(
+        #     last_hidden_state=encoder_outputs.last_hidden_state,
+        #     hidden_states=encoder_outputs.hidden_states,
+        #     attentions=encoder_outputs.attentions,
+        #     loss=loss,
+        #     latent_variable=z,
+        #     representation=representation,
+        #     supp_data=supp_data,
+        # )
         return outputs
 
     def all_losses(self, outputs):
