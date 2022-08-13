@@ -8,10 +8,11 @@ from transformers import (
     BartConfig,
     BartForConditionalGeneration, BartPretrainedModel,
     BartModel,
+    PreTrainedModel,
 )
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
-    BartEncoder, BartDecoder,
+    BartEncoder, BartDecoder
 )
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -772,20 +773,78 @@ class VAEForLM(BartForConditionalGeneration):
         return input_ids, model_kwargs
 
 
-class Twin(nn.Module):
+class MyPreTrainedModel(PreTrainedModel):
+
+    """A bit of an unfortunate consequence of encoding twin examples as list
+    instead of using an additional dimension of a tensor is that the PreTrainedModel
+    class needs to be modified in the obscure method estimate_tokens() called by the 
+    equally obscure floating_point_ops(). Using PreTrainedModel as base class is useful
+    to be able to load model with from_pretrained().
+    """
+
+    def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
+        """
+        Helper function to estimate the total number of tokens from the model inputs.
+
+        Args:
+            inputs (`dict`): The model inputs.
+
+        Returns:
+            `int`: The total number of tokens.
+        """
+        if self.main_input_name in input_dict:
+            return input_dict[self.main_input_name][0].numel() + input_dict[self.main_input_name][1].numel()
+        else:
+            logger.warn(
+                "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
+            )
+            return 0
+
+    def floating_point_ops(
+        self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
+    ) -> int:
+        # For models that inherit from [`PreTrainedModel`], uses that method to compute the number of
+        #     floating point operations for every backward + forward pass. If using another model, either implement such a
+        #     method in the model or subclass and override this method.
+
+        """
+        Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
+        batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
+        tokens (valid if `12 * d_model << sequence_length`) as laid out in [this paper](https://arxiv.org/pdf/2001.08361.pdf) section 2.1. Should be overridden for transformers with parameter
+        re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
+
+        Args:
+            batch_size (`int`):
+                The batch size for the forward pass.
+
+            sequence_length (`int`):
+                The number of tokens in each line of the batch.
+
+            exclude_embeddings (`bool`, *optional*, defaults to `True`):
+                Whether or not to count embedding and softmax operations.
+
+        Returns:
+            `int`: The number of floating-point operations.
+        """
+
+        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
+
+
+class Twin(MyPreTrainedModel):
 
     def __init__(
         self,
         pretrained: BartModel,
         config: TwinConfig
     ):
-        super().__init__()
+        super().__init__(config)
         pretrained_encoder = pretrained.get_encoder()
         self.encoder = LatentEncoder(pretrained_encoder, config)
         self.config = config
         self.mu = self.config.mu
         self.lambd = self.config.lambd
 
+ 
     def forward(
         self,
         input_ids: List[torch.Tensor] = None,
