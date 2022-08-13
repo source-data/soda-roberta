@@ -285,6 +285,7 @@ class LatentEncoderOutput(BaseModelOutput):
     loss: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
+    hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
     # inherited
     # last_hidden_state: torch.FloatTensor = None
@@ -297,6 +298,7 @@ class VAEOutput(Seq2SeqModelOutput):
     loss: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
+    hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
@@ -306,6 +308,7 @@ class VAELMOutput(Seq2SeqLMOutput):
     logits: torch.Tensor = None
     latent_variable: torch.Tensor = None
     representation: torch.Tensor = None
+    hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
@@ -314,6 +317,7 @@ class TwinOutput(ModelOutput):
     loss: torch.Tensor = None
     last_hidden_state: List[torch.Tensor] = None
     representations: List[torch.Tensor] = None
+    hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
@@ -322,6 +326,7 @@ class TwinLMOutput(ModelOutput):
     loss: torch.Tensor = None
     logits: List[torch.Tensor] = None
     representations: List[torch.Tensor] = None
+    hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
 
 
@@ -430,7 +435,6 @@ class LatentEncoder(BartEncoder):
 
         supp_data = {
             "loss_z": loss,
-            "hidden_before_latent": hidden_before_latent,
         }
 
         return LatentEncoderOutput(
@@ -439,6 +443,7 @@ class LatentEncoder(BartEncoder):
             attentions=encoder_outputs.attentions,
             loss=loss,
             latent_variable=z,
+            hidden_before_latent=hidden_before_latent,
             representation=representation,
             supp_data=supp_data,
         )
@@ -625,6 +630,7 @@ class VAE(BartModel):
             loss=encoder_outputs.loss,
             latent_variable=encoder_outputs.latent_variable,
             representation=encoder_outputs.representation,
+            hidden_before_latent=encoder_outputs.hidden_before_latent,
             supp_data=encoder_outputs.supp_data,
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
@@ -733,6 +739,7 @@ class VAEForLM(BartForConditionalGeneration):
             logits=logits,
             latent_variable=outputs.latent_variable,
             representation=outputs.representation,
+            hidden_before_latent=outputs.hidden_before_latent,
             supp_data=supp_data,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
@@ -878,6 +885,7 @@ class Twin(MyPreTrainedModel):
             loss=loss,
             last_hidden_state=[out.last_hidden_state for out in outputs],
             representations=representations,
+            hidden_before_latent=[out.hidden_before_latent for out in outputs],
             supp_data=supp_data
         )
 
@@ -1059,6 +1067,7 @@ class GraphEncoder(BartEncoder):
         y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
         y = self.act_fct(y)
+        hidden_before_latent=y
         y = y.view(batch_size, (self.seq_length * self.hidden_features))
 
         # adj matrix
@@ -1102,6 +1111,7 @@ class GraphEncoder(BartEncoder):
             loss=loss,
             latent_variable=z,
             representation=representation,
+            hidden_before_latent=hidden_before_latent,
             supp_data=supp_data,
         )
 
