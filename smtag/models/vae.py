@@ -391,6 +391,7 @@ class LatentEncoder(BartEncoder):
         y = self.fc_compress(y)  # -> B x L x H (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
         y = self.act_fct(y)
+        hidden_before_latent = y  # for visualization
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 65_536)
         # latent var
         y = self.vae_dropout(y)
@@ -427,7 +428,10 @@ class LatentEncoder(BartEncoder):
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
-        supp_data = {"loss_z": loss}
+        supp_data = {
+            "loss_z": loss,
+            "hidden_before_latent": hidden_before_latent,
+        }
 
         return LatentEncoderOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -532,10 +536,10 @@ class VAE(BartModel):
 
     def __init__(
         self,
+        config: LatentConfig,
         pretrained_encoder: LatentEncoder,
         pretrained_decoder: LatentDecoder,
         pretrained_embedding: nn.Embedding,
-        config: LatentConfig,
     ):
         super().__init__(config)
         self.config = config
@@ -635,7 +639,12 @@ class VAE(BartModel):
 
 class VAEForLM(BartForConditionalGeneration):
 
-    def __init__(self, pretrained: BartForConditionalGeneration, config: VAEConfigLM, **kwargs):
+    def __init__(
+        self,
+        config: VAEConfigLM,
+        pretrained: BartForConditionalGeneration,
+        **kwargs
+    ):
         super().__init__(config)
         self.gamma = self.config.gamma
         self.model: VAE = self._build_model(pretrained, config)
@@ -832,10 +841,12 @@ class MyPreTrainedModel(PreTrainedModel):
 
 class Twin(MyPreTrainedModel):
 
+    config_class = TwinConfig
+
     def __init__(
         self,
-        pretrained: BartModel,
-        config: TwinConfig
+        config: TwinConfig,
+        pretrained: BartModel
     ):
         super().__init__(config)
         pretrained_encoder = pretrained.get_encoder()
@@ -844,7 +855,6 @@ class Twin(MyPreTrainedModel):
         self.mu = self.config.mu
         self.lambd = self.config.lambd
 
- 
     def forward(
         self,
         input_ids: List[torch.Tensor] = None,
@@ -891,8 +901,8 @@ class TwinLM(Twin):
 
     def __init__(
         self,
-        models: Union[VAEForLM, List[VAEForLM]],
-        config: TwinConfig
+        config: TwinConfig,
+        models: Union[VAEForLM, List[VAEForLM]]
     ):
         super().__init__(models, config)
 
@@ -983,8 +993,8 @@ class GraphEncoder(BartEncoder):
 
     def __init__(
         self,
-        pretrained,
-        config: GraphLatentConfig
+        config: GraphLatentConfig,
+        pretrained
     ):
         super().__init__(config)
         self.config = config

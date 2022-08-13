@@ -219,8 +219,8 @@ def train(
                 latent_var_loss="mmd"  # "kl" or "mmd" or "kl-mc" or None
             )
             model = VAEForLM(
-                pretrained=pretrained,
                 config=model_config
+                pretrained=pretrained,
             )
         else:
             raise ValueError("Training VAE from scratch is not implemented.")
@@ -248,8 +248,8 @@ def train(
                 latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
             )
             model = GraphVAEForLM(
-                pretrained=pretrained,
                 config=model_config
+                pretrained=pretrained,
             )
         else:
             raise ValueError("Training GVAE from scratch is not implemented.")
@@ -270,8 +270,8 @@ def train(
                     mu=1.0,  # weight of twin_z_losss over other losses
                 )
                 model = Twin(
+                    config=model_config,
                     pretrained=pretrained,
-                    config=model_config
                 )
             # elif data_config_name in ["SEQ2SEQ", "MLM"]:
             #     vae_configs = [
