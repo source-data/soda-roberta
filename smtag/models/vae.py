@@ -8,6 +8,7 @@ from transformers import (
     BartConfig,
     BartForConditionalGeneration, BartPretrainedModel,
     BartModel,
+    PreTrainedModel,
 )
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
@@ -393,7 +394,7 @@ class LatentEncoder(BartEncoder):
         y = y.view(batch_size, (self.seq_length * self.hidden_features))  # B x (L * H)  (example: 32 * 65_536)
         # latent var
         y = self.vae_dropout(y)
-        if self.latent_var_loss == "mmd" or self.latent_var_loss is None:
+        if self.latent_var_loss == "mmd":
             z = self.fc_z_1(y)  # -> B x Z  (example: 32 example x 128 dimensional latent var)
             z = self.norm_z(z)
             loss = compute_mmd_loss(z, self.sampling_iterations)
@@ -772,7 +773,7 @@ class VAEForLM(BartForConditionalGeneration):
         return input_ids, model_kwargs
 
 
-class Twin(nn.Module):
+class Twin(PreTrainedModel):
 
     def __init__(
         self,
@@ -813,7 +814,7 @@ class Twin(nn.Module):
         )
 
     def all_losses(self, outputs):
-        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.latent_variable for out in outputs])
+        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.representation for out in outputs])
         losses = torch.stack([out.loss for out in outputs])
         losses = losses.sum()
         loss_twin_z = self.mu * (loss_diag + self.lambd * loss_off_diag)
