@@ -253,6 +253,13 @@ class TwinConfig(LatentConfig):
         self.mu = mu  # weight twin z loss vs the other losses
 
 
+class TwinLMConfig(TwinConfig):
+
+    def __init__(self, gamma: float = None, **kwargs):
+        super().__init__(**kwargs)
+        self.gamma = gamma
+
+
 class GraphVAEConfigLM(VAEConfigLM):
     def __init__(
         self,
@@ -313,12 +320,16 @@ class VAELMOutput(Seq2SeqLMOutput):
 
 
 @dataclass
-class TwinOutput(ModelOutput):
+class TwinOutput(LatentEncoderOutput):
     loss: torch.Tensor = None
     last_hidden_state: List[torch.Tensor] = None
     representations: List[torch.Tensor] = None
-    hidden_before_latent: torch.Tensor = None
+    hidden_before_latent: List[torch.Tensor] = None
+    latent_variable: List[torch.Tensor] = None
     supp_data: Dict[str, torch.Tensor] = None
+    last_hidden_state: List[torch.FloatTensor] = None
+    # hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -528,6 +539,7 @@ class LatentDecoder(BartDecoder):
         )
 
         return decoder_outputs
+        # BaseModelOutputWithPastAndCrossAttentions
         # return LatentDecoderOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
         #     past_key_values=decoder_outputs.past_key_values,
@@ -873,7 +885,6 @@ class Twin(MyPreTrainedModel):
             for i in range(len(input_ids))
         ]
         loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
-        representations = [out.representation for out in outputs]  # List[B X Z]
         supp_data = {
                 "loss_diag": loss_diag,
                 "loss_off_diag": loss_off_diag,
@@ -884,8 +895,9 @@ class Twin(MyPreTrainedModel):
         return TwinOutput(
             loss=loss,
             last_hidden_state=[out.last_hidden_state for out in outputs],
-            representations=representations,
+            representations=[out.representation for out in outputs],
             hidden_before_latent=[out.hidden_before_latent for out in outputs],
+            latent_variable=[out.latent_variable for out in outputs],
             supp_data=supp_data
         )
 
@@ -910,63 +922,99 @@ class TwinLM(Twin):
     def __init__(
         self,
         config: TwinConfig,
-        models: Union[VAEForLM, List[VAEForLM]]
+        pretrained: BartModel
     ):
-        super().__init__(models, config)
+        super().__init__(config, pretrained)
+        pretrained_decoder = pretrained.get_decoder()
+        self.decoder = LatentDecoder(pretrained_decoder, config)
+        self.lm_head = pretrained.lm_head
+        self.embedding = pretrained.get_input_embeddings()
+        self.gamma = config.gamma
 
     def forward(
         self,
-        input_ids: List[torch.Tensor] = None,
-        labels: List[torch.Tensor] = None,
-        attention_mask: List[torch.Tensor] = None,
-        **kwargs
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
-        outputs = self.twin_prediction(input_ids, labels, attention_mask, **kwargs)
 
-        loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = [
+                    shift_tokens_right(
+                        lbl, self.config.pad_token_id, self.config.decoder_start_token_id
+                    )
+                    for lbl in labels
+                ]
 
-        representations = [out.representation for out in outputs]  # List[B X Z]
+        encoder_outputs: TwinOutput = super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict
+        )
+        decoder_outputs = [
+            self.decoder(
+                input_ids=decoder_input_ids[i],
+                encoder_hidden_states=encoder_outputs.last_hidden_state[i],  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                latent_variable=encoder_outputs.latent_variable[i],
+                # attention_mask=decoder_attention_mask[i],
+                # encoder_attention_mask=attention_mask[i],
+                # head_mask=decoder_head_mask[i],
+                # cross_attn_head_mask=cross_attn_head_mask[i],
+                # past_key_values=past_key_values[i],
+                # inputs_embeds=decoder_inputs_embeds[i],
+                # use_cache=use_cache,
+                # output_attentions=output_attentions,
+                # output_hidden_states=output_hidden_states,
+                # return_dict=return_dict,
+            )
+            for i in range(len(input_ids))
+        ]
 
-        supp_data = {
-                "loss_diag": loss_diag,
-                "loss_off_diag": loss_off_diag,
-                "loss_twin_z": loss_twin_z,
-                "img_correl": cross_correl.unsqueeze(0),
-                # "embeddings": torch.cat(representations, 0)  # not so easy...since trainer averages across GPUs
-            }
+        # trainable language model head
+        logits = [
+            self.lm_head(out.last_hidden_state)
+            for out in decoder_outputs
+        ]
+        supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
 
-        supp_data = self.update_supp_data(supp_data, outputs)
-
-        # the only difference with parent class: get logits from language model head
-        logits = [out.logits for out in outputs]
+        # calculate composite loss
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss_lm = self.gamma * sum([
+                loss_fct(logits[i].view(-1, self.decoder.config.vocab_size), labels[i].view(-1))
+                for i in range(len(input_ids))
+            ])
+            loss_z = encoder_outputs.loss  # loss on latent var
+            loss = loss_lm + loss_z  # combine with language modelling loss
+            supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+        else:
+            loss = None
+            supp_data['loss_lm'] = loss_lm = None
 
         return TwinLMOutput(
             loss=loss,
             logits=logits,
-            representations=representations,
+            representations=encoder_outputs.representations,
             supp_data=supp_data
         )
-
-    def twin_prediction(
-        self,
-        input_ids: List[torch.Tensor] = None,
-        labels: List[torch.Tensor] = None,
-        attention_mask: List[torch.Tensor] = None,
-        **kwargs
-    ) -> Union[List[LatentEncoderOutput], List[VAELMOutput]]:
-
-        # note: labels are required for language model Twin models
-        if len(self.models) == 1:  # single model for all twin examples
-            outputs = [
-                self.models[0](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
-                for i in range(len(input_ids))
-            ]
-        else:  # one model trained for each type fo twin example
-            outputs = [
-                self.models[i](input_ids=input_ids[i], labels=labels[i], attention_mask=attention_mask[i], **kwargs)
-                for i in range(len(input_ids))
-            ]
-        return outputs
 
 
 class MLP(nn.Module):
