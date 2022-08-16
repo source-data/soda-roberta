@@ -1,3 +1,4 @@
+import pdb
 from random import randrange, sample
 from typing import Dict
 
@@ -57,8 +58,8 @@ class ShowExample(TrainerCallback):
         self.to_console(inputs, pred_idx)
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
-        L = len(dataloader.dataset)
         dataset = dataloader.dataset
+        L = len(dataset)
         rand_example_idx = randrange(L)
         batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
         inputs = {}
@@ -174,17 +175,16 @@ class ShowExampleTwinLM(ShowExampleLM):
                 self.to_console(inputs_i, pred_idx)
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
-        batch = next(iter(dataloader))
-        # batch[_][_] is a list of twin example
-        rand_example_idx = randrange(batch['input_ids'][0].size(0))
+        dataset = dataloader.dataset
+        L = len(dataset)
+        rand_example_idx = randrange(L)
+        batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
         inputs = {}
-        for k, v in batch.items():
-            inputs[k] = []
-            for twin in batch[k]:
-                ex = twin[rand_example_idx].clone().unsqueeze(0)
-                if torch.cuda.is_available():
-                    ex = ex.cuda()
-                inputs[k].append(ex)
+        for k in batch:
+            inputs[k] = [
+                twin.cuda() if torch.cuda.is_available() else twin
+                for twin in batch[k]
+            ]
         return inputs
 
 
