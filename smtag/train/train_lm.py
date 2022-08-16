@@ -278,13 +278,13 @@ def train(
                     **pretrained_config_dict,
                     freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                     hidden_features=256,
-                    z_dim=1024,  # 96,
+                    z_dim=256,  # 96,
                     sampling_iterations=200,
                     seq_length=config.max_length[0],
                     latent_var_loss=None,  # "kl" or "mmd" or None
                     lambd=1.0,  # weight off-diagonal vs diagonal
                     mu=1.0,  # weight of twin_z_losss over other losses
-                    gamma=1.0,
+                    gamma=0.1,  # weight of language model lost over z losses
                     residuals=data_config_name in ["MLM"],
                 )
                 model = TwinLM(

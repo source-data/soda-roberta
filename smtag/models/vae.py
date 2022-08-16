@@ -869,7 +869,11 @@ class Twin(MyPreTrainedModel):
     ):
         super().__init__(config)
         pretrained_encoder = pretrained.get_encoder()
-        self.encoder = LatentEncoder(pretrained_encoder, config)
+        # shared pretrained encoder
+        self.encoders = nn.ModuleList([
+            LatentEncoder(pretrained_encoder, config),
+            LatentEncoder(pretrained_encoder, config),
+        ])
         self.config = config
         self.mu = self.config.mu
         self.lambd = self.config.lambd
@@ -881,7 +885,7 @@ class Twin(MyPreTrainedModel):
         **kwargs
     ):
         outputs: List[LatentEncoderOutput] = [
-            self.encoder(input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
+            self.encoders[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
             for i in range(len(input_ids))
         ]
         loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
@@ -926,7 +930,11 @@ class TwinLM(Twin):
     ):
         super().__init__(config, pretrained)
         pretrained_decoder = pretrained.get_decoder()
-        self.decoder = LatentDecoder(pretrained_decoder, config)
+        # two LatentDecoders with the shared pretrained_decoder; only the decompression is independent
+        self.decoders = nn.ModuleList([
+            LatentDecoder(pretrained_decoder, config),
+            LatentDecoder(pretrained_decoder, config),
+        ])
         self.lm_head = pretrained.lm_head
         self.embedding = pretrained.get_input_embeddings()
         self.gamma = config.gamma
@@ -970,7 +978,7 @@ class TwinLM(Twin):
             return_dict=return_dict
         )
         decoder_outputs = [
-            self.decoder(
+           decoder(
                 input_ids=decoder_input_ids[i],
                 encoder_hidden_states=encoder_outputs.last_hidden_state[i],  # in BartModel encoder_hidden_states=encoder_outputs[0]
                 latent_variable=encoder_outputs.latent_variable[i],
@@ -984,8 +992,7 @@ class TwinLM(Twin):
                 # output_attentions=output_attentions,
                 # output_hidden_states=output_hidden_states,
                 # return_dict=return_dict,
-            )
-            for i in range(len(input_ids))
+            ) for i, decoder in enumerate(self.decoders)
         ]
 
         # trainable language model head
@@ -999,7 +1006,7 @@ class TwinLM(Twin):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             loss_lm = self.gamma * sum([
-                loss_fct(logits[i].view(-1, self.decoder.config.vocab_size), labels[i].view(-1))
+                loss_fct(logits[i].view(-1, self.decoders[i].config.vocab_size), labels[i].view(-1))
                 for i in range(len(input_ids))
             ])
             loss_z = encoder_outputs.loss  # loss on latent var
