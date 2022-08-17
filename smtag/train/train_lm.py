@@ -30,7 +30,7 @@ from transformers.integrations import TensorBoardCallback
 from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    LatentEncoder, VAEForLM, Twin, TwinLM, GraphVAEForLM,
+    LatentEncoder, VAEForLM, Twin, TwinSEQ2SEQ, GraphVAEForLM,
     LatentConfig, VAEConfigLM, TwinConfig, TwinLMConfig, GraphVAEConfigLM,
 )
 from ..data_collator import (
@@ -125,7 +125,7 @@ def train(
                 mlm=True,
                 pad_to_multiple_of=config.max_length
             )
-        # elif config.model_type in ["Twin"]:
+        # elif config.model_type in ["Twin"]:  # for now Twin is encoder-decoer SEQ2SEQ, so MLM does not make much sense
         #     data_collator = MyDataCollatorForTwinLanguageModeling(
         #         tokenizer=tokenizer,
         #         mlm=True,
@@ -216,7 +216,7 @@ def train(
                 sampling_iterations=200,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
-                latent_var_loss="mmd"  # "kl" or "mmd" or "kl-mc" or None
+                latent_var_loss=None  # "kl" or "mmd" or "kl-mc" or None
             )
             model = VAEForLM(
                 config=model_config,
@@ -273,7 +273,7 @@ def train(
                     config=model_config,
                     pretrained=pretrained
                 )
-            elif data_config_name in ["SEQ2SEQ", "MLM"]:
+            elif data_config_name in ["SEQ2SEQ"]:
                 model_config = TwinLMConfig(
                     **pretrained_config_dict,
                     freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
@@ -285,9 +285,9 @@ def train(
                     lambd=1.0,  # weight off-diagonal vs diagonal
                     mu=1.0,  # weight of twin_z_losss over other losses
                     gamma=0.1,  # weight of language model lost over z losses
-                    residuals=data_config_name in ["MLM"],
+                    residuals=False,  # data_config_name in ["MLM"],
                 )
-                model = TwinLM(
+                model = TwinSEQ2SEQ(
                     config=model_config,
                     pretrained=pretrained
                 )

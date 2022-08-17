@@ -257,11 +257,9 @@ class MyDataCollatorForSeq2Seq(DataCollatorMixin):
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
 
-    def __call__(self, features, return_tensors=None):
+    def torch_call(self, features):
         import numpy as np
 
-        if return_tensors is None:
-            return_tensors = self.return_tensors
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
@@ -294,7 +292,7 @@ class MyDataCollatorForSeq2Seq(DataCollatorMixin):
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors=return_tensors,
+            return_tensors="pt",
         )
 
         # prepare decoder_input_ids
@@ -314,7 +312,7 @@ class MyDataCollatorForTwinSeq2Seq(MyDataCollatorForSeq2Seq):
 
     max_length_list: List[int] = None # each twin example has its max length!
 
-    def __call__(self, features, return_tensors=None):
+    def torch_call(self, features):
         num_twins = len(features[0]["input_ids"])
         appended_features = []
         for twin_idx in range(num_twins):
@@ -326,7 +324,7 @@ class MyDataCollatorForTwinSeq2Seq(MyDataCollatorForSeq2Seq):
                 for feature in features
             ]
             self.pad_to_multiple_of = self.max_length_list[twin_idx]
-            appended_features.append(super().__call__(features_this_twin, return_tensors))
+            appended_features.append(super().torch_call(features_this_twin))
         # from list of dict to dict of list
         new_features = {k: [] for k in appended_features[0].keys()}
         for f in appended_features:
@@ -344,7 +342,7 @@ class MyDataCollatorForTwinLanguageModeling(DataCollatorForLanguageModeling):
 
     max_length_list: List[int] = None # each twin example has its max length!
 
-    def __call__(self, features, return_tensors=None):
+    def torch_call(self, features):
         num_twins = len(features[0]["input_ids"])
         appended_features = []
         for twin_idx in range(num_twins):
@@ -356,7 +354,7 @@ class MyDataCollatorForTwinLanguageModeling(DataCollatorForLanguageModeling):
                 for feature in features
             ]
             self.pad_to_multiple_of = self.max_length_list[twin_idx]
-            appended_features.append(super().__call__(features_this_twin, return_tensors))
+            appended_features.append(super().torch_call(features_this_twin))
         # from list of dict to dict of list
         new_features = {k: [] for k in appended_features[0].keys()}
         for f in appended_features:

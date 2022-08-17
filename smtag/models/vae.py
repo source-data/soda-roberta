@@ -356,7 +356,7 @@ class LatentEncoder(BartEncoder):
         if self.freeze_pretrained in ['both', 'encoder']:
             for param in self.model.parameters():
                 param.requires_grad_(False)
-        elif self.freeze_pretrained is None or self.freeze_pretrained == '':
+        elif self.freeze_pretrained is None or self.freeze_pretrained in ['', 'decoder']:
             pass
         else:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
@@ -475,7 +475,7 @@ class LatentDecoder(BartDecoder):
         if self.freeze_pretrained in ['both', 'decoder']:
             for param in self.model.parameters():
                 param.requires_grad_(False)
-        elif self.freeze_pretrained is None or self.freeze_pretrained == '':
+        elif self.freeze_pretrained is None or self.freeze_pretrained in ['', 'encoder']:
             pass
         else:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
@@ -674,10 +674,10 @@ class VAEForLM(BartForConditionalGeneration):
         pretrained_decoder = pretrained.get_decoder()
         pretrained_embedding = pretrained.get_input_embeddings()
         return VAE(
+            config,
             LatentEncoder(pretrained_encoder, config),
             LatentDecoder(pretrained_decoder, config),
-            pretrained_embedding,
-            config
+            pretrained_embedding
         )
 
     def forward(
@@ -921,11 +921,11 @@ class Twin(MyPreTrainedModel):
         return supp_data
 
 
-class TwinLM(Twin):
+class TwinSEQ2SEQ(Twin):
 
     def __init__(
         self,
-        config: TwinConfig,
+        config: TwinLMConfig,
         pretrained: BartModel
     ):
         super().__init__(config, pretrained)
@@ -1056,8 +1056,8 @@ class GraphEncoder(BartEncoder):
 
     def __init__(
         self,
-        config: GraphLatentConfig,
-        pretrained
+        pretrained,
+        config: GraphLatentConfig
     ):
         super().__init__(config)
         self.config = config
@@ -1087,7 +1087,7 @@ class GraphEncoder(BartEncoder):
         # latent vars
         self.hidden_features = self.config.hidden_features
         self.sampling_iterations = self.config.sampling_iterations
-        self.latent_var_loss = self.config.latent_var_loss.split('-') if  self.config.latent_var_loss is not None else None
+        self.latent_var_loss = self.config.latent_var_loss.split('-') if self.config.latent_var_loss is not None else None
         self.z_dim = self.config.z_dim
         assert self.z_dim == (self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2), f"{self.z_dim} <> {(self.num_nodes * self.num_entity_features) + (self.num_nodes ** 2)}"
         self.alpha = self.config.alpha
@@ -1122,7 +1122,7 @@ class GraphEncoder(BartEncoder):
         y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
         y = self.norm_compress(y)
         y = self.act_fct(y)
-        hidden_before_latent=y
+        hidden_before_latent = y
         y = y.view(batch_size, (self.seq_length * self.hidden_features))
 
         # adj matrix
@@ -1148,9 +1148,9 @@ class GraphEncoder(BartEncoder):
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities, self.latent_var_loss)
         elif self.latent_var_loss is None:
             loss = torch.tensor(0)
-            supp_data = {"loss_z": loss}
             if torch.cuda.is_available():
                 loss = loss.cuda()
+            supp_data = {"loss_z": loss}
         else:
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
@@ -1235,7 +1235,7 @@ class GraphEncoder(BartEncoder):
             mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
             trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
             L_dag = trace - d
-            losses['DAG'] =  L_dag.mean()
+            losses['DAG'] = L_dag.mean()
 
             # Zheng et al 2018 DAG with NOTEARS
             # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
@@ -1260,8 +1260,13 @@ class GraphEncoder(BartEncoder):
 
 class GraphVAEForLM(VAEForLM):
 
-    def __init__(self, pretrained: BartForConditionalGeneration, config: GraphVAEConfigLM, **kwargs):
-        super().__init__(pretrained, config, **kwargs)
+    def __init__(
+        self,
+        config: GraphVAEConfigLM,
+        pretrained: BartForConditionalGeneration,
+        **kwargs
+    ):
+        super().__init__(config, pretrained,  **kwargs)
 
     @staticmethod
     def _build_model(pretrained, config):
@@ -1269,8 +1274,8 @@ class GraphVAEForLM(VAEForLM):
         pretrained_decoder = pretrained.get_decoder()
         pretrained_embedding = pretrained.get_input_embeddings()
         return VAE(
+            config,
             GraphEncoder(pretrained_encoder, config),
             LatentDecoder(pretrained_decoder, config),
-            pretrained_embedding,
-            config
+            pretrained_embedding
         )

@@ -68,18 +68,20 @@ class ShowExample(TrainerCallback):
         return inputs
 
     def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
-        pred_idx = [e.item() for e in pred_idx]
-        input_ids = [e.item() for e in inputs["input_ids"]]
-        labels = [e.item() for e in inputs["labels"]]
+        pred_idx = pred_idx.tolist()
+        input_ids = inputs["input_ids"].tolist()
+        labels = inputs["labels"].tolist()
+        attention_mask = inputs["attention_mask"].tolist()
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
             label_idx = pred_idx[i]
             true_label = labels[i]
-            colored += self._correct_incorrect(input_id, label_idx, true_label)
+            attn_mask = attention_mask[i]
+            colored += self._correct_incorrect(input_id, label_idx, true_label, attn_mask)
         print(f"\n\n{colored}\n\n")
 
-    def _correct_incorrect(self, input_id: int, label_idx: int, true_label: int) -> str:
+    def _correct_incorrect(self, input_id: int, label_idx: int, true_label: int, attention_mask: int) -> str:
         raise NotImplementedError
 
 
@@ -102,7 +104,7 @@ class ShowExampleLM(ShowExample):
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
-    def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask=None) -> str:
+    def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask) -> str:
         colored = ""
         is_prediction = true_label != -100
         if is_prediction:
@@ -138,9 +140,10 @@ class ShowExampleTextGeneration(ShowExampleLM):
         self.to_console(inputs, pred_idx)
 
     def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
-        pred_idx = [e.item() for e in pred_idx]
-        input_ids = [e.item() for e in inputs["input_ids"]]
-        labels = [e.item() for e in inputs["labels"]]
+        pred_idx = pred_idx.tolist()
+        input_ids = inputs["input_ids"].tolist()
+        labels = inputs["labels"].tolist()
+        attention_mask = inputs["attention_mask"].tolist()
         colored = ""
         input_str = self.tokenizer.decode(input_ids, skip_special_tokens=True)
         generated_str = self.tokenizer.decode(pred_idx, skip_special_tokens=True)
@@ -154,7 +157,8 @@ class ShowExampleTextGeneration(ShowExampleLM):
         for i in range(min(len(labels), len(pred_idx))):
             label_idx = pred_idx[i]
             true_label = labels[i]
-            colored += self._correct_incorrect(None, label_idx, true_label)
+            attn_mask = attention_mask[i]
+            colored += self._correct_incorrect(None, label_idx, true_label, attn_mask)
         print(f"\n\n{colored}\n\n")
 
 
@@ -200,7 +204,7 @@ class ShowExampleTOKCL(ShowExample):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _correct_incorrect(self, input_id, label_idx, true_label, **kwargs) -> str:
+    def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask=None) -> str:
         colored = ""
         if input_id != self.tokenizer.pad_token_id:  # don't display padding
             decoded = self.tokenizer.decode(input_id)
