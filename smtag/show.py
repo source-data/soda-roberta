@@ -192,6 +192,23 @@ class ShowExampleTwinLM(ShowExampleLM):
         return inputs
 
 
+class ShowExampleCGraphVAEForLM(ShowExampleLM):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
+        with torch.no_grad():
+            inputs = self.pick_random_example(eval_dataloader)
+            pred = model(**inputs)
+            # pred.logits is an array with predictions for twin examples
+            for i, pred_logits in enumerate(pred['logits']):
+                pred_idx = pred_logits.argmax(-1)[0].cpu()
+                # extract input from specific twin example
+                inputs_i = {k: v[i][0] for k, v in inputs.items()}
+                self.to_console(inputs_i, pred_idx)
+
+
 class ShowExampleTOKCL(ShowExample):
 
     COLOR_CHAR = {

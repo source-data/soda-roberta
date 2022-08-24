@@ -30,7 +30,7 @@ from transformers.integrations import TensorBoardCallback
 from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    LatentEncoder, VAEForLM, Twin, TwinSEQ2SEQ, GraphVAEForLM,
+    LatentEncoder, VAEForLM, Twin, TwinSEQ2SEQ, GraphVAEForLM, CGraphVAEForLM,
     LatentConfig, VAEConfigLM, TwinConfig, TwinLMConfig, GraphVAEConfigLM,
 )
 from ..data_collator import (
@@ -42,7 +42,8 @@ from ..data_collator import (
 
 from ..trainer import MyTrainer
 from ..show import (
-    ShowExampleLM, ShowExampleTwinLM, ShowExampleTextGeneration,
+    ShowExampleCGraphVAEForLM, ShowExampleLM, ShowExampleTwinLM,
+    ShowExampleTextGeneration, ShowExampleCGraphVAEForLM
 )
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -145,7 +146,7 @@ def train(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
             )
-        elif model_type in ["VAE", "GVAE", "Generator"]:  # for debuging, maybe not necessary
+        elif model_type in ["VAE", "GVAE", "CGVAE", "Generator"]:  # for debuging, maybe not necessary
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
@@ -157,7 +158,7 @@ def train(
                 max_length=sum(config.max_length),
                 pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
             )
-        elif model_type in ["Autoencoder", "VAE", "GVAE", "Generator"]:
+        elif model_type in ["Autoencoder", "VAE", "GVAE", "CGVAE", "Generator"]:
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length[0]
@@ -253,6 +254,35 @@ def train(
             )
         else:
             raise ValueError("Training GVAE from scratch is not implemented.")
+    elif model_type == "CGVAE":
+        if config.from_pretrained:
+            pretrained = BartForConditionalGeneration.from_pretrained(from_pretrained)
+            # convert BartConfig into dict so that we have all its fields as mapping
+            pretrained_config_dict = pretrained.config.to_dict()
+            model_config = GraphVAEConfigLM(
+                **pretrained_config_dict,  # initialize with all values from pretrained.config before updating
+                freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
+                hidden_features=768,
+                # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
+                mlp_num_layers=3,
+                alpha=1.0,
+                beta=1.0,
+                gamma=1.0,  # weight of lm loss as compared to z_loss
+                sampling_iterations=20,
+                num_nodes=4,
+                num_entity_features=64,
+                sample_num_interactions=5,
+                seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
+                residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
+                latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
+            )
+            model = GraphVAEForLM(
+                config=model_config,
+                pretrained=pretrained
+            )
+        else:
+            raise ValueError("Training CGVAE from scratch is not implemented.")
     elif model_type == "Twin":
         if config.from_pretrained:
             pretrained = AutoModelForSeq2SeqLM.from_pretrained(from_pretrained)
@@ -300,7 +330,13 @@ def train(
     print(training_args)
     if model_type in ["Twin"]:
         show_callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name in ["SEQ2SEQ", "MLM"] else None
-        trainer = MyTrainer(
+    elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
+        show_callbacks = [ShowExampleTextGeneration(tokenizer)]
+    elif model_type in ["CGVAE"]:
+        show_callbacks = [ShowExampleCGraphVAEForLM(tokenizer)]
+    else:
+        show_callbacks = [ShowExampleLM(tokenizer)]
+    trainer = MyTrainer(
             model=model,
             args=training_args,
             data_collator=data_collator,
@@ -308,26 +344,6 @@ def train(
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
             callbacks=show_callbacks
-        )
-    elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
-        trainer = MyTrainer(
-            model=model,
-            args=training_args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleTextGeneration(tokenizer)]
-        )
-    else:
-        trainer = MyTrainer(
-            model=model,
-            args=training_args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleLM(tokenizer)],
         )
 
     # switch the Tensorboard callback to plot losses on same plot

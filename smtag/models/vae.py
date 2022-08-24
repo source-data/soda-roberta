@@ -1279,3 +1279,136 @@ class GraphVAEForLM(VAEForLM):
             LatentDecoder(pretrained_decoder, config),
             pretrained_embedding
         )
+
+
+# encoder_outputs.latent_variable results from
+        # z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
+        # z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        # z = torch.cat([z_graph, z_entities], -1)
+
+
+def reverse(t: torch.Tensor) -> torch.Tensor:
+    return t.flip(1)  # right to left
+
+
+class CGraphVAEForLM(VAEForLM):
+
+    def transpose_adj_matrix(self, adj, entities) -> torch.Tensor:
+        adj_t = adj.transpose(-1, -2)  # inverse 'causality'
+        z_graph, z_entities = self.to_permutation_independent_set(adj_t, entities)
+        z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
+        z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        z = torch.cat([z_graph, z_entities], -1)
+        return z
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
+        # skip encoder if text generation has already produced encoder outputs from context/query input
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        decoder_outputs = []
+
+        decoder_outputs[0] = self.decoder(
+            input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+            latent_variable=encoder_outputs.latent_variable,
+            attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        adjascency_matrix = encoder_outputs.representation[0]
+
+        decoder_outputs[1] = self.decoder(
+            input_ids=reverse(decoder_input_ids),
+            encoder_hidden_states=reverse(encoder_outputs.last_hidden_state),  # in BartModel encoder_hidden_states=encoder_outputs[0]
+            latent_variable=self.transpose_adj_matrix(adjascency_matrix),
+            attention_mask=reverse(decoder_attention_mask),
+            encoder_attention_mask=reverse(attention_mask),
+            head_mask=reverse(decoder_head_mask),
+            cross_attn_head_mask=reverse(cross_attn_head_mask),
+            past_key_values=reverse(past_key_values),
+            inputs_embeds=reverse(decoder_inputs_embeds),
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        # trainable language model head
+        logits = [
+            self.lm_head(out.last_hidden_state)
+            for out in decoder_outputs
+        ]
+        supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
+
+        # calculate composite loss
+
+        both_directions = [labels, reverse(labels)]
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss_lm = self.gamma * sum([
+                loss_fct(logits[i].view(-1, self.decoder.config.vocab_size), both_directions[i].view(-1))
+                for i in 2
+            ])
+            loss_z = encoder_outputs.loss  # loss on latent var
+            loss = loss_lm + loss_z  # combine with language modelling loss
+            supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+        else:
+            loss = None
+            supp_data['loss_lm'] = loss_lm = None
+
+        return TwinLMOutput(
+            loss=loss,
+            logits=logits,
+            representations=encoder_outputs.representations,
+            supp_data=supp_data
+        )
