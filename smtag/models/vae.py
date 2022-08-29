@@ -1,6 +1,7 @@
+import pdb
 from dataclasses import dataclass
 from itertools import permutations, product
-from random import sample, gauss
+from random import sample, gauss, random
 from typing import List, Dict, Tuple, Union, Any
 import torch
 from torch import nn
@@ -150,6 +151,9 @@ def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
     #     c = c.cuda()
     return loss_diag, loss_off_diag, c
 
+def flip(t: torch.Tensor) -> torch.Tensor:
+    return t.flip(1) if t is not None else None
+
 
 class LatentConfig(BartConfig):
     # inherited from BartConfig:
@@ -212,6 +216,8 @@ class GraphLatentConfig(LatentConfig):
         sample_num_entities: int = 5,
         alpha: float = 1.0,
         beta: float = 1.0,
+        flip_proba: float = 0,
+        flipped: torch.Tensor = torch.tensor(False),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -223,6 +229,8 @@ class GraphLatentConfig(LatentConfig):
         self.z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)  # concat vectorized adj matrix and entity embeddings, overrides z_dim
         self.alpha = alpha
         self.beta = beta
+        self.flip_proba = flip_proba
+        self.flipped = flipped
 
 
 class VAEConfig(LatentConfig):
@@ -299,6 +307,9 @@ class LatentEncoderOutput(BaseModelOutput):
     # hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+@dataclass
+class LatentCGraphEncoderOutput(LatentEncoderOutput):
+    flipped: torch.Tensor = None
 
 @dataclass
 class VAEOutput(Seq2SeqModelOutput):
@@ -317,6 +328,11 @@ class VAELMOutput(Seq2SeqLMOutput):
     representation: torch.Tensor = None
     hidden_before_latent: torch.Tensor = None
     supp_data: Dict[str, torch.Tensor] = None
+
+
+@dataclass
+class CGVAELMOutput(VAELMOutput):
+    flipped: bool = None
 
 
 @dataclass
@@ -1063,6 +1079,7 @@ class GraphEncoder(BartEncoder):
         self.config = config
         self.num_nodes = self.config.num_nodes
         self.num_entity_features = self.config.num_entity_features
+        self.flip_proba = config.flip_proba
 
         self.freeze_pretrained = self.config.freeze_pretrained
         self.model = pretrained
@@ -1131,6 +1148,17 @@ class GraphEncoder(BartEncoder):
         adj = self.norm_adj(adj)
         adj = self.act_fct(adj)
         adj = adj.view(-1, self.num_nodes, self.num_nodes)
+
+        flipped = False
+        if self.flip_proba > 0:
+            p = random()
+            if p <= self.flip_proba:
+                adj = adj.transpose(-1, -2)  # inverse 'causality'
+                x = flip(x)  # -> B x L x H_enc
+                encoder_outputs.hidden_states = flip(encoder_outputs.hidden_states)
+                encoder_outputs.attentions = flip(encoder_outputs.attentions)
+                flipped = True
+
         adj_matrix_representation = adj
 
         # entities
@@ -1159,8 +1187,8 @@ class GraphEncoder(BartEncoder):
         z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
         z = torch.cat([z_graph, z_entities], -1)
 
-        return LatentEncoderOutput(
-            last_hidden_state=encoder_outputs.last_hidden_state,
+        return LatentCGraphEncoderOutput(
+            last_hidden_state=x,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             loss=loss,
@@ -1168,6 +1196,7 @@ class GraphEncoder(BartEncoder):
             representation=representation,
             hidden_before_latent=hidden_before_latent,
             supp_data=supp_data,
+            flipped=torch.tensor(flipped).cuda() if torch.cuda.is_available() else torch.tensor(flipped)
         )
 
     def to_permutation_independent_set(self, adj, entities, with_grad: bool = True):
@@ -1281,23 +1310,30 @@ class GraphVAEForLM(VAEForLM):
         )
 
 
-# encoder_outputs.latent_variable results from
-        # z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
-        # z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
-        # z = torch.cat([z_graph, z_entities], -1)
+class CGraphVAEForLM(BartForConditionalGeneration):
 
+    def __init__(
 
-def reverse(t: torch.Tensor) -> torch.Tensor:
-    return t.flip(1)  # right to left
-
-
-class CGraphVAEForLM(VAEForLM):
+        self,
+        config: VAEConfigLM,
+        pretrained: BartForConditionalGeneration,
+        **kwargs
+    ):
+        super().__init__(config)
+        self.gamma = self.config.gamma
+        pretrained_encoder = pretrained.get_encoder()
+        pretrained_decoder = pretrained.get_decoder()
+        self.encoder = GraphEncoder(pretrained_encoder, config)
+        self.decoder = LatentDecoder(pretrained_decoder, config)
+        self.lm_head = pretrained.lm_head
+        self.shared = pretrained.get_input_embeddings()
+        self.z_dim = self.config.z_dim
 
     def transpose_adj_matrix(self, adj, entities) -> torch.Tensor:
         adj_t = adj.transpose(-1, -2)  # inverse 'causality'
-        z_graph, z_entities = self.to_permutation_independent_set(adj_t, entities)
-        z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
-        z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        z_graph, z_entities = self.encoder.to_permutation_independent_set(adj_t, entities)
+        z_graph = z_graph.view(-1, self.encoder.num_nodes * self.encoder.num_nodes)
+        z_entities = z_entities.view(-1, self.encoder.num_entity_features * self.encoder.num_nodes)
         z = torch.cat([z_graph, z_entities], -1)
         return z
 
@@ -1329,12 +1365,6 @@ class CGraphVAEForLM(VAEForLM):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if labels is not None:
-            if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
-                )
-
         # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1347,58 +1377,72 @@ class CGraphVAEForLM(VAEForLM):
                 return_dict=return_dict,
             )
 
-        decoder_outputs = []
+        # important to do this AFTER the encoding to see if labels need to be flipped before shifting them right
+        # to produce decoder_input_ids
+        if labels is not None:
+            if encoder_outputs.flipped:
+                labels = flip(labels)
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+        # unflipped: predict next token
+        # shift right for inputs
+        # Inputs:   ^This is a cat
+        #           \|||||||||||||
+        # Labels    This is a cat.
 
-        decoder_outputs[0] = self.decoder(
-            input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
-            latent_variable=encoder_outputs.latent_variable,
-            attention_mask=decoder_attention_mask,
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        # flipped: predict previous token
+        # shift right kabeks sfor inputs
+        # inputs:  .tac a si sihT
+        #          |||||||||||\\|
+        # labels:  tac a si sihT^
 
-        adjascency_matrix = encoder_outputs.representation[0]
+        if not encoder_outputs.flipped:
+            decoder_outputs = self.decoder(
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=None, #encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=decoder_attention_mask,
+                encoder_attention_mask=attention_mask,
+                head_mask=decoder_head_mask,
+                cross_attn_head_mask=cross_attn_head_mask,
+                past_key_values=past_key_values,
+                inputs_embeds=decoder_inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        else:
+            # flipped causal model, encoder hidden states and labels are flipped
+            # adj matrix is transposed
 
-        decoder_outputs[1] = self.decoder(
-            input_ids=reverse(decoder_input_ids),
-            encoder_hidden_states=reverse(encoder_outputs.last_hidden_state),  # in BartModel encoder_hidden_states=encoder_outputs[0]
-            latent_variable=self.transpose_adj_matrix(adjascency_matrix),
-            attention_mask=reverse(decoder_attention_mask),
-            encoder_attention_mask=reverse(attention_mask),
-            head_mask=reverse(decoder_head_mask),
-            cross_attn_head_mask=reverse(cross_attn_head_mask),
-            past_key_values=reverse(past_key_values),
-            inputs_embeds=reverse(decoder_inputs_embeds),
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+            decoder_outputs = self.decoder(
+                input_ids=flip(decoder_input_ids),
+                encoder_hidden_states=None, #encoder_outputs.last_hidden_state),  # already flipped
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=flip(decoder_attention_mask),
+                encoder_attention_mask=flip(attention_mask),
+                head_mask=flip(decoder_head_mask),
+                cross_attn_head_mask=flip(cross_attn_head_mask),
+                past_key_values=flip(past_key_values),
+                inputs_embeds=flip(decoder_inputs_embeds),
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         # trainable language model head
-        logits = [
-            self.lm_head(out.last_hidden_state)
-            for out in decoder_outputs
-        ]
+        logits = self.lm_head(decoder_outputs.last_hidden_state)
         supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
 
         # calculate composite loss
 
-        both_directions = [labels, reverse(labels)]
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            loss_lm = self.gamma * sum([
-                loss_fct(logits[i].view(-1, self.decoder.config.vocab_size), both_directions[i].view(-1))
-                for i in 2
-            ])
+            loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             loss_z = encoder_outputs.loss  # loss on latent var
             loss = loss_lm + loss_z  # combine with language modelling loss
             supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
@@ -1406,9 +1450,19 @@ class CGraphVAEForLM(VAEForLM):
             loss = None
             supp_data['loss_lm'] = loss_lm = None
 
-        return TwinLMOutput(
+        return CGVAELMOutput(
             loss=loss,
             logits=logits,
-            representations=encoder_outputs.representations,
-            supp_data=supp_data
+            latent_variable=encoder_outputs.latent_variable,
+            representation=encoder_outputs.representation,
+            hidden_before_latent=encoder_outputs.hidden_before_latent,
+            supp_data=supp_data,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            flipped=encoder_outputs.flipped,
         )

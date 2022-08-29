@@ -129,7 +129,6 @@ class MyTensorBoardCallback(TensorBoardCallback):
                     val = torch.cat([val] * 3, 0)  # format C x H x W
                     self.tb_writer.add_image("images", val, state.global_step)
                 else:
-                    # assume a scalar
                     self.tb_writer.add_scalars(main_tag, val, state.global_step)
             self.tb_writer.flush()
 
