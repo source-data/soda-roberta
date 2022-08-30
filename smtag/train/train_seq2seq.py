@@ -83,6 +83,7 @@ class HfSeq2SeqTrainer:
 
     def __call__(self):
         if self.task != "NER":
+            logger.info(f"Note that you need a csv file with the columns subset, input_text, and output_text to use this trainer.")
             try:
                 logger.info(f"Obtaining data from the HuggingFace 🤗 Hub: {self.datapath}")
                 self.dataset = load_dataset(self.datapath)
@@ -166,10 +167,9 @@ class HfSeq2SeqTrainer:
                     for example in output_string:
                         self.output_text.append(example)
 
-        self.output_ds = self.tokenized_dataset["test"]
-        self.output_ds = self.output_ds.add_column("generated_text", self.output_text)
-        self.output_ds.to_csv("./data/seq2seq/predictions_NER_seq2seq.csv")
-        # self.tokenized_dataset["test"].to_csv("./data/seq2seq/predictions_NER_seq2seq.csv")
+            self.output_ds = self.tokenized_dataset["test"]
+            self.output_ds = self.output_ds.add_column("generated_text", self.output_text)
+            self.tokenized_dataset["test"].to_csv("./data/seq2seq/predictions_NER_seq2seq.csv")
         return self.dataset, self.tokenizer, self.model, self.tokenized_dataset
 
     def _tokenize_data(self):
@@ -208,24 +208,25 @@ class HfSeq2SeqTrainer:
                                     {len(self.split)} elements in the list.""")
     
         result = {
-                    'train': {'input': [],'target': [], 'fig_id':[], 'doi': []},
-                    'test': {'input': [],'target': [], 'fig_id':[], 'doi': []},
-                    'eval': {'input': [],'target': [], 'fig_id':[], 'doi': []}
+                    'train': {'input': [],'target': []},
+                    'test': {'input': [],'target': []},
+                    'eval': {'input': [],'target': []}
                     }
         logger.info(f"Reading lines from file {self.datapath}")
         dataframe = pd.read_csv(self.datapath)
         dataframe = dataframe.dropna()
         for _, row in dataframe.iterrows():
-            split = row["subset"]
+            if row["subset"] in ["train", "trainset"]:
+                split = "train"
+            if row["subset"] in ["validation", "eval"]:
+                split = "eval"
+            if row["subset"] in ["test", "testset"]:
+                split = "test"
             data_input = row["input_text"]
             data_output = row["output_text"]
-            doi = row["doi"]
-            f_id = row["f_id"]
 
             result[split]["input"].append(data_input)
             result[split]["target"].append(data_output)
-            result[split]["fig_id"].append(doi)
-            result[split]["doi"].append(f_id)
 
         return DatasetDict(
                             {

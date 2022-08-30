@@ -51,7 +51,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     do_train: bool = field(default=False)
     do_eval: bool = field(default=False)
     do_predict: bool = field(default=False)
-    run_name: Optional[str] = field(default="sd-lm-SMALL-NER")
+    run_name: Optional[str] = field(default="sd-ner-v2")
 
     # Other params 
     disable_tqdm: Optional[bool] = field(default=None)

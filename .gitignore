@@ -129,6 +129,7 @@ runs/
 # MAC
 .DS_Store
 Untitled.ipynb
+panelization.ipynb
 
 seq2seq_models/*
 
