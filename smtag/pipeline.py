@@ -155,9 +155,7 @@ class Serializer:
                         elif entity is not None:
                             entity_list.append(entity.to_dict(self.tokenizer))
                             entity = None
-                print(entity_list)
                 j_panel_group['panel_group'].append(entity_list)
-            stop
             j['smtag'].append(j_panel_group)
         return json.dumps(j, indent=2)
 
