@@ -25,16 +25,16 @@ class HfSeq2SeqTrainer:
     def __init__(self, 
                  # DATA AND MODELS
                  datapath: str,
-                 task: str,
-                 task_type: str = "copy_tag",
-                 labels_list = "all",
+                 task: str, # Will be deprecated
+                 task_type: str = "copy_tag", # Will be deprecated 
+                 labels_list: List[str] = "all", # Will be deprecated
                  delimiter: str = "###tt9HHSlkWoUM###",
                  base_model: str = "t5-base",
                  from_local_checkpoint: str = None,
                  # SPECIAL FOR NER
-                 prompt_init: str = "Do NER on the entities",
-                 prompt_end: str = "\n\nEND_INPUT\n\n",
-                 generate_end: str = "[END]",
+                 prompt_init: str = "Do NER on the entities", # Will be deprecated
+                 prompt_end: str = "\n\nEND_INPUT\n\n", # Will be deprecated
+                 generate_end: str = "[END]", # Will be deprecated
                  # DATA GENERATION
                  split: List[float] = [0.8, 0.1, 0.1],
                  skip_lines: int = 0,

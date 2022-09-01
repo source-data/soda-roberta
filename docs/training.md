@@ -221,6 +221,8 @@ A default call to the hyperparameter search can be done with the following comma
 
 **IMPORTANT NOTE** The `--smoke_test` option must be disabled for real training. This option generates a very fast run of `HpSearchForTokenClassification` for debugging and development purposes. However, it will not generate any good results whatsoever.
 
+**YET ANOTHER VERY IMPORTANT NOTE** This will store **ALL** the models generated. It might fill your entire disk space soon. Keep an eye on this!
+
 ```bash
 
     # To test the training. It takes about 5 minutes to run
@@ -296,121 +298,33 @@ Research shows that [`PopulationBasedTraining`](https://docs.ray.io/en/latest/tu
 ## Seq2Seq training
 
 To finetune 🤗 models in seq2seq tasks we have the `smtag.cli.seq2seq.hf_finetune` module. To use these, we require `*.csv` files
-that have at least the columns `input_text` and `output_text`. Extra columns that provide `doi` or identifiers might be added and will not generate issues
-with the model.
+that have at least the columns `input_text` and `output_text`. Extra columns that provide `doi` or identifiers might be added and will not generate issues with the model.
 
-The `smtag.cli.seq2seq.hf_finetune` model allows three tasks. These are:
-
-* PANELIZATION - Separates a figure caption into its constituent panels. It uses the `./data/seq2seq/panelization_task.csv` file.
-* NER - Performs NER by listing the entities in the text. It will generate the labelled text from the `EMBO/sd-nlp-non-tokenized` dataset. 
-    The user can select the labels to be used for each run as all of them or sinngle labels or any combination of them.
-* CAUSAL HPOTHESIS - It performs NER of the measured and controlled entities and classifies them as such. It also mentions the experiment 
-    assay on which the entities have been compared.
-
-
-The `separate_labels` argument accepts a list with the different elements to be separated and to convert some tasks in simple NER
-tasks. Given that any entities are enclosed in HTML tags in `output_text`.
-
-The following text will finetune `facebook/bart-base` to find `geneprod` mentions in the SourceData dataset.
+This is an example on how to use `biobart-base` to do the panelization task. The `other` keywords are legacy instruments that should disappear in future versions.
 
 ```bsh
-    python -m smtag.cli.seq2seq.hf_finetune "EMBO/sd-nlp-non-tokenized" "NER" \
-        --base_model "facebook/bart-large" \
-        --from_local_checkpoint "./seq2seq_models/checkpoint-30000/" \
-        --ner_labels all \
-        --generate_end "[END]" \
-        --max_input_length 512 \
-        --max_target_length 128 \
-        --per_device_train_batch_size 8 \
-        --per_device_eval_batch_size 8 \
-        --num_train_epochs 15. \
-        --temperature 0.5 \
-        --early_stopping \
-        --repetition_penalty 10 \
-        --length_penalty 75. \
+    python -m smtag.cli.seq2seq.hf_finetune "/data/seq2seq/panelization_task.csv" "other" "other" \
+        --base_model "GanjinZero/biobart-base" \
+        --max_input_length 1024 \
+        --max_target_length 1024 \
+        --per_device_train_batch_size 4 \
+        --per_device_eval_batch_size 4 \
+        --num_train_epochs 50. \
         --learning_rate 0.0001 \
         --evaluation_strategy "steps" \
-        --eval_steps 10 \
-        --save_steps 1000 \
+        --eval_steps 1000 \
         --save_total_limit 10 \
         --do_train \
         --do_eval \
         --do_predict \
         --logging_steps 100 \
-        --run_name "seq2seq-biobart-large-ner-all" \
-        --generation_max_length 128 \
+        --run_name "seq2seq-biobart-base-panelization" \
+        --generation_max_length 1024 \
         --predict_with_generate \
+        --generation_num_beams 1        
         --generation_num_beams 1 
         
 ```
-
-As above but it will do NER in all the available tags.
-
-```bsh
-    python -m smtag.cli.seq2seq.hf_finetune "/data/seq2seq/NER_roles_essays.csv" \
-        --base_model "facebook/bart-base" \
-        --max_input_length 512 \
-        --max_target_length 512 \
-        --per_device_train_batch_size 8 \
-        --per_device_eval_batch_size 16 \
-        --num_train_epochs 50. \
-        --learning_rate 0.0001 \
-        --evaluation_strategy "steps" \
-        --eval_steps 100 \
-        --save_total_limit 10 \
-        --do_train \
-        --do_eval \
-        --do_predict \
-        --logging_steps 100 \
-        --run_name "seq2seq-bart-base" \
-        --separate_labels "all"
-        
-```
-
-As above but it will do NER and derive causal hypothesis.
-
-```bsh
-    python -m smtag.cli.seq2seq.hf_finetune "/data/seq2seq/NER_roles_essays.csv" \
-        --base_model "facebook/bart-base" \
-        --max_input_length 512 \
-        --max_target_length 512 \
-        --per_device_train_batch_size 8 \
-        --per_device_eval_batch_size 16 \
-        --num_train_epochs 50. \
-        --learning_rate 0.0001 \
-        --evaluation_strategy "steps" \
-        --eval_steps 100 \
-        --save_total_limit 10 \
-        --do_train \
-        --do_eval \
-        --do_predict \
-        --logging_steps 100 \
-        --run_name "seq2seq-bart-base" 
-        
-```
-
-As above but it will finetune for the panelization task.
-
-```bsh
-    python -m smtag.cli.seq2seq.hf_finetune "/data/seq2seq/panelization_task.csv" \
-        --base_model "facebook/bart-base" \
-        --max_input_length 512 \
-        --max_target_length 512 \
-        --per_device_train_batch_size 8 \
-        --per_device_eval_batch_size 16 \
-        --num_train_epochs 50. \
-        --learning_rate 0.0001 \
-        --evaluation_strategy "steps" \
-        --eval_steps 100 \
-        --save_total_limit 10 \
-        --do_train \
-        --do_eval \
-        --do_predict \
-        --logging_steps 100 \
-        --run_name "seq2seq-bart-base" 
-        
-```
-
 
 With the module `smtag.cli.seq2seq.gpt3_finetune` the files used for the seq2seq can be prepared to be
 used in the OpenAI API. Check the notebook `Fine tuning GPT 3.ipynb` for more details on how to use the data.
