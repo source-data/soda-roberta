@@ -44,7 +44,6 @@ from transformers import __version__, Trainer
 from transformers.configuration_utils import PretrainedConfig
 from transformers.data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from transformers.debug_utils import DebugOption, DebugUnderflowOverflow
-from transformers.deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from transformers.dependency_versions_check import dep_version_check
 from transformers.file_utils import (
     CONFIG_NAME,
@@ -223,16 +222,6 @@ class MyTrainer(Trainer):
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if args.deepspeed and not self.deepspeed:
-
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(
-                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
 
         model = self._wrap_model(self.model, training=False)
 
@@ -500,6 +489,8 @@ class MyTrainer(Trainer):
                     # MODIFICATION OF BASE CLASS
                     supp_data = {}
             else:
+                # TODO: this might not be correct; in case of pure representation optimization, there is a loss even there are no labels
+                # rather check if loss is None
                 loss = None
                 with self.autocast_smart_context_manager():
                     outputs = model(**inputs)

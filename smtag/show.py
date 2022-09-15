@@ -1,8 +1,10 @@
-from random import randrange
+from random import randrange, sample
 from typing import Dict
 
 import torch
 from transformers import RobertaTokenizerFast, TrainerCallback
+
+from .config import config
 
 
 # uses spcial color characters for the console output
@@ -51,31 +53,29 @@ class ShowExample(TrainerCallback):
             inputs = self.pick_random_example(eval_dataloader)
             pred = model(inputs["input_ids"], labels=inputs["labels"], attention_mask=inputs["attention_mask"])
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
+        inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
     def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
-        batch = next(iter(dataloader))
-        rand_example_idx = randrange(batch['input_ids'].size(0))
+        L = len(dataloader.dataset)
+        dataset = dataloader.dataset
+        rand_example_idx = randrange(L)
+        batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
         inputs = {}
         for k, v in batch.items():
-            ex = v[rand_example_idx].clone().unsqueeze(0)   # single example
-            if torch.cuda.is_available():
-                ex = ex.cuda()
-            inputs[k] = ex
+            inputs[k] = v.cuda() if torch.cuda.is_available() else v
         return inputs
 
     def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
         pred_idx = [e.item() for e in pred_idx]
         input_ids = [e.item() for e in inputs["input_ids"]]
         labels = [e.item() for e in inputs["labels"]]
-        attention_mask = [e.item() for e in inputs["attention_mask"]]
         colored = ""
         for i in range(len(input_ids)):
             input_id = input_ids[i]
             label_idx = pred_idx[i]
             true_label = labels[i]
-            attn_mask = attention_mask[i]
-            colored += self._correct_incorrect(input_id, label_idx, true_label, attn_mask)
+            colored += self._correct_incorrect(input_id, label_idx, true_label) + " "
         print(f"\n\n{colored}\n\n")
 
     def _correct_incorrect(self, input_id: int, label_idx: int, true_label: int) -> str:
@@ -111,9 +111,53 @@ class ShowExampleLM(ShowExample):
             color = "blue" if correct else "red"
             insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
             colored = f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
-        elif attention_mask == 1:
+        elif attention_mask == 1 and input_id is not None:
             colored += self.tokenizer.decode(input_id)
         return colored
+
+
+class ShowExampleTextGeneration(ShowExampleLM):
+
+    COLOR_CHAR = {
+            "blue": '\033[32;1m',
+            "red": '\033[31;1m',
+            "close": '\033[0m'
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_length = kwargs.get('max_sentence_length', None)
+        self.model_config = kwargs.get('model_config', None)
+        if not self.max_length:
+            self.max_length = config.max_length[1]
+
+    def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
+        with torch.no_grad():
+            inputs = self.pick_random_example(eval_dataloader)
+            pred_idx = model.generate(inputs["input_ids"], **self.model_config)
+        pred_idx = pred_idx[0][1:]  # removing first token that seems to be </s> probably a mistake somewhere
+        inputs = {k: v[0] for k, v in inputs.items()}
+        self.to_console(inputs, pred_idx)
+
+    def to_console(self, inputs: Dict[str, torch.Tensor], pred_idx):
+        pred_idx = [e.item() for e in pred_idx]
+        input_ids = [e.item() for e in inputs["input_ids"]]
+        labels = [e.item() for e in inputs["labels"]]
+        colored = ""
+        input_str = self.tokenizer.decode(input_ids, skip_special_tokens=True)
+        generated_str = self.tokenizer.decode(pred_idx, skip_special_tokens=True)
+        target_no_pad_labels = [l for l in labels if l != -100]
+        target_str = self.tokenizer.decode(target_no_pad_labels, skip_special_tokens=True)
+        colored += f"input:\n{input_str}\n\n"
+        colored += f"generated:\n{generated_str}\n\n"
+        colored += f"target:\n{target_str}\n\n"
+        colored += "diff:\n"
+
+        for i in range(min(len(labels), len(pred_idx))):
+            label_idx = pred_idx[i]
+            true_label = labels[i]
+            colored += self._correct_incorrect(None, label_idx, true_label)
+        print(f"\n\n{colored}\n\n")
 
 
 class ShowExampleTwinLM(ShowExampleLM):
@@ -170,3 +214,48 @@ class ShowExampleTOKCL(ShowExample):
             else:
                 colored = f"{decoded}"
         return colored
+
+class ShowExampleTwinLM(ShowExampleLM):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
+        with torch.no_grad():
+            inputs = self.pick_random_example(eval_dataloader)
+            pred = model(**inputs)
+            # pred.logits is an array with predictions for twin examples
+            for i, pred_logits in enumerate(pred['logits']):
+                pred_idx = pred_logits.argmax(-1)[0].cpu()
+                # extract input from specific twin example
+                inputs_i = {k: v[i][0] for k, v in inputs.items()}
+                self.to_console(inputs_i, pred_idx)
+
+    def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
+        dataset = dataloader.dataset
+        L = len(dataset)
+        rand_example_idx = randrange(L)
+        batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
+        inputs = {}
+        for k in batch:
+            inputs[k] = [
+                twin.cuda() if torch.cuda.is_available() else twin
+                for twin in batch[k]
+            ]
+        return inputs
+
+
+class ShowExampleCGraphVAEForLM(ShowExampleLM):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
+        with torch.no_grad():
+            inputs = self.pick_random_example(eval_dataloader)
+            pred = model(**inputs)
+            pred_idx = pred['logits'].argmax(-1)[0].cpu()
+        inputs = {k: v[0] for k, v in inputs.items()}
+        if pred.flipped:
+            inputs['labels'] = inputs['labels'].flip(0)
+        self.to_console(inputs, pred_idx)

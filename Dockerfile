@@ -14,7 +14,8 @@ RUN apt-get update \
 && pip install nltk==3.5 \
 && pip install scikit-learn==0.24.0 \
 # && pip install transformers==4.1.1 \
-&& pip install transformers==4.15.0 \
+# && pip install transformers==4.15.0 \
+&& pip install transformers==4.20.0 \
 # && pip install datasets==1.3.0 \
 && pip install datasets==1.17.0 \
 && pip install seqeval==1.2.2 \
@@ -27,7 +28,12 @@ RUN apt-get update \
 && python -m spacy download en_core_web_sm \
 # apparently need separate installation for progress bar stuff in jupyter
 # https://ipywidgets.readthedocs.io/en/stable/user_install.html
-&& pip install ipywidgets
+&& pip install ipywidgets \
+&& pip install ray==1.13.0 \
+&& pip install ray tune  \
+&& pip install evaluate \
+&& pip install rouge_score \
+&& pip install wandb 
 # optional for plotting
 RUN pip install plotly 
 

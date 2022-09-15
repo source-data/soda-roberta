@@ -19,7 +19,8 @@ from transformers import (
     Trainer,
     IntervalStrategy,
     RobertaForMaskedLM, RobertaConfig,
-    AutoModel, AutoModelForMaskedLM, AutoTokenizer,
+    # OPTForCausalLM, OPTConfig,
+    AutoModel, AutoModelForMaskedLM, AutoTokenizer, AutoModelForSeq2SeqLM,
     TrainingArguments,
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
@@ -28,8 +29,8 @@ from transformers.integrations import TensorBoardCallback
 from transformers.trainer_callback import ProgressCallback
 from datasets import load_dataset, GenerateMode
 from ..models.vae import (
-    VAEForLM, TwinVAEForLM,
-    VAEConfig, VAEConfigLM, TwinVAEConfig
+    LatentEncoder, VAEForLM, Twin, TwinLM,
+    LatentConfig, VAEConfigLM, TwinConfig
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -40,7 +41,8 @@ from ..data_collator import (
 
 from ..trainer import MyTrainer
 from ..show import (
-    ShowExampleLM, ShowExampleTwinLM,
+    ShowExampleLM, ShowExampleTwinLM, ShowExampleTextGeneration,
+    ShowExampleCGraphVAEForLM
 )
 from ..metrics import compute_metrics_lm
 from ..tb_callback import MyTensorBoardCallback
@@ -96,18 +98,19 @@ def train(
         cache_dir=CACHE
     )
 
-    if data_config_name in ["DET", "NOUN", "VERB", "SMALL", "ROLES"]:
+    targeted_masking_tasks = ["DET", "NOUN", "VERB", "SMALL", "GENEPROD_INTERVENTION", "GENEPROD_OBSERVATION", "GENEPROD"]
+    if data_config_name in targeted_masking_tasks:
         if config.model_type == "Autoencoder":
             data_collator = DataCollatorForTargetedMasking(
                 tokenizer=tokenizer,
                 mlm_probability=1.0
             )
-        # elif config.model_type in ["VAE", "Twin"]:
-        #     data_collator = DataCollatorForTargetedMasking(
-        #         tokenizer=tokenizer,
-        #         mlm_probability=0.5,
-        #         pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
-        #     )
+        elif config.model_type in ["VAE"]:
+            data_collator = DataCollatorForTargetedMasking(
+                tokenizer=tokenizer,
+                mlm_probability=1.0,
+                pad_to_multiple_of=config.max_length  # VAE and Twin need samples to have equal length
+            )
         else:
             raise ValueError(f"unsupported config.model_type: {model_type} for targeted language modeling")
     elif data_config_name == "MLM":
@@ -122,13 +125,13 @@ def train(
                 mlm=True,
                 pad_to_multiple_of=config.max_length
             )
-        elif config.model_type in ["Twin"]:
-            data_collator = MyDataCollatorForTwinLanguageModeling(
-                tokenizer=tokenizer,
-                mlm=True,
-                pad_to_multiple_of=config.max_length,
-                max_length_list=config.max_length
-            )
+        # elif config.model_type in ["Twin"]:
+        #     data_collator = MyDataCollatorForTwinLanguageModeling(
+        #         tokenizer=tokenizer,
+        #         mlm=True,
+        #         pad_to_multiple_of=config.max_length,
+        #         max_length_list=config.max_length
+        #     )
         else:
             raise ValueError(f"unsupported config.model_type: {model_type} for MLM")
     elif data_config_name == "SEQ2SEQ":
@@ -143,10 +146,32 @@ def train(
                 max_length_list=config.max_length
             )
         elif model_type == "VAE":  # for debuging, maybe not necessary
-            data_collator = MyDataCollatorForSeq2Seq(
+            data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
+    elif data_config_name in ["QandA", "AandQ", "MULTITASK", "NEXT"]:
+        if data_config_name in ["NEXT"] and model_type == "Autoencoder":
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                max_length = sum(config.max_length),
+                pad_to_multiple_of=sum(config.max_length) # Q and A are concatenated for causal LM
+            )
+        elif model_type == "Autoencoder":
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=config.max_length[0]
+            )
+        else:
+            raise NotImplementedError(f"{data_config_name} is not implemented for {model_type}")
+    elif data_config_name == "NOLM":
+        if model_type == "Twin":
+            data_collator = MyDataCollatorForTwinSeq2Seq(
+                tokenizer=tokenizer,
+                max_length_list=config.max_length
+            )
+        else:
+            raise NotImplementedError(f"{data_config_name} is not implemented for {model_type}")
     else:
         raise NotImplementedError(f"{data_config_name} is not implemented")
 
@@ -155,7 +180,14 @@ def train(
 
     if model_type == "Autoencoder":
         if config.from_pretrained:
-            model = AutoModelForMaskedLM.from_pretrained(from_pretrained)
+            if data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
+                if 'facebook/opt' in config.from_pretrained:
+                    opt_model_config = OPTConfig()
+                    model = OPTForCausalLM(config=opt_model_config)
+                else:
+                    model = AutoModelForSeq2SeqLM.from_pretrained(config.from_pretrained)
+            else:
+                model = AutoModelForMaskedLM.from_pretrained(config.from_pretrained)
         else:
             model_config = RobertaConfig(
                 vocab_size=tokenizer.vocab_size,
@@ -168,15 +200,14 @@ def train(
     elif model_type == "VAE":
         if config.from_pretrained:
             pretrained = AutoModel.from_pretrained(from_pretrained)
-            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
             model_config = VAEConfigLM(
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 hidden_features=256,
-                z_dim=1024,
-                gamma=1E-1,  # weight of lm loss as compared to z_loss
+                z_dim=256,
+                gamma=10,  # weight of lm loss as compared to z_loss
                 sampling_iterations=200,
                 seq_length=config.max_length,
-                residuals=residuals,
+                residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
                 latent_var_loss="kl"  # "kl" or "mmd" or None
             )
             model = VAEForLM(
@@ -192,35 +223,62 @@ def train(
                 AutoModel.from_pretrained(from_pretrained)
                 for i in range(num_models)
             ]
-            residuals = data_config_name in ["MLM"]  # masked language model only need to predict difference
-            vae_configs = [
-                VAEConfigLM(
-                    freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
-                    hidden_features=256,
-                    z_dim=100,#1024,
-                    gamma=1.0,  # weight of lm loss as compared to z_loss
-                    sampling_iterations=200,
-                    seq_length=config.max_length[i],
-                    residuals=residuals,
-                    latent_var_loss=None  # "kl" or "mmd" or None
+            if data_config_name == "NOLM":
+                vae_configs = [
+                    LatentConfig(
+                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                        hidden_features=256,
+                        z_dim=1024, #96,
+                        sampling_iterations=200,
+                        seq_length=config.max_length[i],
+                        latent_var_loss=None  # "kl" or "mmd" or None
+                    )
+                    for i in range(num_models)
+                ]
+                models = [
+                    LatentEncoder(
+                        pretrained=pretrained[i].get_encoder(),
+                        config=vae_configs[i]
+                    )
+                    for i in range(num_models)
+                ]
+                model_config = TwinConfig(
+                    lambd_a=1.0,  # weight off-diagonal vs diagonal
+                    mu=1.0,  # weight of twin_z_losss over other losses
                 )
-                for i in range(num_models)
-            ]
-            models = [
-                VAEForLM(
-                    pretrained=pretrained[i],
-                    config=vae_configs[i]
+                model = Twin(
+                    models=models,
+                    config=model_config
                 )
-                for i in range(num_models)
-            ]
-            model_config = TwinVAEConfig(
-                lambd_a=1.0,  # weight off-diagonal vs diagonal
-                mu=1.0,  # weight of twin_z_losss over other losses
-            )
-            model = TwinVAEForLM(
-                models=models,
-                config=model_config
-            )
+            elif data_config_name in ["SEQ2SEQ", "MLM"]:
+                vae_configs = [
+                    VAEConfigLM(
+                        freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
+                        hidden_features=256,
+                        z_dim=96,
+                        gamma=1.0,  # weight of lm loss as compared to z_loss
+                        sampling_iterations=200,
+                        seq_length=config.max_length[i],
+                        residuals=data_config_name in ["MLM"],
+                        latent_var_loss=None  # "kl" or "mmd" or None
+                    )
+                    for i in range(num_models)
+                ]
+                models = [
+                    VAEForLM(
+                        pretrained=pretrained[i],
+                        config=vae_configs[i]
+                    )
+                    for i in range(num_models)
+                ]
+                model_config = TwinConfig(
+                    lambd_a=1.0,  # weight off-diagonal vs diagonal
+                    mu=1.0,  # weight of twin_z_losss over other losses
+                )
+                model = TwinLM(
+                    models=models,
+                    config=model_config
+                )
         else:
             raise ValueError("Training TwinVAE from scratch is not implemented.")
 
@@ -229,33 +287,26 @@ def train(
     print("\nTraining arguments:")
     print(training_args)
     if model_type in ["Twin"]:
-        show_example = ShowExampleTwinLM(tokenizer)
-    elif model_type in ["VAE", "Autoencoder"]:
-        show_example = ShowExampleLM(tokenizer)
-    if model_type in ["Twin", "VAE"]:
-        trainer = MyTrainer(
-            model=model,
-            args=training_args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics_lm,
-            callbacks=[show_example]
-        )
+        show_callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name in ["SEQ2SEQ", "MLM"] else None
+    elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
+        show_callbacks = [ShowExampleTextGeneration(tokenizer)]
+    elif model_type in ["CGVAE"]:
+        show_callbacks = [ShowExampleCGraphVAEForLM(tokenizer)]  # [ShowExampleCGraphVAEForLM(tokenizer)]
     else:
-        trainer = Trainer(
+        show_callbacks = [ShowExampleLM(tokenizer)]
+    trainer = MyTrainer(
             model=model,
             args=training_args,
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics_lm,
-            callbacks=[ShowExampleLM(tokenizer)],
+            callbacks=show_callbacks
         )
-
     # switch the Tensorboard callback to plot losses on same plot
     trainer.remove_callback(TensorBoardCallback)  # remove default Tensorboard callback
     trainer.add_callback(MyTensorBoardCallback)  # replace with customized callback
+    # swithch ProgressCallback to use custom one that filters out non scalars from output
     trainer.remove_callback(ProgressCallback)
     trainer.add_callback(MyProgressCallback)
 

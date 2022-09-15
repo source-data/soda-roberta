@@ -38,7 +38,6 @@ def distribute(path: Path, ext: str):
         if not subset_path.exists():
             subset_path.mkdir()
         for i, p in enumerate(subset[train_valid_test]):
-            progress(i, len(subset[train_valid_test]), f"{train_valid_test} {i+1}                   ")
+            progress(i, len(subset[train_valid_test]), f"{train_valid_test} {i+1}")
             filename = p.name
             p.rename(subset_path / filename)
-        print()

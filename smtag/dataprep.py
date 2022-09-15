@@ -239,7 +239,7 @@ class PreparatorLM:
 
 class PreparatorTOKCL:
     """Processes source xml documents into examples that can be used in a token classification task.
-    It tokenizes the text with the provided tokenizer. 
+    It tokenizes the text with the provided tokenizer.
     The XML is used to generate labels according to the provided CodeMap.
     The datset is then split into train, eval, and test set and saved into json line files.
 
@@ -254,8 +254,6 @@ class PreparatorTOKCL:
             A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
         max_length (int):
             Maximum number of token in one example. Examples will be truncated.
-        split_ratio (Dict[str, float]):
-            Proportion of examples in train, eval and test subsets.
     """
     def __init__(
         self,
@@ -298,156 +296,156 @@ class PreparatorTOKCL:
                 lines = f.readlines()
                 for line in tqdm(lines):
                     xml_example: Element = fromstring(line)
-                    tokenized, token_level_labels = self._encode_example(xml_example)
-                    if self.tokenizer.is_fast:
-                        tokens = tokenized.tokens()
-                    else:
-                        tokens = self.tokenizer.convert_ids_to_tokens(tokenized.input_ids)
-                    # add special_tokens_mask "mannually" now that label_ids are aligned
+                    tokens, token_level_labels = self._encode_example(xml_example)
                     examples.append({
-                        'tokens': tokens,  # do we ever need this?
-                        'input_ids': tokenized.input_ids,
-                        'label_ids': token_level_labels,
-                        'special_tokens_mask': _special_tokens_mask(tokens, self.tokenizer)
-                    })
+                        'words': tokens,
+                        'label_ids': token_level_labels})
             self._save_json(examples, dest_file_path)
-            self._verify(dest_file_path)
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         xml_encoder = XMLEncoder(xml)
         inner_text = innertext(xml_encoder.element)
-        # if isinstance(config.tokenizer, ByT5Tokenizer):
-        #     inner_text = str(inner_text.encode('ascii', 'replace'))
-        tokenized: BatchEncoding = self.tokenizer(
-            inner_text,
-            max_length=self.max_length,
-            truncation=True,
-            return_offsets_mapping=True,
-            add_special_tokens=True
-        )
-        token_level_labels = {}
+        token_level_labels_dict = {}
+
         for code_map in self.code_maps:
             xml_encoded = xml_encoder.encode(code_map)
-            labels = self._align_labels(tokenized, xml_encoded, code_map, inner_text)
-            token_level_labels[code_map.name] = labels
-        return tokenized, token_level_labels
-
-    def _align_labels(self, tokenized: BatchEncoding, xml_encoded: Dict, code_map: CodeMap, inner_text) -> List[int]:
-        num_tokens = len(tokenized.input_ids)
-        # prefill with outside of entity label 'O' using IOB2 scheme
-        token_level_labels = ['O'] * num_tokens
-        # tokenizer may have truncated the example
-        last_token_start, last_token_end = tokenized.offset_mapping[-2]  # -2 because the last token is </s> with offsets (0,0) by convention
-        # get the character-level start end end of the xml element and try to map to tokens
-        inner_text = inner_text[:last_token_end]
-        for element_start, element_end in xml_encoded['offsets']:
-            # check we are still within the truncated example
-            if (element_start <= last_token_start) & (element_end < last_token_end):
-                code = xml_encoded['label_ids'][element_start]  # element_end would give the same, maybe check with assert
-                assert xml_encoded['label_ids'][element_start] == xml_encoded['label_ids'][element_end - 1], f"{xml_encoded['label_ids'][element_start:element_end]}\n{element_start, element_end}"
-                start_token_idx = self._char_to_token(element_start, inner_text, tokenized)
-                end_token_idx = self._char_to_token(element_end, inner_text, tokenized)
-                # sanity check
-                try:
-                    assert start_token_idx is not None, f"\n\nproblem with start token None."
-                    assert end_token_idx is not None, f"\n\nproblem with end token None."
-                except Exception:
-                    import pdb; pdb.set_trace()
-                if (start_token_idx == end_token_idx):
-                    # In addition, the tokenizer may generate a token that is actually spanning an element boundary.
-                    # Recursive tokenized in the XMLEncode is NOT a solution as it will force learning on atypical tokenization that will not be
-                    # representative of tokenization of free text. It actually destroys prediction :-(
-                    # But empty element cannot not correspond to any token
-                    start, end = tokenized.offset_mapping[end_token_idx]
-                    if (start <= element_start) and (end > element_end):
-                        print(f"WARNING: token overlaps element boundary {code_map.constraints[code]['tag']} at position {element_end} in '{inner_text[start-10:start]}>>>{inner_text[start:element_end]}^{inner_text[element_end:end]}...<<<{inner_text[end:end+10]}'")
-                        # if next token outside of an element, will be labeled; if part of next element, labelig will be overriden
-                        end_token_idx += 1 if end_token_idx <= num_tokens else num_tokens
-                    else:
-                        print(f"WARNING: emtpy element {code_map.constraints[code]['tag']}? at position {element_start, element_end} in >>>{inner_text[element_start:element_start+50]}...<<<")
-                prefix = "B"  # for B-egining token according to IOB2 scheme
-                if code_map.mode == 'whole_entity':  # label all the tokens corresponding to the xml element
-                    for token_idx in range(start_token_idx, end_token_idx):
-                        label = self._int_code_to_iob2_label(prefix, code, code_map)
-                        token_level_labels[token_idx] = label
-                        prefix = "I"  # for subsequet I-nside tokens
-                elif code_map.mode == 'boundary_start' and (start_token_idx != end_token_idx):  # label the B-egining of non-empty elements
-                    label = self._int_code_to_iob2_label(prefix, code, code_map)
-                    token_level_labels[start_token_idx] = label
+            if code_map.name != "panel_start":
+                char_level_labels = xml_encoded['label_ids']
+                words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                                  list(inner_text),
+                                                                                  char_level_labels)
             else:
-                # the last token has been reached, no point scanning further elemnts
-                break
-        return token_level_labels
+                char_level_labels = ["O"] * len(xml_encoded['label_ids'])
+                offsets = xml_encoded["offsets"]
+                for offset in offsets:
+                    char_level_labels[offset[0]] = "B-PANEL_START"
+                words, token_level_labels = self._from_char_to_token_level_labels_panel(list(inner_text),
+                                                                                        char_level_labels)
+
+            token_level_labels_dict[code_map.name] = token_level_labels
+
+        return words,  token_level_labels_dict
+
+    def _from_char_to_token_level_labels(self, code_map: CodeMap, text: List[str], labels: List) -> List: # Checked
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying Tthe XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of the characters inside the text of the XML elements
+            labels List:        List of labels for each character inside the XML elements. They will be
+                                a mix of integers and None
+
+        Returns:
+            List[str]           Word-level tokenized labels for the input text
+        """
+
+        word, label_word = '', ''
+        word_level_words, word_level_labels = [], []
+
+        for i, char in enumerate(text):
+            if char.isalnum():
+                word += char
+                label_word += str(labels[i]).replace("None", "O")
+            elif char == " ":
+                if word not in [""]:
+                    word_level_words.append(word)
+                    word_level_labels.append(label_word[0])
+                word = ''
+                label_word = ''
+            else:
+                if word not in [""]:
+                    word_level_words.append(word)
+                    word_level_labels.append(label_word[0])
+
+                word_level_words.append(char)
+                word_level_labels.append(str(labels[i]).replace("None", "O"))
+                word = ''
+                label_word = ''
+
+        word_level_iob2_labels = self._labels_to_iob2(code_map, word_level_words, word_level_labels)
+        assert len(word_level_words) == len(word_level_iob2_labels), "Length of labels and words not identical!"
+        return word_level_words, word_level_iob2_labels
 
     @staticmethod
-    def _char_to_token(element_pos, inner_text, tokenized):
-        # Nasty: because of RobertaTokenizer's behavior with spaces, 
-        # a space before a word is included in token. When this happens across xml element boundary, 
-        # the character at the boundary position is a space and is included in the next or previous token outside the element.
-        # In addition, BatchEncoding.char_to_token() will return None if the token is a single space
-        # proper token will be found only from next or previous character, respectively
-        # This gymnastic is to try to circumven this.
-        pos = element_pos
-        # _, last_pos = tokenized.offset_mapping[-2]  # end of last non special token
-        if pos >= len(inner_text):
-            token_idx = len(tokenized.input_ids)
-            return token_idx
-        elif inner_text[pos] != ' ':  # usual case, not in a space, all fine
-            token_idx = tokenized.char_to_token(pos)
-            return token_idx
-        while (inner_text[pos] == ' ') and (pos < len(inner_text) - 1): pos += 1  # scanning for non space on the right
-        if inner_text[pos] == ' ':  # we are still in a run of space and at the end of the string!
-            token_idx = len(tokenized.input_ids) - 1
-        else:
-            # __.token    is tokenized into two single spaces plus one .token (dot is special character produced by RobertaTokenizer)
-            #    ^        need to scan until non space character
-            # 5           element_start = 5
-            # 5678        pos = 8 after scanning
-            # 234         actual start_token_idx 2, first non space token is 4, tokens 2 and 3 are single spaces
-            num_single_space_tokens = pos - 1 - element_pos
-            try:
-                token_idx = tokenized.char_to_token(pos) - num_single_space_tokens
-            except Exception:
-                import pdb; pdb.set_trace()
-        return token_idx
+    def _from_char_to_token_level_labels_panel(text: List[str], labels: List) -> List: # Checked
+        """
+        Args:
+            text List[str]:     List of the characters inside the text of the XML elements
+            labels List:        List of labels for each character inside the XML elements. They will be
+                                a mix of integers and None
+
+        Returns:
+            List[str]           Word-level tokenized labels for the input text
+        """
+
+        word_level_words, word_level_labels = [], []
+        word, label_word = '', ''
+
+        for i, char in enumerate(text):
+            if char.isalnum():
+                word += char
+                label_word += str(labels[i])
+            elif char == " ":
+                if word not in [""]:
+                    word_level_words.append(word)
+                    if "B-PANEL_START" in label_word:
+                        word_level_labels.append("B-PANEL_START")
+                    else:
+                        word_level_labels.append("O")
+                word = ''
+                label_word = ''
+            else:
+                if word not in [""]:
+                    word_level_words.append(word)
+                    if "B-PANEL_START" in label_word:
+                        word_level_labels.append("B-PANEL_START")
+                    else:
+                        word_level_labels.append("O")
+                word_level_words.append(char)
+                word_level_labels.append(labels[i])
+                word = ''
+                label_word = ''
+
+        return word_level_words, word_level_labels
+
 
     @staticmethod
-    def _int_code_to_iob2_label(prefix: str, code: int, code_map: CodeMap) -> str:
-        label = code_map.constraints[code]['label']
-        iob2_label = f"{prefix}-{label}"
-        return iob2_label
+    def _labels_to_iob2(code_map: CodeMap, words: List[str], labels: List) -> List: # Checked
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying The XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of separated words
+            labels List:        List of labels for each word inside the XML elements.
 
-    def _save_json(self, examples: List, dest_file_path: Path):
+        Returns:
+            List[str]           Word-level tokenized labels in IOB2 format
+
+        """
+        iob2_labels = []
+
+        for idx, label in enumerate(labels):
+            if code_map.name == "panel_start":
+                iob2_labels.append("O")
+
+            if code_map.name != "panel_start":
+                if label == "O":
+                    iob2_labels.append(label)
+
+                if label != "O":
+                    if idx == 0:
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] != label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] == label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2])
+
+        return iob2_labels
+
+    @staticmethod
+    def _save_json(examples: List, dest_file_path: Path):
         # saving line by line to json-line file
         with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
                 f.write(f"{json.dumps(example)}\n")
-
-    def _verify(self, dest_file_path):
-        with dest_file_path.open() as f:
-            cumul_len = 0
-            max_len = 0
-            longest_example = ''
-            min_len = 1E3
-            shortest_example = ''
-            for n, line in enumerate(f):
-                j = json.loads(line)
-                L = len(j['tokens'])
-                assert L <= self.max_length, f"Length verification: error line {n} in {p} with {len(j['tokens'])} tokens > {self.max_length}."
-                assert len(j['input_ids']) == L, f"mismatch in number of tokens and input_ids: error line {n} in {p}"
-                for k, label_ids in j['label_ids'].items():
-                    assert len(label_ids) == L, f"mismatch in number of tokens and {k} label_ids: error line {n} in {p}"
-                cumul_len += L
-                if L > max_len:
-                    max_len = L
-                    longest_example = j['input_ids']
-                if L < min_len:
-                    min_len = L
-                    shortest_example = j['input_ids']
-        n += 1
-        print("\nLength verification: OK!")
-        print(f"\naverage input_ids length = {round(cumul_len / n)} (min={min_len}, max={max_len}) tokens")
-        print(f"longest example: {config.tokenizer.decode(longest_example)}")
-        print(f"shortest example: {config.tokenizer.decode(shortest_example)}")
-        return True

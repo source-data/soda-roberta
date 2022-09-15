@@ -54,6 +54,7 @@ class BioLang(datasets.GeneratorBasedBuilder):
 
     BUILDER_CONFIGS = [
         datasets.BuilderConfig(name="SEQ2SEQ", version="0.0.1", description="Control dataset with no masking for seq2seq task."),
+        datasets.BuilderConfig(name="NOLM", version="0.0.1", description="Dataset for optimization of representations, without target."),
         datasets.BuilderConfig(name="MLM", version="0.0.1", description="Dataset for general masked language model."),
         datasets.BuilderConfig(name="DET", version="0.0.1", description="Dataset for part-of-speech (determinant) masked language model."),
         datasets.BuilderConfig(name="VERB", version="0.0.1", description="Dataset for part-of-speech (verbs) masked language model."),
@@ -102,6 +103,15 @@ class BioLang(datasets.GeneratorBasedBuilder):
                         feature=datasets.Value("int32")
                     )
                 )
+            })
+        elif self.config.name == "NOLM":
+            # no language model, pure representation optimization
+            features = datasets.Features({
+                "input_ids": datasets.Sequence(
+                    feature=datasets.Sequence(
+                        feature=datasets.Value("int32")
+                    )
+                ),
             })
 
         return datasets.DatasetInfo(
@@ -161,6 +171,11 @@ class BioLang(datasets.GeneratorBasedBuilder):
                     example = {
                         "input_ids": data["input_ids"],
                         "special_tokens_mask": data['special_tokens_mask']
+                    }
+                elif self.config.name == "NOLM":
+                    # no language modeling, pure representation optimization
+                    example = {
+                        "input_ids": data["input_ids"],
                     }
                 else:
                     example = {

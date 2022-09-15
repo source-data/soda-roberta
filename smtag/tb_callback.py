@@ -1,5 +1,6 @@
 import os, re
 import numpy as np
+import scipy.cluster.hierarchy as sch
 import torch
 from transformers.integrations import (
     TensorBoardCallback
@@ -48,6 +49,35 @@ def rewrite_logs(d):
     return new_d
 
 
+# from https://wil.yegelwel.com/cluster-correlation-matrix/
+def cluster_corr(corr_array, inplace=False):
+    """
+    Rearranges the correlation matrix, corr_array, so that groups of highly 
+    correlated variables are next to eachother 
+    
+    Parameters
+    ----------
+    corr_array : pandas.DataFrame or numpy.ndarray
+        a NxN correlation matrix 
+        
+    Returns
+    -------
+    pandas.DataFrame or numpy.ndarray
+        a NxN correlation matrix with the columns and rows rearranged
+    """
+    pairwise_distances = sch.distance.pdist(corr_array)
+    linkage = sch.linkage(pairwise_distances, method='complete')
+    cluster_distance_threshold = pairwise_distances.max()/2
+    idx_to_cluster_array = sch.fcluster(linkage, cluster_distance_threshold, 
+                                        criterion='distance')
+    idx = np.argsort(idx_to_cluster_array)
+
+    if not inplace:
+        corr_array = corr_array.copy()
+
+    return corr_array[idx, :][:, idx]
+
+
 class MyTensorBoardCallback(TensorBoardCallback):
 
     """Display log and metrics. Modified to plot losses together and to plot supp_data items passed in the model output. Also looks for logs elements with  _img_ in keys to display as images."""
@@ -88,7 +118,9 @@ class MyTensorBoardCallback(TensorBoardCallback):
             logs = rewrite_logs(logs)
             for main_tag, val in logs.items():
                 if main_tag.startswith("images"):
-                    val = torch.tensor(val) # re-tensorify
+                    val = np.array(val)
+                    val = cluster_corr(val)
+                    val = torch.from_numpy(val)  # re-tensorify
                     if val.dim() < 3:
                         val = val.unsqueeze(0)
                     val = val - val.min()
