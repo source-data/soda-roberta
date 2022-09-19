@@ -20,7 +20,7 @@ The following command is sent to train the language model using the task to find
 The training argumentds used for this training are summarized below:
 
 ```config
-{ "output_dir": "/lm_models/lm_models_small", "overwrite_output_dir": true, "do_train": false, "do_eval": true, "do_predict": false, "evaluation_strategy": "steps", "prediction_loss_only": true, "per_device_train_batch_size": 8, "per_device_eval_batch_size": 16, "per_gpu_train_batch_size": null, "per_gpu_eval_batch_size": null, "gradient_accumulation_steps": 1, "eval_accumulation_steps": null, "learning_rate": 5e-05, "weight_decay": 0.0, "adam_beta1": 0.9, "adam_beta2": 0.999, "adam_epsilon": 1e-08, "max_grad_norm": 1.0, "num_train_epochs": 3, "max_steps": -1, "lr_scheduler_type": "linear", "warmup_ratio": 0.0, "warmup_steps": 0, "log_level": -1, "log_level_replica": -1, "log_on_each_node": true, "logging_dir": "/runs/lm-SMALL-2022-07-12T10-40-30.039887", "logging_strategy": "steps", "logging_first_step": false, "logging_steps": 500, "logging_nan_inf_filter": true, "save_strategy": "steps", "save_steps": 5000, "save_total_limit": 5, "save_on_each_node": false, "no_cuda": false, "seed": 42, "bf16": false, "fp16": false, "fp16_opt_level": "O1", "half_precision_backend": "auto", "bf16_full_eval": false, "fp16_full_eval": false, "tf32": null, "local_rank": -1, "xpu_backend": null, "tpu_num_cores": null, "tpu_metrics_debug": false, "debug": [], "dataloader_drop_last": false, "eval_steps": 5000, "dataloader_num_workers": 0, "past_index": -1, "run_name": "/lm_models/lm_models_small", "disable_tqdm": false, "remove_unused_columns": false, "label_names": null, "load_best_model_at_end": false, "metric_for_best_model": null, "greater_is_better": null, "ignore_data_skip": false, "sharded_ddp": [], "deepspeed": null, "label_smoothing_factor": 0.0, "adafactor": false, "group_by_length": false, "length_column_name": "length", "report_to": [ "tensorboard" ], "ddp_find_unused_parameters": null, "ddp_bucket_cap_mb": null, "dataloader_pin_memory": true, "skip_memory_metrics": true, "use_legacy_prediction_loop": false, "push_to_hub": false, "resume_from_checkpoint": null, "hub_model_id": null, "hub_strategy": "every_save", "hub_token": "<hub_token>", "gradient_checkpointing": false, "fp16_backend": "auto", "push_to_hub_model_id": null, "push_to_hub_organization": null, "push_to_hub_token": "<push_to_hub_token>", "_n_gpu": 4, "mp_parameters": "" }</push_to_hub_token></hub_token>
+{ "output_dir": "/lm_models/lm_models_small", "overwrite_output_dir": true, "do_train": false, "do_eval": true, "do_predict": false, "evaluation_strategy": "steps", "prediction_loss_only": true, "per_device_train_batch_size": 8, "per_device_eval_batch_size": 16, "per_gpu_train_batch_size": null, "per_gpu_eval_batch_size": null, "gradient_accumulation_steps": 1, "eval_accumulation_steps": null, "learning_rate": 5e-05, "weight_decay": 0.0, "adam_beta1": 0.9, "adam_beta2": 0.999, "adam_epsilon": 1e-08, "max_grad_norm": 1.0, "num_train_epochs": 3, "max_steps": -1, "lr_scheduler_type": "linear", "warmup_ratio": 0.0, "warmup_steps": 0, "log_level": -1, "log_level_replica": -1 , "log_on_each_node": true, "logging_dir": "/runs/lm-SMALL-2022-07-12T10-40-30.039887", "logging_strategy": "steps", "logging_first_step": false, "logging_steps": 500, "logging_nan_inf_filter": true, "save_strategy": "steps", "save_steps": 5000, "save_total_limit": 5, "save_on_each_node": false, "no_cuda": false, "seed": 42, "bf16": false, "fp16": false, "fp16_opt_level": "O1", "half_precision_backend": "auto", "bf16_full_eval": false, "fp16_full_eval": false, "tf32": null, "local_rank": -1, "xpu_backend": null, "tpu_num_cores": null, "tpu_metrics_debug": false, "debug": [], "dataloader_drop_last": false, "eval_steps": 5000, "dataloader_num_workers": 0, "past_index": -1, "run_name": "/lm_models/lm_models_small", "disable_tqdm": false, "remove_unused_columns": false, "label_names": null, "load_best_model_at_end": false, "metric_for_best_model": null, "greater_is_better": null, "ignore_data_skip": false, "sharded_ddp": [], "deepspeed": null, "label_smoothing_factor": 0.0, "adafactor": false, "group_by_length": false, "length_column_name": "length", "report_to": [ "tensorboard" ], "ddp_find_unused_parameters": null, "ddp_bucket_cap_mb": null, "dataloader_pin_memory": true, "skip_memory_metrics": true, "use_legacy_prediction_loop": false, "push_to_hub": false, "resume_from_checkpoint": null, "hub_model_id": null, "hub_strategy": "every_save", "hub_token": "<hub_token>", "gradient_checkpointing": false, "fp16_backend": "auto", "push_to_hub_model_id": null, "push_to_hub_organization": null, "push_to_hub_token": "<push_to_hub_token>", "_n_gpu": 4, "mp_parameters": "" }</push_to_hub_token></hub_token>
 
 { "_name_or_path": "roberta-base", "architectures": [ "RobertaForMaskedLM" ], "attention_probs_dropout_prob": 0.1, "bos_token_id": 0, "classifier_dropout": null, "eos_token_id": 2, "hidden_act": "gelu", "hidden_dropout_prob": 0.1, "hidden_size": 768, "initializer_range": 0.02, "intermediate_size": 3072, "layer_norm_eps": 1e-05, "max_position_embeddings": 514, "model_type": "roberta", "num_attention_heads": 12, "num_hidden_layers": 12, "pad_token_id": 1, "position_embedding_type": "absolute", "transformers_version": "4.15.0", "type_vocab_size": 1, "use_cache": true, "vocab_size": 50265 }
 ```
@@ -1784,3 +1784,68 @@ python -m smtag.cli.tokcl.train \
 
 ```
 
+# Improving NER performance
+
+NER is currently the bottleneck of our performance. One of the possible issues about it is the inbalance between 
+classes. We will act on this following different approaches. First, by adding class weights to the training algorithm.
+Then, we will keep the training without class weights, but we will select a balanced version of the dataset. The last
+option will be to use ontologies to generate data augmentation. We define below how each of the approaches went down.
+
+We will use PubMedBERT as the model to go in the entire process. The main reason is that it is as good as BioLinkBERT-large
+while having only half of its parameters.
+
+## Class weights in training parameters
+
+The label smoothing improves the results. The improvement is quite small, but it is enought to generate a 
+model that is better than that of BioLinkBERT large.
+
+The label smoothing factor is defined as follows in the documentation.
+
+```
+      label_smoothing_factor (`float`, *optional*, defaults to 0.0):
+         The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
+         labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
+         label_smoothing_factor/num_labels` respectively.
+```
+
+As it can be seen, it has nothing to do with the data balance or inbalance. It is just about the weight of the different types of classes.
+This improves the algorithm but that is only part of the story. The next step is to get actually balanced data to see if that improves the options of the 
+trainer to generate a better model.
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --label_smoothing_factor 0.25 \
+    --per_device_train_batch_size 16 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.0001 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-pubmedbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+                precision    recall  f1-score   support
+
+          CELL       0.71      0.81      0.76      4948
+     EXP_ASSAY       0.59      0.59      0.59      9885
+      GENEPROD       0.79      0.91      0.84     21869
+      ORGANISM       0.74      0.88      0.80      3464
+SMALL_MOLECULE       0.71      0.83      0.76      6431
+   SUBCELLULAR       0.73      0.75      0.74      3850
+        TISSUE       0.70      0.78      0.73      2975
+
+     micro avg       0.73      0.81      0.77     53422
+     macro avg       0.71      0.79      0.75     53422
+  weighted avg       0.72      0.81      0.76     53422
+
+{'test_loss': 1.974186658859253, 'test_accuracy_score': 0.9438226566693138, 'test_precision': 0.7254271895031046, 'test_recall': 0.8113698476283179, 'test_f1': 0.7659954229365662, 'test_runtime': 52.9353, 'test_samples_per_second': 155.378, 'test_steps_
+amples_per_second': 155.378, 'test_steps_per_second': 0.623}
+```
