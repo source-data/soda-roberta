@@ -61,6 +61,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
     greater_is_better: Optional[bool] = field(default=True)
     report_to: Optional[List[str]] = field(default='tensorboard')
     resume_from_checkpoint: Optional[str] = field(default=None)
+    class_weights: Optional[bool] = field(default=False)
 
     # HuggingFace Hub parameters
     # push_to_hub: bool = field(default=False)

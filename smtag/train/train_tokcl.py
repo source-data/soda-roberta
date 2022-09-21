@@ -19,7 +19,7 @@ from ..models.experimental import (
     BecauseConfigForTokenClassification,
 )
 from ..data_collator import DataCollatorForMaskedTokenClassification
-from ..trainer import MyTrainer
+from ..trainer import MyTrainer, ClassWeightTokenClassificationTrainer
 from ..metrics import MetricsTOKCL
 from ..show import ShowExampleTOKCL
 from ..tb_callback import MyTensorBoardCallback
@@ -34,6 +34,11 @@ from ray import tune
 from ray.tune import CLIReporter
 
 from smtag import data_collator
+from collections import Counter
+import itertools
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, minmax_scale
+from sklearn.utils.class_weight import compute_class_weight
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -110,6 +115,20 @@ class TrainTokenClassification:
                             ShowExampleTOKCL(self.tokenizer)]
             )
 
+            if self.training_args.class_weights:
+                weights = self._compute_class_weights()
+
+                self.trainer = ClassWeightTokenClassificationTrainer(model=self.model,
+                                                        args=self.training_args,
+                                                        data_collator=self.data_collator,
+                                                        train_dataset=self.train_dataset,
+                                                        eval_dataset=self.eval_dataset,
+                                                        compute_metrics=self.compute_metrics,
+                                                        callbacks=[DefaultFlowCallback,
+                                                                EarlyStoppingCallback(early_stopping_patience=2,
+                                                                                        early_stopping_threshold=0.0),
+                                                                    ShowExampleTOKCL(self.tokenizer)],
+                                                        class_weights=weights)
 
         elif self.model_type == "GraphRepresentation":
             # "The bare BART Model outputting raw hidden-states without any specific head on top."
@@ -174,6 +193,31 @@ class TrainTokenClassification:
         if self.training_args.push_to_hub:
             print(f"Uploading the model {self.trainer.model} and tokenizer {self.trainer.tokenizer} to HuggingFace")
             self.trainer.push_to_hub(commit_message="End of training")
+
+    def _compute_class_weights(self) -> torch.tensor:
+        train = self.train_dataset
+        y = []
+        for i in train[:]["labels"]:
+            y.extend(i)
+
+        y = np.array(y)  
+        y = y[y >= 0]
+        counter = Counter(y)  
+        counts = []
+        for key in range(len(counter.keys())):
+            counts.append(counter[key])
+        
+        counts = np.array(counts)
+        norm_weights = max(counts) / counts
+        
+        scaled_weights = minmax_scale(norm_weights.reshape(-1,1), feature_range=(0.2, 0.9))
+        # scaled_weights = compute_class_weight("balanced", classes, y_np)    
+        # print(scaled_weights)  
+
+        return torch.tensor(scaled_weights.flatten(), 
+                            device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+                            dtype=torch.float,
+                            )
 
     def _get_tokenizer(self):
         if "Megatron" in self.from_pretrained:

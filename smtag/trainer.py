@@ -553,3 +553,38 @@ class MyTrainer(Trainer):
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
         return (loss, outputs) if return_outputs else loss
+
+
+class ClassWeightTokenClassificationTrainer(Trainer):
+    def __init__(self,
+                model,
+                args,
+                data_collator,
+                train_dataset,
+                eval_dataset,
+                compute_metrics,
+                callbacks,
+                class_weights) -> None:
+        super().__init__(
+                    model=model,
+                    args=args,
+                    data_collator=data_collator,
+                    train_dataset=train_dataset,
+                    eval_dataset=eval_dataset,
+                    compute_metrics=compute_metrics,
+                    callbacks=callbacks,
+                    )
+        self.class_weights = class_weights
+        
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.get("labels")
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
+        # compute custom loss (suppose one has 3 labels with different weights)
+        loss_fct = nn.CrossEntropyLoss(weight=self.class_weights,
+                                        reduction="mean"
+                                        )
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss    
+

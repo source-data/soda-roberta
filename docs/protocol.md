@@ -1794,7 +1794,7 @@ option will be to use ontologies to generate data augmentation. We define below 
 We will use PubMedBERT as the model to go in the entire process. The main reason is that it is as good as BioLinkBERT-large
 while having only half of its parameters.
 
-## Class weights in training parameters
+## Label smoothing in training parameters
 
 The label smoothing improves the results. The improvement is quite small, but it is enought to generate a 
 model that is better than that of BioLinkBERT large.
@@ -1835,17 +1835,151 @@ python -m smtag.cli.tokcl.train \
                 precision    recall  f1-score   support
 
           CELL       0.71      0.81      0.76      4948
-     EXP_ASSAY       0.59      0.59      0.59      9885
-      GENEPROD       0.79      0.91      0.84     21869
-      ORGANISM       0.74      0.88      0.80      3464
-SMALL_MOLECULE       0.71      0.83      0.76      6431
-   SUBCELLULAR       0.73      0.75      0.74      3850
-        TISSUE       0.70      0.78      0.73      2975
+     EXP_ASSAY       0.60      0.62      0.61      9885
+      GENEPROD       0.79      0.90      0.84     21869
+      ORGANISM       0.75      0.87      0.81      3464
+SMALL_MOLECULE       0.72      0.82      0.77      6431
+   SUBCELLULAR       0.74      0.76      0.75      3850
+        TISSUE       0.68      0.76      0.72      2975
 
      micro avg       0.73      0.81      0.77     53422
      macro avg       0.71      0.79      0.75     53422
-  weighted avg       0.72      0.81      0.76     53422
+  weighted avg       0.73      0.81      0.77     53422
 
-{'test_loss': 1.974186658859253, 'test_accuracy_score': 0.9438226566693138, 'test_precision': 0.7254271895031046, 'test_recall': 0.8113698476283179, 'test_f1': 0.7659954229365662, 'test_runtime': 52.9353, 'test_samples_per_second': 155.378, 'test_steps_
-amples_per_second': 155.378, 'test_steps_per_second': 0.623}
+{'test_loss': 1.257552146911621, 'test_accuracy_score': 0.943930878453774, 'test_precision': 0.729350090731904, 'test_recall': 0.8125491370596384, 'test_f1': 0.768704953160141, 'test_runtime': 52.5044, 'test_samp
+les_per_second': 156.654, 'test_steps_per_second': 0.629}
+```
+
+## Adding class weights to the loss computation in training
+
+Classes might be unbalanced. In these cases, it is important to weight the classes properly. 
+For this, we have generated an special trainer that adds class weights to the `CrossEntropyLoss` 
+function. These weights are automatically obtained from the Huggingface datasets. 
+
+We check now the performance of this function.
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --per_device_train_batch_size 16 \
+    --save_strategy "epoch" \
+    --class_weights \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.0001 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-pubmedbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+# Usig minmax_scale between 0.1 and 0.9 and reduction mean in the CrossEntropyLoss function we obtained
+
+                precision    recall  f1-score   support
+
+          CELL       0.69      0.84      0.76      4948
+     EXP_ASSAY       0.52      0.72      0.60      9885
+      GENEPROD       0.78      0.91      0.84     21869
+      ORGANISM       0.66      0.92      0.77      3464
+SMALL_MOLECULE       0.67      0.88      0.76      6431
+   SUBCELLULAR       0.64      0.84      0.73      3850
+        TISSUE       0.59      0.81      0.69      2975
+
+     micro avg       0.68      0.86      0.76     53422
+     macro avg       0.65      0.85      0.74     53422
+  weighted avg       0.68      0.86      0.76     53422
+
+{'test_loss': 0.2393004447221756, 'test_accuracy_score': 0.9390916097405456, 'test_precision': 0.677549387198601, 'test_recall': 0.8558084684212497, 'test_f1': 0.7563172565529906, 'test_runtime': 52.6869, 'test_s
+amples_per_second': 156.111, 'test_steps_per_second': 0.626}
+
+```
+
+Adding class weights and label smoothing factor together
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --label_smoothing_factor 0.5 \
+    --class_weights \
+    --per_device_train_batch_size 16 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.0001 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-pubmedbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+                precision    recall  f1-score   support
+
+          CELL       0.68      0.82      0.74      4948
+     EXP_ASSAY       0.55      0.68      0.61      9885
+      GENEPROD       0.78      0.91      0.84     21869
+      ORGANISM       0.70      0.91      0.79      3464
+SMALL_MOLECULE       0.68      0.86      0.76      6431
+   SUBCELLULAR       0.67      0.82      0.74      3850
+        TISSUE       0.62      0.80      0.70      2975
+
+     micro avg       0.69      0.84      0.76     53422
+     macro avg       0.67      0.83      0.74     53422
+  weighted avg       0.69      0.84      0.76     53422
+
+{'test_loss': 0.20707711577415466, 'test_accuracy_score': 0.940903593401981, 'test_precision': 0.6915936764004126, 'test_recall': 0.8410018344502265, 'test_f1': 0.7590150779237235, 'test_runtime': 53.2697, 'test_
+samples_per_second': 154.403, 'test_steps_per_second': 0.619}
+
+```
+
+The winnnigs are not so big. Let us try with the biolink large model to see if we actually win something compred to the 
+published model.
+
+```bsh
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --label_smoothing_factor 0.5 \
+    --class_weights \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.00005 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-biolinkbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+               precision    recall  f1-score   support
+
+          CELL       0.68      0.82      0.75      4948
+     EXP_ASSAY       0.56      0.68      0.61      9885
+      GENEPROD       0.79      0.91      0.84     21865
+      ORGANISM       0.70      0.91      0.79      3464
+SMALL_MOLECULE       0.71      0.86      0.77      6431
+   SUBCELLULAR       0.67      0.82      0.74      3850
+        TISSUE       0.63      0.82      0.71      2975
+
+     micro avg       0.70      0.84      0.76     53418
+     macro avg       0.68      0.83      0.75     53418
+  weighted avg       0.70      0.84      0.76     53418
+
+{'test_loss': 0.20438554883003235, 'test_accuracy_score': 0.9416225972282724, 'test_precision': 0.7003247665740249, 'test_recall': 0.839660788498259, 'test_f1': 0.7636893005516583, 'test_runtime': 87.9633, 'test_
+samples_per_second': 93.505, 'test_steps_per_second': 0.375}
+
 ```
