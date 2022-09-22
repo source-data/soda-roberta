@@ -449,3 +449,127 @@ class PreparatorTOKCL:
             shuffle(examples)
             for example in examples:
                 f.write(f"{json.dumps(example)}\n")
+
+
+class PreparatorCharacterTOKCL:
+    """Processes source xml documents into examples that can be used in a token classification task.
+    It generates the examples on a character-level. This means, that the labels will be generated for each character.
+    This can be used with models such as CANINE. No tokenizer is needed in this approach.
+    The XML is used to generate labels according to the provided CodeMap.
+    The datset is then split into train, eval, and test set and saved into json line files.
+
+    Args:
+        source_file_path (Path):
+            The path to the source file.
+        dest_file_path (Path):
+            The path of the destination file where the files with the encoded labeled examples should be saved.
+        code_maps (List[CodeMap)]:
+            A list of CodeMap, each specifying Tthe XML-to-code mapping of label codes to specific combinations of tag name and attribute values.
+        max_length (int):
+            Maximum number of token in one example. Examples will be truncated.
+    """
+    def __init__(
+        self,
+        source_dir_path: str,
+        dest_dir_path: str,
+        code_maps: List[CodeMap],
+        max_length: int = config.max_length,
+        subsets: List[str] = ["train", "eval", "test"]
+    ):
+        self.source_dir_path = Path(source_dir_path)
+        self.subsets = subsets
+        self.dest_dir_path = dest_dir_path
+        if not self.dest_dir_path:
+            basename = self.source_dir_path.name
+            self.dest_dir_path = Path("/data/json") / basename
+        else:
+            self.dest_dir_path = Path(self.dest_dir_path)
+        if self.dest_dir_path.exists():
+            raise ValueError(f"{self.dest_dir_path} already exists! Will not overwrite pre-existing dataset.")
+        elif not self.dest_dir_path.parents[0].exists():
+            raise ValueError(f"{self.dest_dir_path.parents[0]} does not exist, cannot proceed")
+        else:
+            self.dest_dir_path.mkdir()
+            print(f"{self.dest_dir_path} created")
+        self.code_maps = code_maps
+        self.max_length = max_length
+
+    def run(self):
+        """Runs the coding and labeling of xml examples.
+        Saves the resulting text files to the destination directory.
+        """
+        for subset in self.subsets:
+            print(f"Preparing: {subset}")
+            source_file_path = self.source_dir_path / f"{subset}.txt"
+            dest_file_path = self.dest_dir_path / f"{subset}.jsonl"
+            examples = []
+            with source_file_path.open() as f:
+                lines = f.readlines()
+                for line in tqdm(lines):
+                    xml_example: Element = fromstring(line)
+                    text, char_level_labels = self._encode_example(xml_example)
+                    examples.append({
+                        'text': text,
+                        'label_ids': char_level_labels})
+            self._save_json(examples, dest_file_path)
+
+    def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
+        xml_encoder = XMLEncoder(xml)
+        inner_text = innertext(xml_encoder.element)
+        char_level_labels_dict = {}
+
+        for code_map in self.code_maps:
+            entity_labels_element = xml_encoder.encode(code_map)
+            if code_map.name != "panel_start":
+                char_level_labels = entity_labels_element["label_ids"]
+                char_level_labels = ['O' if i is None else i for i in char_level_labels]
+                char_level_labels = self._labels_to_iob2(code_map, char_level_labels)
+            else:
+                char_level_labels = ["O"] * len(entity_labels_element['label_ids'])
+                offsets = entity_labels_element["offsets"]
+                for offset in offsets:
+                    char_level_labels[offset[0]] = "B-PANEL_START"
+                    
+            char_level_labels_dict[code_map.name] = char_level_labels
+                    
+        return inner_text,  char_level_labels_dict
+
+    @staticmethod
+    def _labels_to_iob2(code_map: CodeMap, labels: List) -> List: # Checked
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying The XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            labels List:        List of labels for each word inside the XML elements.
+
+        Returns:
+            List[str]           Word-level tokenized labels in IOB2 format
+
+        """
+        iob2_labels = []
+ 
+        for idx, label in enumerate(labels):
+            if code_map.name == "panel_start":
+                iob2_labels.append("O")
+
+            if code_map.name != "panel_start":
+                if label == "O":
+                    iob2_labels.append(label)
+
+                if label != "O":
+                    if idx == 0:
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] != label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] == label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2])
+
+        return iob2_labels
+
+    @staticmethod
+    def _save_json(examples: List, dest_file_path: Path):
+        # saving line by line to json-line file
+        with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
+            shuffle(examples)
+            for example in examples:
+                f.write(f"{json.dumps(example)}\n")
