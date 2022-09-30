@@ -13,7 +13,7 @@ services:
     - tensorboard
     - celery
     - flower
-#    runtime: nvidia
+  #  runtime: nvidia
     deploy: &gpus
       resources:
         reservations:
@@ -55,6 +55,9 @@ services:
     volumes: *volumes
     working_dir: /app
     command: celery --app=smtag worker --loglevel=info
+    environment:
+      - LC_ALL=C.UTF-8
+      - LANG=C.UTF-8   
 
   flower:
     image: smtag

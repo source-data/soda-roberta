@@ -124,6 +124,8 @@ Tokenize the data:
 
 This can take a while for large datasets. To follow the progress, visit http://localhost:5555 (via the celery flower service)
 
+
+
 ## Train language model
 
 Four tasks (or data configurations) are supported:
@@ -180,7 +182,17 @@ Prepare the datasets for NER, ROLES and PANELIZATION. This step generates the da
     mkdir /data/json/sd_panels
     python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
     mkdir /data/json/sd_panelization
-    python -m tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization
+
+### Character-level data
+
+We also offer the option of generating the character level data for NER. This might be of interest to generate token classification models 
+with pre-trained weights such as CANINE. 
+
+    mkdir /data/json/sd_character_panels
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels /data/json/sd_character_panels -C
+    mkdir /data/json/sd_character_panelization
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panelization /data/json/sd_character_panelization -C -P
 
 ## Train the models
 

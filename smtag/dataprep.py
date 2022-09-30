@@ -296,9 +296,10 @@ class PreparatorTOKCL:
                 lines = f.readlines()
                 for line in tqdm(lines):
                     xml_example: Element = fromstring(line)
-                    tokens, token_level_labels = self._encode_example(xml_example)
+                    tokens, token_level_labels, text = self._encode_example(xml_example)
                     examples.append({
                         'words': tokens,
+                        'text': text,
                         'label_ids': token_level_labels})
             self._save_json(examples, dest_file_path)
 
@@ -324,7 +325,7 @@ class PreparatorTOKCL:
 
             token_level_labels_dict[code_map.name] = token_level_labels
 
-        return words,  token_level_labels_dict
+        return words,  token_level_labels_dict, inner_text
 
     def _from_char_to_token_level_labels(self, code_map: CodeMap, text: List[str], labels: List) -> List: # Checked
         """

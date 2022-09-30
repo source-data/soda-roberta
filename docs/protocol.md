@@ -1983,3 +1983,24 @@ SMALL_MOLECULE       0.71      0.86      0.77      6431
 samples_per_second': 93.505, 'test_steps_per_second': 0.375}
 
 ```
+giacomomiolo/electramed_base_scivocab_1M
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "giacomomiolo/electramed_base_scivocab_1M" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --label_smoothing_factor 0.5 \
+    --class_weights \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.00005 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-electramed" \
+    --do_train \
+    --do_eval \
+    --do_predict 

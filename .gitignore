@@ -140,3 +140,6 @@ seq2seq_models/
 sd-ner-v2/
 
 test_seq2seq_metrics/
+generic_tokenizer_extractor.ipynb
+protocol_testing_seq2seq_model.ipynb
+Visualizing panelization.ipynb
