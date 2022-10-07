@@ -32,6 +32,11 @@ if __name__ == "__main__":
     parser.add_argument("--masked_data_collator", 
                         action="store_true", 
                         help="Whether to randomly mask tokens in the data collator or not.")
+    parser.add_argument("--ner_labels",
+                        nargs="*", 
+                        type=str,
+                        default="all" ,
+                        help="Which NER entities are to be classify. Choose all or any combination of: [GENEPROD, TISSUE, ORGANISM, SMALL_MOLECULE, EXP_ASSAY, CELL, SUBCELLULAR].")
     parser.add_argument("--hyperparameter_search", 
                         action="store_true", 
                         help="""Activates the hyperparameter search for the model.
@@ -64,6 +69,7 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     from_pretrained = args.from_pretrained
     add_prefix_space = args.add_prefix_space
+    labels = ["all"] if args.ner_labels == "all" else args.ner_labels
     model_type = config.model_type
     tokenizer = config.tokenizer  
     masked_data_collator = args.masked_data_collator  
@@ -143,7 +149,8 @@ if __name__ == "__main__":
             data_dir=data_dir,
             no_cache=no_cache,
             tokenizer=tokenizer,
-            add_prefix_space=add_prefix_space
+            add_prefix_space=add_prefix_space,
+            ner_labels=labels
         )
 
         trainer()

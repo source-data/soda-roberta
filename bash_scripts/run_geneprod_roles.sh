@@ -46,7 +46,7 @@ for i in ${!small_model_list[@]}; do
         --do_eval \
         --do_predict 
         --report_to none \
-        --run_name "${small_model_names[$i]}_SMALL_MOL_ROLES" > "data/results/geneprod_roles/${small_model_names[$i]}.txt"
+        --run_name "${small_model_names[$i]}_GENEPROD_ROLES" > "data/results/geneprod_roles/${small_model_names[$i]}.txt"
 done
 
 for i in ${!large_model_list[@]}; do
@@ -64,5 +64,5 @@ for i in ${!large_model_list[@]}; do
         --do_train \
         --do_eval \
         --do_predict \
-        --run_name "${large_model_names[$i]}_SMALL_MOL_ROLES" > "data/results/geneprod_roles/${large_model_names[$i]}.txt"
+        --run_name "${large_model_names[$i]}_GENEPROD_ROLES" > "data/results/geneprod_roles/${large_model_names[$i]}.txt"
 done

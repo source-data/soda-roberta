@@ -197,6 +197,13 @@ class SourceDataCodes(Enum):
                 'attributes': {
                     'category': ['assay'],
                 }
+            },
+            8: {
+                'label': 'DISEASE',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'category': ['disease'],
+                }
             }
         })
     )

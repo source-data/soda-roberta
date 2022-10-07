@@ -1,5 +1,5 @@
 # https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple, Union, List
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ from transformers import (
     AutoConfig, BertTokenizerFast
 )
 from transformers.integrations import TensorBoardCallback
-from datasets import load_dataset, DatasetDict
+from datasets import Dataset, load_dataset, DatasetDict
 from ..models.experimental import (
     BecauseTokenClassification,
     BecauseConfigForTokenClassification,
@@ -54,6 +54,7 @@ class TrainTokenClassification:
                 no_cache: bool = True,
                 tokenizer: str = None,
                 add_prefix_space: bool = False,
+                ner_labels: Union[str, List[str]] = "all"
                ):
 
         self.training_args = deepcopy(training_args)
@@ -68,6 +69,8 @@ class TrainTokenClassification:
         self.config = config
         self.tokenizer_pretrained = tokenizer.name_or_path
         self.add_prefix_space = add_prefix_space
+        self.ner_labels = ner_labels
+
 
     def __call__(self):
         # Define the tokenizer
@@ -76,10 +79,6 @@ class TrainTokenClassification:
         # Load the dataset either from 🤗 or from local
         self.train_dataset, self.eval_dataset, self.test_dataset = self._data_loader()
 
-        # Get the data labels
-        self.id2label, self.label2id = self._get_data_labels()
-        logger.info("\nTraining with {len(self.train_dataset)} examples.")
-        logger.info(f"Evaluating on {len(self.eval_dataset)} examples.")
         if self.training_args.do_predict:
             logger.info(f"Testing on {len(self.test_dataset)} examples.")
 
@@ -252,6 +251,12 @@ class TrainTokenClassification:
         logger.info(f"Obtaining data from the HuggingFace 🤗 Hub: load_dataset('{self.loader_path}',' {self.task}')")
         data = load_dataset(self.loader_path, self.task, ignore_verifications=True)
 
+        # Get the data labels
+        self.dataset_id2label, self.dataset_label2id = self._get_data_labels(data["train"])
+        self.id2label, self.label2id = self._generate_new_label_dict()
+        logger.info(f"Training with {len(data['train'])} examples.")
+        logger.info(f"Evaluating on {len(data['validation'])} examples.")
+
         if self.loader_path == "EMBO/sd-nlp":
             tokenized_data = deepcopy(data)
             if not self.masked_data_collator:
@@ -261,14 +266,54 @@ class TrainTokenClassification:
                 columns_to_remove = ['words']
             else:
                 columns_to_remove = ['words', 'tag_mask']
-            print(self.add_prefix_space)
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
                 batched=True,
                 remove_columns=columns_to_remove)
 
+        if (self.ner_labels != "all") or (self.ner_labels not in ["all"]):
+            tokenized_data = tokenized_data.map(
+                self._substitute_training_labels,
+                batched=True)
+
         return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
 
+    def _substitute_training_labels(self, examples):
+        
+        all_labels = examples['labels']
+        new_labels = []
+        new_tag_mask = []
+        for labels in all_labels:
+            new_labels_sentence = []
+            for label in labels:
+                if label == -100:
+                    new_labels_sentence.append(label)
+                elif self.dataset_id2label[label] in list(self.id2label.values()):
+                    new_labels_sentence.append(self.label2id[self.dataset_id2label[label]])
+                else:
+                    new_labels_sentence.append(0)
+            new_labels.append(new_labels_sentence)
+            new_tag_mask.append([0 if tag == 0 else 1 for tag in new_labels[-1]])
+
+        examples['labels'] = new_labels
+        examples['tag_mask'] = new_tag_mask
+
+        return examples
+        
+    def _generate_new_label_dict(self):
+        id2label, label2id = {}, {}
+        if (self.ner_labels == ["all"]) or (self.ner_labels == "all"):
+            id2label, label2id = self.dataset_id2label, self.dataset_label2id
+        else:
+            new_labels = ["O"]
+            for label in self.ner_labels:
+                new_labels.append(f"B-{label}")
+                new_labels.append(f"I-{label}")
+            for i, label in enumerate(new_labels):
+                id2label[i] = label
+                label2id[label] = i
+        return id2label, label2id
+        
 
     def _tokenize_and_align_labels(self, examples) -> DatasetDict:
         """
@@ -351,15 +396,15 @@ class TrainTokenClassification:
                                                                max_length=512)
         return data_collator
 
-    def _get_data_labels(self) -> Tuple[dict, dict]:
-        num_labels = self.train_dataset.info.features['labels'].feature.num_classes
-        label_list = self.train_dataset.info.features['labels'].feature.names
+    def _get_data_labels(self, data: Dataset) -> Tuple[dict, dict]:
+        num_labels = data.info.features['labels'].feature.num_classes
+        label_list = data.info.features['labels'].feature.names
         id2label, label2id = {}, {}
         for class_, label in zip(range(num_labels), label_list):
             id2label[class_] = label
             label2id[label] = class_
-        print(f"\nTraining on {num_labels} features:")
-        print(", ".join(label_list))
+        print(f"The data set has {num_labels} features: {label_list}")
+        print(f"\nTraining on {len(self.ner_labels)} features: {self.ner_labels}")
         return id2label, label2id
 
     def _get_masked_data_collator_args(self) -> dict:
