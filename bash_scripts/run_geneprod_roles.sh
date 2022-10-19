@@ -1,4 +1,5 @@
 #!/bin/bash
+mkdir data/results/geneprod_roles/
 
 small_model_list=("EMBO/bio-lm" \
             "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
@@ -42,10 +43,10 @@ for i in ${!small_model_list[@]}; do
         --learning_rate 0.0001 \
         --disable_tqdm False \
         --masked_data_collator \
+        --report_to none \
         --do_train \
         --do_eval \
-        --do_predict 
-        --report_to none \
+        --do_predict \
         --run_name "${small_model_names[$i]}_GENEPROD_ROLES" > "data/results/geneprod_roles/${small_model_names[$i]}.txt"
 done
 
@@ -53,7 +54,7 @@ for i in ${!large_model_list[@]}; do
     python -m smtag.cli.tokcl.train \
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task GENEPROD_ROLES \
-        --from_pretrained ${large_model_list$i]} \
+        --from_pretrained ${large_model_list[$i]} \
         --per_device_train_batch_size 8 \
         --add_prefix_space \
         --num_train_epochs 2.0 \

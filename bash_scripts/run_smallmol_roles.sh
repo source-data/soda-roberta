@@ -31,12 +31,14 @@ large_model_names=(
             "BioMegatron345mUncased" \
             "BioMegatron345mCased")
 
+mkdir data/results/smallmol_roles
+
 for i in ${!small_model_list[@]}; do
     python -m smtag.cli.tokcl.train \
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task SMALL_MOL_ROLES \
-        --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
-        --per_device_train_batch_size 16 \
+        --from_pretrained ${small_model_list[$i]} \
+        --per_device_train_batch_size 32 \
         --add_prefix_space \
         --num_train_epochs 2.0 \
         --learning_rate 0.0001 \
@@ -53,11 +55,11 @@ for i in ${!large_model_list[@]}; do
     python -m smtag.cli.tokcl.train \
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task SMALL_MOL_ROLES \
-        --from_pretrained "EMBO/BioMegatron345mCased" \
-        --per_device_train_batch_size 4 \
+        --from_pretrained ${large_model_list[$i]} \
+        --per_device_train_batch_size 8 \
         --add_prefix_space \
         --num_train_epochs 2.0 \
-        --learning_rate 0.000025 \
+        --learning_rate 0.00005 \
         --disable_tqdm False \
         --masked_data_collator \
         --report_to none \

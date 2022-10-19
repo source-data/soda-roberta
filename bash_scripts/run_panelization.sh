@@ -1,4 +1,5 @@
 #!/bin/bash
+mkdir data/results/panelization
 
 small_model_list=("EMBO/bio-lm" \
             "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext" \
@@ -36,7 +37,7 @@ for i in ${!small_model_list[@]}; do
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task PANELIZATION \
         --from_pretrained ${small_model_list[$i]} \
-        --per_device_train_batch_size 16 \
+        --per_device_train_batch_size 32 \
         --add_prefix_space \
         --learning_rate 0.0001 \
         --num_train_epochs 2.0 \
@@ -53,7 +54,7 @@ for i in ${!large_model_list[@]}; do
         --loader_path "EMBO/sd-nlp-non-tokenized" \
         --task PANELIZATION \
         --from_pretrained ${large_model_list[$i]} \
-        --per_device_train_batch_size 4 \
+        --per_device_train_batch_size 8 \
         --save_strategy "epoch" \
         --evaluation_strategy "epoch" \
         --add_prefix_space \

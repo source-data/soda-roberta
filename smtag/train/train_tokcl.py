@@ -10,7 +10,7 @@ from transformers import (
     TrainingArguments, DataCollatorForTokenClassification,
     Trainer, IntervalStrategy,
     BartModel, DefaultFlowCallback, EarlyStoppingCallback,
-    AutoConfig, BertTokenizerFast
+    AutoConfig, BertTokenizerFast, CanineConfig
 )
 from transformers.integrations import TensorBoardCallback
 from datasets import Dataset, load_dataset, DatasetDict
@@ -70,7 +70,7 @@ class TrainTokenClassification:
         self.tokenizer_pretrained = tokenizer.name_or_path
         self.add_prefix_space = add_prefix_space
         self.ner_labels = ner_labels
-
+        self.max_length = self.config.max_length if "canine" not in self.from_pretrained else 1024*4
 
     def __call__(self):
         # Define the tokenizer
@@ -97,7 +97,7 @@ class TrainTokenClassification:
                                                                     id2label=self.id2label,
                                                                     label2id=self.label2id,
                                                                     # classifier_dropout=self.training_args.classifier_dropout,
-                                                                    max_length=self.config.max_length)
+                                                                    max_length=self.max_length)
     
         # Define the trainer
         if self.model_type == "Autoencoder":
@@ -257,6 +257,9 @@ class TrainTokenClassification:
         logger.info(f"Training with {len(data['train'])} examples.")
         logger.info(f"Evaluating on {len(data['validation'])} examples.")
 
+        if self.loader_path == "EMBO/sd-character-level-ner":
+            data = data.rename_column("text", "words")
+
         if self.loader_path == "EMBO/sd-nlp":
             tokenized_data = deepcopy(data)
             if not self.masked_data_collator:
@@ -265,7 +268,10 @@ class TrainTokenClassification:
             if self.masked_data_collator:
                 columns_to_remove = ['words']
             else:
-                columns_to_remove = ['words', 'tag_mask']
+                if self.loader_path != "EMBO/sd-character-level-ner":
+                    columns_to_remove = ['words', 'tag_mask']
+                else:
+                    columns_to_remove = ['words']
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
                 batched=True,
@@ -325,21 +331,32 @@ class TrainTokenClassification:
             `datasets.DatasetDict` with entries tokenized to the `AutoTokenizer`
         """
         
-        tokenized_inputs = self.tokenizer(examples['words'],
-                                        truncation=True,
-                                        is_split_into_words=True,
-                                        max_length=self.config.max_length)
 
-        all_labels = examples['labels']
-        new_labels = []
-        tag_mask = []
-        for i, labels in enumerate(all_labels):
-            word_ids = tokenized_inputs.word_ids(i)
-            new_labels.append(self._align_labels_with_tokens(labels, word_ids))
-            tag_mask.append([0 if tag == 0 else 1 for tag in new_labels[-1]])
-
-        tokenized_inputs['labels'] = new_labels
-        tokenized_inputs['tag_mask'] = tag_mask
+        if self.loader_path != "EMBO/sd-character-level-ner":
+            tokenized_inputs = self.tokenizer(examples['words'],
+                                            truncation=True,
+                                            is_split_into_words=True,
+                                            max_length=self.max_length)
+            all_labels = examples['labels']
+            new_labels = []
+            tag_mask = []
+            for i, labels in enumerate(all_labels):
+                word_ids = tokenized_inputs.word_ids(i)
+                new_labels.append(self._align_labels_with_tokens(labels, word_ids))
+                tag_mask.append([0 if tag == 0 else 1 for tag in new_labels[-1]])
+            tokenized_inputs['labels'] = new_labels
+            tokenized_inputs['tag_mask'] = tag_mask
+        else:
+            tokenized_inputs = self.tokenizer(examples['words'],
+                                            truncation=True,
+                                            padding=True,
+                                            is_split_into_words=False,
+                                            max_length=self.max_length)
+            all_labels = examples['labels']
+            tag_mask = []
+            for i, labels in enumerate(all_labels):
+                tag_mask.append([0 if tag == 0 else 1 for tag in labels])
+            tokenized_inputs['tag_mask'] = tag_mask
 
         return tokenized_inputs
 
@@ -392,8 +409,8 @@ class TrainTokenClassification:
             logger.info("Instantiating DataCollatorForTokenClassification")
             data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
                                                                return_tensors='pt',
-                                                               padding=True,
-                                                               max_length=512)
+                                                               padding="max_length",
+                                                               max_length=self.max_length)
         return data_collator
 
     def _get_data_labels(self, data: Dataset) -> Tuple[dict, dict]:
@@ -440,6 +457,8 @@ class TrainTokenClassification:
     def _max_position_embeddings(self) -> int:
         if any(x in self.from_pretrained for x in ["roberta", "gpt2"]) or self.get_roberta:
             return config.max_length + 2
+        elif "canine" in self.from_pretrained:
+            return CanineConfig.from_pretrained(self.from_pretrained).max_position_embeddings
         else:
             return config.max_length
 
