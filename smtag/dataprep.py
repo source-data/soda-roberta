@@ -451,6 +451,30 @@ class PreparatorTOKCL:
             for example in examples:
                 f.write(f"{json.dumps(example)}\n")
 
+    @staticmethod
+    def _cleaning_rules(text, alternative):
+        if '"button"' in text:
+            text = alternative
+        to_replace = {
+            "’": "'",
+            "–": "-",
+            "\xa0": " ",
+            "&amp;": "&",
+            "&amp;amp;": "&",
+            "&nbsp;": " ",
+            "\u2009": " ",
+            "&gt;": ">",
+            "&lt;": "<",
+            "amp;": "",
+            ") ": ")",
+        }
+
+        text = text.strip()
+        for x, y in to_replace.items():
+            text = text.replace(x, y)
+
+        return text
+
 
 class PreparatorCharacterTOKCL:
     """Processes source xml documents into examples that can be used in a token classification task.
