@@ -310,6 +310,11 @@ class PreparatorTOKCL:
 
         for code_map in self.code_maps:
             xml_encoded = xml_encoder.encode(code_map)
+            print(xml_encoded)
+            stop
+
+
+
             if code_map.name != "panel_start":
                 char_level_labels = xml_encoded['label_ids']
                 words, token_level_labels = self._from_char_to_token_level_labels(code_map,
