@@ -124,7 +124,23 @@ Tokenize the data:
 
 This can take a while for large datasets. To follow the progress, visit http://localhost:5555 (via the celery flower service)
 
+### Defining a new tokenizer
 
+Using available models is handy but it comes with the inconvenience that you need to use them on the vocabulary (tokenizer) they were trained on.
+We add a simple module where users can define their own tokenizer, that can be used in the previous step (by properly configuring the 
+`config.py` file) to generate a new tokenizer that can then be used to train a special in-domain model from scratch.
+
+```bsh
+    python -m smtag.cli.lm.tokenizer \
+        /app/data/text/oapmc_abstracts_figs/ \
+        roberta-base \
+        excell-roberta-ls \
+        --full_articles_path "/app/data/text/pubmed-full/pubmed-articles.jsonl" \
+        --vocab_size 30000 \
+        --prob_keep_fig 0.5 \
+        --prob_keep_full 0.5 \
+        --batch_size 100
+```
 
 ## Train language model
 
