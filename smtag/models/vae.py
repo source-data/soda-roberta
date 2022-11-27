@@ -1119,7 +1119,7 @@ class GraphEncoder(BartEncoder):
 
         # compress
         y = self.vae_dropout(x)
-        y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
+        y = self.fc_compress(y)  # -> B x L x H
         y = self.norm_compress(y)
         y = self.act_fct(y)
         hidden_before_latent = y
@@ -1334,6 +1334,9 @@ class CGraphVAEForLM(VAEForLM):
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
+                reversed_decoder_input_ids = shift_tokens_right(
+                    reverse(labels), self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
@@ -1368,7 +1371,7 @@ class CGraphVAEForLM(VAEForLM):
         adjascency_matrix = encoder_outputs.representation[0]
 
         decoder_outputs[1] = self.decoder(
-            input_ids=reverse(decoder_input_ids),
+            input_ids=reversed_decoder_input_ids,
             encoder_hidden_states=reverse(encoder_outputs.last_hidden_state),  # in BartModel encoder_hidden_states=encoder_outputs[0]
             latent_variable=self.transpose_adj_matrix(adjascency_matrix),
             attention_mask=reverse(decoder_attention_mask),
@@ -1397,7 +1400,7 @@ class CGraphVAEForLM(VAEForLM):
             loss_fct = nn.CrossEntropyLoss()
             loss_lm = self.gamma * sum([
                 loss_fct(logits[i].view(-1, self.decoder.config.vocab_size), both_directions[i].view(-1))
-                for i in 2
+                for i in range(2)
             ])
             loss_z = encoder_outputs.loss  # loss on latent var
             loss = loss_lm + loss_z  # combine with language modelling loss
