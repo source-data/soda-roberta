@@ -223,7 +223,7 @@ class Tagger:
         len_ = 0
         for panel in panelized[0]["input_ids"]:
             len_ += len(panel)
-        print(len_)
+
         self.panelized = panelized
         for panel_group in panelized:
             panel_group = self._truncate(panel_group)
@@ -609,11 +609,15 @@ class LongTextTokenClassificationPipeline(ChunkPipeline):
                     panel_group_text.append(entity["word"])
                     did_panel_start = False
 
+        if panel_group_text == []:
+            panel_group_text = [sentence]
+
         panel_groups = self.tokenizer(panel_group_text,
                                 return_special_tokens_mask=True,
                                 return_token_type_ids=False,
                                 return_attention_mask=False)
-        return panel_groups                
+        
+        return panel_groups
         
     def _to_tensor(self, inputs: List[Any]) -> Union[tf.Tensor, torch.tensor, np.ndarray]:
         if self.framework == "pt":
