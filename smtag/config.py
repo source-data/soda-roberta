@@ -31,8 +31,8 @@ class Config:
     asynchr: bool = True
     twin_delimiter: str = "###tt9HHSlkWoUM###"  # to split concatenated twin examples
     hp_search_config: dict = None
-    hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining()
-    hp_search_reporter: tune.progress_reporter.CLIReporter = CLIReporter()
+    hp_search_scheduler: pbt.PopulationBasedTraining = None
+    hp_search_reporter: tune.progress_reporter.CLIReporter = None
 
     def __post_init__(
         self,
@@ -142,9 +142,13 @@ HP_SEARCH_REPORTER = CLIReporter(
 
 config = Config(
     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-    from_pretrained="roberta-base",  # leave empty if training a language model from scratch
+    from_pretrained="microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",  # leave empty if training a language model from scratch
     model_type="Autoencoder",
     asynchr=True,  # we need ordered examples while async returns results in non deterministic way
+    truncation=True,
+    celery_batch_size=1000,
+    nlp=spacy.load("en_core_web_sm"),
+    fast=True,
     hp_search_config=HP_SEARCH_CONFIG,
     hp_search_scheduler=HP_SEARCH_SCHEDULER,
     hp_search_reporter=HP_SEARCH_REPORTER

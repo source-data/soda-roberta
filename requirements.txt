@@ -14,3 +14,4 @@ spacy==2.3.5
 notebook
 ipywidgets  # https://ipywidgets.readthedocs.io/en/stable/user_install.html
 plotly
+allennlp==2.10.1

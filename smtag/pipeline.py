@@ -17,6 +17,7 @@ import numpy as np
 from transformers.models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 from transformers.models.bert.tokenization_bert import BasicTokenizer
 from math import ceil
+import warnings
 
 class Entity:
 
@@ -111,7 +112,10 @@ class Serializer:
                 entity_list = []
                 entity = None
                 for i in range(len(label_ids)):
-                    special_token = special_tokens_mask[i]
+                    try:
+                        special_token = special_tokens_mask[i]
+                    except IndexError:
+                        special_token = 1
                     # ignore positions that are special tokens
                     if special_token == 0:
                         input_id_ner = label_ids[i]
@@ -222,6 +226,7 @@ class Tagger:
         print(len_)
         self.panelized = panelized
         for panel_group in panelized:
+            panel_group = self._truncate(panel_group)
             ner_results = self.ner(panel_group)
             geneprod_roles_results = self.roles(ner_results, ['B-GENEPROD', 'I-GENEPROD'], self.geneprod_role_model)
             small_mol_roles_results = self.roles(ner_results, ['B-SMALL_MOLECULE', 'I-SMALL_MOLECULE'], self.small_mol_role_model)
@@ -278,9 +283,8 @@ class Tagger:
             batch.append(panel_group)
         return batch
 
-    def ner(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]:
-        outputs = self.predict(inputs, self.ner_model)
-        return outputs
+    def ner(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]: 
+        return self.predict(inputs, self.ner_model)
 
     def roles(
         self,
@@ -309,7 +313,7 @@ class Tagger:
             examples = self.tokenizer.pad(
                 inputs,
                 return_tensors="pt",
-                padding=True  # this will pad to the max length in the batch
+                padding=True,  # this will pad to the max length in the batch
             )
         else:
             # already as tensor; need to clone before popping things out
@@ -339,7 +343,15 @@ class Tagger:
             "special_tokens_mask": special_tokens_mask.tolist(),
         }
         return predictions
-
+    
+    def _truncate(self, panel_group):
+        new_inputs = {}
+        for key, value in panel_group.items():
+            if key == "input_ids":
+                new_inputs[key] = [value[0][:self.panel_model.config.max_position_embeddings-1] + [self.tokenizer.sep_token_id]]
+            else:
+                new_inputs[key] = [value[0][:self.panel_model.config.max_position_embeddings]]
+        return new_inputs
 
 class SmartTagger(Tagger):
 

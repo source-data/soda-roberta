@@ -39,6 +39,7 @@ import itertools
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, minmax_scale
 from sklearn.utils.class_weight import compute_class_weight
+from ..excell_roberta.modeling_excell_roberta import EXcellRobertaForTokenClassification
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -90,14 +91,24 @@ class TrainTokenClassification:
 
         # Define the model 
         logger.info(f"Instantiating model for token classification {self.from_pretrained}.")
-        self.model = AutoModelForTokenClassification.from_pretrained(
-                                                                    self.from_pretrained,
-                                                                    num_labels=len(list(self.label2id.keys())),
-                                                                    max_position_embeddings=self._max_position_embeddings(),
-                                                                    id2label=self.id2label,
-                                                                    label2id=self.label2id,
-                                                                    # classifier_dropout=self.training_args.classifier_dropout,
-                                                                    max_length=self.max_length)
+        if "excell-roberta" in self.from_pretrained:
+            self.model = EXcellRobertaForTokenClassification.from_pretrained(
+                                                                        self.from_pretrained,
+                                                                        num_labels=len(list(self.label2id.keys())),
+                                                                        max_position_embeddings=self._max_position_embeddings(),
+                                                                        id2label=self.id2label,
+                                                                        label2id=self.label2id,
+                                                                        # classifier_dropout=self.training_args.classifier_dropout,
+                                                                        max_length=self.max_length)
+        else:
+            self.model = AutoModelForTokenClassification.from_pretrained(
+                                                                        self.from_pretrained,
+                                                                        num_labels=len(list(self.label2id.keys())),
+                                                                        max_position_embeddings=self._max_position_embeddings(),
+                                                                        id2label=self.id2label,
+                                                                        label2id=self.label2id,
+                                                                        # classifier_dropout=self.training_args.classifier_dropout,
+                                                                        max_length=self.max_length)
     
         # Define the trainer
         if self.model_type == "Autoencoder":
@@ -187,7 +198,6 @@ class TrainTokenClassification:
             logger.info(f"Testing on {len(self.test_dataset)}.")
             self.trainer.args.prediction_loss_only = False
             pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
-            print(f"{pred.metrics}")
 
         if self.training_args.push_to_hub:
             print(f"Uploading the model {self.trainer.model} and tokenizer {self.trainer.tokenizer} to HuggingFace")
@@ -230,7 +240,10 @@ class TrainTokenClassification:
                                                                 is_pretokenized=True, 
                                                                 add_prefix_space=self.add_prefix_space
                                                                 )
-                self.get_roberta = False
+                if any(x in self.tokenizer_pretrained for x in ["roberta", "gpt2"]):
+                    self.get_roberta = True
+                else:
+                    self.get_roberta = False
             except OSError:
                 tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_pretrained, 
                                                                 is_pretokenized=True, 
@@ -470,7 +483,7 @@ class HpSearchForTokenClassification(TrainTokenClassification):
                 cpus_per_trial: int = 0,
                 hp_tune_samples: int = 8,
                 hp_search_config: dict = {},
-                hp_search_scheduler: pbt.PopulationBasedTraining = PopulationBasedTraining(),
+                hp_search_scheduler: pbt.PopulationBasedTraining = None,
                 hp_search_reporter: tune.progress_reporter.CLIReporter = CLIReporter(),
                 hp_experiment_name: str = "tune_transformer_pbt",
                 hp_local_dir: str = "/app/ray_results/",

@@ -13,6 +13,15 @@ class XMLEncoder:
     """
     def __init__(self, element: Element):
         self.element = element
+        panels = element.findall('sd-panel')
+        _text_chunks = []
+        for panel in panels:
+            inner_text = innertext(panel)
+            if inner_text in _text_chunks:
+                parent = panel.getparent()
+                parent.remove(panel)
+                continue
+            _text_chunks.append(inner_text)
 
     def encode(self, code_map: CodeMap):
         """Encodes an Element into a list of character-level label codes (int).
@@ -37,6 +46,7 @@ class XMLEncoder:
         self.code_map = code_map
         encoded, offsets, _ = self._encode(self.element)
         labels_and_offsets = {'label_ids': encoded, 'offsets': offsets, 'xml': tostring(self.element)}
+
         for start, end in offsets:
             if end - start > 0:  # check only if not zero length
                 assert encoded[start] == encoded[end-1], f"{encoded[start:end]}\nstart={start}, end={end},\n{innertext(self.element)}\n{innertext(self.element)[start:end]}\n{tostring(self.element)}"

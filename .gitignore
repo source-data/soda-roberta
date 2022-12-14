@@ -145,3 +145,8 @@ test/
 untracked_notebooks
 
 excel-roberta-ls/
+
+excell-roberta-tokenizer/
+excell-roberta-lm/
+test-own-tokenizer.json
+*.csv

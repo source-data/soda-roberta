@@ -14,10 +14,9 @@ class ExcellRobertaTokenizer:
     """
     Tokenizer class similar to RoBERTa, but with biomedical vocabulary.
     """
-    def __init__(self, tokenizer_name, vocab_size: int = 52000, min_frequency: int = 50, individual_digits: bool = True):
+    def __init__(self, tokenizer_name, vocab_size: int = 52000, min_frequency: int = 50):
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self.individual_digits = individual_digits
         self.tokenizer_name = tokenizer_name
 
     def create_model(self, files: List[str]):
@@ -39,7 +38,7 @@ class ExcellRobertaTokenizer:
             ]
         )
 
-        tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_preffix_space=False)
+        tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_preffix_space=True)
             # [
             #     pre_tokenizers.ByteLevel(), 
             #     pre_tokenizers.WhitespaceSplit(), 
@@ -52,6 +51,7 @@ class ExcellRobertaTokenizer:
             min_frequency=self.min_frequency,
             special_tokens=["<s>", "</s>", "<unk>", "<pad>", "<mask>"],
             show_progress=True,
+            continuing_subword_prefix="##"
         )
         tok.train(files=files, trainer=trainer)
 
@@ -78,23 +78,21 @@ class ExcellRobertaTokenizer:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generates tokenizer based on 13GB of full PubMed articles and 12 million abstract and figure captions from OAPMC.")
-    parser.add_argument("file_name", help="Path to the file to be used to build the tokenizer.")
     parser.add_argument("tokenizer_name", nargs="?", help="name of the new tokenizer.")
+    parser.add_argument("--file_name", action='append', help="Path to the file to be used to build the tokenizer.")
     parser.add_argument("--vocab_size", default=52000, type=int, help="total size of the vocabularry.")
     parser.add_argument("--min_freq", default=50, type=int, help="Minimum times a token must appear to be considered.")
-    parser.add_argument("--individual_digits", action='store_true', help="Minimum times a token must appear to be considered.")
     args = parser.parse_args()
     file_name = args.file_name
+    assert isinstance(args.file_name, list)
     tokenizer_name = args.tokenizer_name
     vocab_size = args.vocab_size
     min_freq = args.min_freq
-    individual_digits = args.individual_digits
 
     new_tokenizer = ExcellRobertaTokenizer(
         tokenizer_name, 
         vocab_size=vocab_size, 
         min_frequency=min_freq, 
-        individual_digits =True
     )
-
-    new_tokenizer.create_model([file_name])
+    
+    new_tokenizer.create_model(file_name)

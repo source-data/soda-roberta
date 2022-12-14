@@ -87,7 +87,8 @@ class ShowExampleLM(ShowExample):
     COLOR_CHAR = {
             "blue": '\033[32;1m',
             "red": '\033[31;1m',
-            "close": '\033[0m'
+            "close": '\033[0m',
+            "white": '\033[37m'
         }
 
     def __init__(self, *args, **kwargs):
@@ -96,23 +97,30 @@ class ShowExampleLM(ShowExample):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
+            if "attention_mask" not in list(inputs.keys()):
+                inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
             pred = model(inputs["input_ids"], attention_mask=inputs["attention_mask"])
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
         inputs = {k: v[0] for k, v in inputs.items()}
+        mask = inputs["labels"].ge(0)
         self.to_console(inputs, pred_idx)
 
     def _correct_incorrect(self, input_id, label_idx, true_label, attention_mask=None) -> str:
         colored = ""
         is_prediction = true_label != -100
         if is_prediction:
-            decoded_pred = self.tokenizer.decode(label_idx)
-            decoded_label = self.tokenizer.decode(true_label)
+            decoded_pred = self.tokenizer.decode(label_idx).replace("##","")
+            decoded_label = self.tokenizer.decode(true_label).replace("##","")
             correct = (label_idx == true_label)
             color = "blue" if correct else "red"
             insert = decoded_pred if correct else f"{decoded_pred}[{decoded_label.strip()}]"
             colored = f"{self.COLOR_CHAR[color]}{insert}{self.COLOR_CHAR['close']}"
         elif attention_mask == 1 and input_id is not None:
-            colored += self.tokenizer.decode(input_id)
+            insert = self.tokenizer.decode(input_id).replace('##','')
+            colored = f"{self.COLOR_CHAR['white']}{insert}{self.COLOR_CHAR['close']}"
+        else:
+            insert = self.tokenizer.decode(input_id).replace('##','')
+            colored = f"{self.COLOR_CHAR['white']}{insert}{self.COLOR_CHAR['close']}"
         return colored
 
 
