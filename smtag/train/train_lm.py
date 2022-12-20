@@ -270,14 +270,15 @@ def train(
                 beta=1.0,
                 gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
-                num_nodes=4,
+                num_nodes=6,
                 num_entity_features=64,
                 sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
-                residuals=data_config_name in (targeted_masking_tasks + ["MLM"]),
+                residuals=False,
                 latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
+                flip_proba=0.5,
             )
-            model = GraphVAEForLM(
+            model = CGraphVAEForLM(
                 config=model_config,
                 pretrained=pretrained
             )
@@ -333,7 +334,7 @@ def train(
     elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
         show_callbacks = [ShowExampleTextGeneration(tokenizer)]
     elif model_type in ["CGVAE"]:
-        show_callbacks = [ShowExampleCGraphVAEForLM(tokenizer)]
+        show_callbacks = [ShowExampleCGraphVAEForLM(tokenizer)]  # [ShowExampleCGraphVAEForLM(tokenizer)]
     else:
         show_callbacks = [ShowExampleLM(tokenizer)]
     trainer = MyTrainer(

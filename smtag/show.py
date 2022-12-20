@@ -99,7 +99,7 @@ class ShowExampleLM(ShowExample):
     def on_evaluate(self, *args, model=None, eval_dataloader=None, **kwargs):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
-            pred = model(inputs["input_ids"], attention_mask=inputs["attention_mask"])
+            pred = model(**inputs)
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
         inputs = {k: v[0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
@@ -201,12 +201,11 @@ class ShowExampleCGraphVAEForLM(ShowExampleLM):
         with torch.no_grad():
             inputs = self.pick_random_example(eval_dataloader)
             pred = model(**inputs)
-            # pred.logits is an array with predictions for twin examples
-            for i, pred_logits in enumerate(pred['logits']):
-                pred_idx = pred_logits.argmax(-1)[0].cpu()
-                # extract input from specific twin example
-                inputs_i = {k: v[i][0] for k, v in inputs.items()}
-                self.to_console(inputs_i, pred_idx)
+            pred_idx = pred['logits'].argmax(-1)[0].cpu()
+        inputs = {k: v[0] for k, v in inputs.items()}
+        if pred.flipped:
+            inputs['labels'] = inputs['labels'].flip(0)
+        self.to_console(inputs, pred_idx)
 
 
 class ShowExampleTOKCL(ShowExample):
