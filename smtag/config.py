@@ -1,7 +1,6 @@
 """
 Application-wide preferences.
 """
-import pdb
 from dataclasses import dataclass, field, InitVar
 from transformers import (
     AutoTokenizer,
