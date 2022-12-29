@@ -1152,13 +1152,17 @@ class GraphEncoder(BartEncoder):
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
 
-        # remove sequence info
+        # remove sequence info through cross-attention
+        # between a learn rosetta stone as magic query
+        # encoder outputs whose attention values are combined in weighted sum
+        # thus distroying sequence information but hopefully keeping
+        # causal dependencies.
         # query: rosetta
         # key_state, value_states: encoder_hidden_states
         rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
         y, cross_attn_weights, cross_attn_present_key_value = self.attn(
-            hidden_states=rosetta_with_batch_size,
-            key_value_states=x
+            hidden_states=rosetta_with_batch_size,  # query
+            key_value_states=x  # key and value
         )
 
         # compress
@@ -1428,7 +1432,7 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
                 input_ids=decoder_input_ids,
-                encoder_hidden_states=None, #encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=decoder_attention_mask,
                 encoder_attention_mask=attention_mask,
@@ -1447,7 +1451,7 @@ class CGraphVAEForLM(BartForConditionalGeneration):
 
             decoder_outputs = self.decoder(
                 input_ids=flip(decoder_input_ids),
-                encoder_hidden_states=encoder_outputs.last_hidden_state,  # already flipped!
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=flip(decoder_attention_mask),
                 encoder_attention_mask=flip(attention_mask),
