@@ -13,7 +13,7 @@ from transformers import (
 )
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
-    BartEncoder, BartDecoder
+    BartEncoder, BartDecoder, BartAttention,
 )
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -150,6 +150,7 @@ def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
     #     loss_off_diag = loss_off_diag.cuda()
     #     c = c.cuda()
     return loss_diag, loss_off_diag, c
+
 
 def flip(t: torch.Tensor) -> torch.Tensor:
     return t.flip(1) if t is not None else None
@@ -1100,6 +1101,23 @@ class GraphEncoder(BartEncoder):
         self.d_encoder = self.model.config.d_model
         self.seq_length = self.config.seq_length
         self.pad_token_id = self.model.config.pad_token_id
+
+        # Rosetta tensor as parameter
+        rosetta = torch.empty(self.seq_length, self.d_encoder)
+        nn.init.normal_(rosetta, std=0.02)
+        # def NormalParameter(n_in, n_out, init_scale=1.0):
+        #     """Parameter with random normal initialization"""
+        #     w = torch.empty(n_in, n_out)
+        #     nn.init.normal_(w, std=0.02 * init_scale)
+        #     return nn.Parameter(w)
+        self.rosetta = nn.Parameter(rosetta)
+        self.attn = BartAttention(
+            self.d_encoder,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=False,
+        )
+
         # adj matrix
         # latent vars
         self.hidden_features = self.config.hidden_features
@@ -1133,6 +1151,15 @@ class GraphEncoder(BartEncoder):
             x.requires_grad_(True)
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
+
+        # remove sequence info
+        # query: rosetta
+        # key_state, value_states: encoder_hidden_states
+        rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
+        y, cross_attn_weights, cross_attn_present_key_value = self.attn(
+            hidden_states=rosetta_with_batch_size,
+            key_value_states=x
+        )
 
         # compress
         y = self.vae_dropout(x)
@@ -1420,7 +1447,7 @@ class CGraphVAEForLM(BartForConditionalGeneration):
 
             decoder_outputs = self.decoder(
                 input_ids=flip(decoder_input_ids),
-                encoder_hidden_states=None, #encoder_outputs.last_hidden_state),  # already flipped
+                encoder_hidden_states=encoder_outputs.last_hidden_state,  # already flipped!
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=flip(decoder_attention_mask),
                 encoder_attention_mask=flip(attention_mask),
