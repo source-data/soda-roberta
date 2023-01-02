@@ -81,11 +81,7 @@ config = Config(
 # config = Config(
 #     max_length=64,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-<<<<<<< HEAD
 #     model_type="CGVAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
-=======
-#     model_type="VAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
->>>>>>> e8bf0e1c0be1f14dd9c49760d6675e410a909839
 #     asynchr=True  #True  # we need ordered examples while async returns results in non deterministic way
 # )
 
