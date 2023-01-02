@@ -1427,8 +1427,6 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # "eos_token_id": 2
         # "decoder_start_token_id": 2
         # "pad_token_id": 1
-        # unflipped: predict next token
-        # shift right labels for input to decoder
         # example
         # [    2,     0, 48245,  4086,     9,    10,   112,     4,  2481,    12,
         #  41238,  5708, 37903,  8200,     5,  9825, 10596,    13,   381,     4,
@@ -1441,18 +1439,14 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # $ = eos token
         # § = decoder_start_token_id
         # + = padding token
+        # unflipped => predict next token
+        # shift right labels for input to decoder
         # Right-shifted inputs: §^This is a cat.$+++++
         #                       ||||||||||||||||||||||
         # Original labels       ^This is a cat.$++++++
 
-        # flipped: predict previous token
+        # flipped => predict *previous* token
         # shift right flipped labels for input to decoder
-        # should padding be moved around?
-        # Right-shifted flipped inputs: §++++++++$.tac a si sihT
-        #                               ||||||||||||||||||||||||
-        # Flipped original labels:      ++++++++$.tac a si sihT^
-
-
         # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
         #                               ||||||||||||||||||||||||
         # Flipped original labels:      $.tac a si sihT^++++++++
