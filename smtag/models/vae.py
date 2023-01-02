@@ -1103,20 +1103,20 @@ class GraphEncoder(BartEncoder):
         self.pad_token_id = self.model.config.pad_token_id
 
         # Rosetta tensor as parameter
-        rosetta = torch.empty(self.seq_length, self.d_encoder)
-        nn.init.normal_(rosetta, std=0.02)
-        # def NormalParameter(n_in, n_out, init_scale=1.0):
-        #     """Parameter with random normal initialization"""
-        #     w = torch.empty(n_in, n_out)
-        #     nn.init.normal_(w, std=0.02 * init_scale)
-        #     return nn.Parameter(w)
-        self.rosetta = nn.Parameter(rosetta)
-        self.attn = BartAttention(
-            self.d_encoder,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
+        # rosetta = torch.empty(self.seq_length, self.d_encoder)
+        # nn.init.normal_(rosetta, std=0.02)
+        # # def NormalParameter(n_in, n_out, init_scale=1.0):
+        # #     """Parameter with random normal initialization"""
+        # #     w = torch.empty(n_in, n_out)
+        # #     nn.init.normal_(w, std=0.02 * init_scale)
+        # #     return nn.Parameter(w)
+        # self.rosetta = nn.Parameter(rosetta)
+        # self.attn = BartAttention(
+        #     self.d_encoder,
+        #     config.decoder_attention_heads,
+        #     dropout=config.attention_dropout,
+        #     is_decoder=False,
+        # )
 
         # adj matrix
         # latent vars
@@ -1159,11 +1159,11 @@ class GraphEncoder(BartEncoder):
         # causal dependencies.
         # query: rosetta
         # key_state, value_states: encoder_hidden_states
-        rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
-        y, cross_attn_weights, cross_attn_present_key_value = self.attn(
-            hidden_states=rosetta_with_batch_size,  # query
-            key_value_states=x  # key and value
-        )
+        # rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
+        # y, cross_attn_weights, cross_attn_present_key_value = self.attn(
+        #     hidden_states=rosetta_with_batch_size,  # query
+        #     key_value_states=x  # key and value
+        # )
 
         # compress
         y = self.vae_dropout(x)
@@ -1447,10 +1447,6 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         # Right-shifted flipped inputs: §++++++++$.tac a si sihT
         #                               ||||||||||||||||||||||||
         # Flipped original labels:      ++++++++$.tac a si sihT^
-        # or
-        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
-        #                               ||||||||||||||||||||||||
-        # Flipped original labels:      $.tac a si sihT^++++++++
 
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
