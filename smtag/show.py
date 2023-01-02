@@ -202,9 +202,7 @@ class ShowExampleCGraphVAEForLM(ShowExampleLM):
             inputs = self.pick_random_example(eval_dataloader)
             pred = model(**inputs)
             pred_idx = pred['logits'].argmax(-1)[0].cpu()
-        inputs = {k: v[0] for k, v in inputs.items()}
-        if pred.flipped:
-            inputs['labels'] = inputs['labels'].flip(0)
+        inputs = {k: v[1][0] if (k == 'labels' and pred.flipped) else v[0][0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
 
