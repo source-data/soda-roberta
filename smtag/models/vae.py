@@ -1452,8 +1452,6 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         #                               ||||||||||||||||||||||||
         # Flipped original labels:      $.tac a si sihT^++++++++
 
-        import pdb; pdb.set_trace()
-
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
                 input_ids=decoder_input_ids,
