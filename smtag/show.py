@@ -205,6 +205,19 @@ class ShowExampleCGraphVAEForLM(ShowExampleLM):
         inputs = {k: v[1][0] if (k == 'labels' and pred.flipped) else v[0][0] for k, v in inputs.items()}
         self.to_console(inputs, pred_idx)
 
+    def pick_random_example(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
+        dataset = dataloader.dataset
+        L = len(dataset)
+        rand_example_idx = randrange(L)
+        batch = dataloader.collate_fn([dataset[rand_example_idx]])  # batch with a single random example
+        inputs = {}
+        for k in batch:
+            inputs[k] = [
+                twin.cuda() if torch.cuda.is_available() else twin
+                for twin in batch[k]
+            ]
+        return inputs
+
 
 class ShowExampleTOKCL(ShowExample):
 
