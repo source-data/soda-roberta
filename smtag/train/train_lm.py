@@ -141,12 +141,12 @@ def train(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
-        elif model_type == "Twin":
+        elif model_type in ["Twin", "CGVAE"]:  # CGVAE and Twin have 2 inputs
             data_collator = MyDataCollatorForTwinSeq2Seq(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
             )
-        elif model_type in ["VAE", "GVAE", "CGVAE", "Generator"]:  # for debuging, maybe not necessary
+        elif model_type in ["VAE", "GVAE", "Generator"]:  # for debuging, maybe not necessary
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
@@ -263,7 +263,7 @@ def train(
                 **pretrained_config_dict,  # initialize with all values from pretrained.config before updating
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
-                hidden_features=768,
+                hidden_features=256,
                 # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
                 mlp_num_layers=1,
                 alpha=1.0,

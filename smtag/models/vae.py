@@ -1341,7 +1341,7 @@ class GraphVAEForLM(VAEForLM):
         )
 
 
-class CGraphVAEForLM(BartForConditionalGeneration):
+class CGraphVAEForLM(MyPreTrainedModel):
 
     def __init__(
 
@@ -1397,6 +1397,8 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # skip encoder if text generation has already produced encoder outputs from context/query input
+        input_ids = input_ids[0]  # unflipped input_ids
+        attention_mask = attention_mask[0]  # collator prepares attention_mask for bot unflipped and flipped input_ids
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1412,7 +1414,9 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         # to produce decoder_input_ids
         if labels is not None:
             if encoder_outputs.flipped:
-                labels = flip(labels)
+                labels = labels[1]  # labels pre-flipped by loader
+            else:
+                labels = labels[0]  # unflipped labels
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
@@ -1447,6 +1451,11 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         # Right-shifted flipped inputs: §++++++++$.tac a si sihT
         #                               ||||||||||||||||||||||||
         # Flipped original labels:      ++++++++$.tac a si sihT^
+
+
+        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      $.tac a si sihT^++++++++
 
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
