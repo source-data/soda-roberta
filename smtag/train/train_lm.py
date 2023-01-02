@@ -263,7 +263,7 @@ def train(
                 **pretrained_config_dict,  # initialize with all values from pretrained.config before updating
                 freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                 # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
-                hidden_features=256,
+                hidden_features=768,
                 # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
                 mlp_num_layers=1,
                 alpha=1.0,
@@ -275,7 +275,7 @@ def train(
                 sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=False,
-                latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
+                latent_var_loss="DAG-sparse-diag",  # "mmd-DAG-diag-sparse", "diag-sparse", "sparse", "diag", "DAG", None
                 flip_proba=0.5,
             )
             model = CGraphVAEForLM(
