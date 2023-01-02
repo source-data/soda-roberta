@@ -1417,17 +1417,42 @@ class CGraphVAEForLM(BartForConditionalGeneration):
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
+        # what/why does shift right insert decoder_start_token_id == eos_token_id???
+        # https://github.com/huggingface/transformers/issues/20842
+        # "bos_token_id": 0,
+        # "eos_token_id": 2
+        # "decoder_start_token_id": 2
+        # "pad_token_id": 1
         # unflipped: predict next token
-        # shift right for inputs
-        # Inputs:   ^This is a cat
-        #           \|||||||||||||
-        # Labels    This is a cat.
+        # shift right labels for input to decoder
+        # example
+        # [    2,     0, 48245,  4086,     9,    10,   112,     4,  2481,    12,
+        #  41238,  5708, 37903,  8200,     5,  9825, 10596,    13,   381,     4,
+        #   9119,   118, 34939,  3724, 17717,   246,    35,  2621,     9,    41,
+        #  16778,   791, 41178,  2630, 20993,   261,     4,     2,     1,     1,
+        #      1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
+        #      1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
+        #      1,     1,     1,     1]
+        # ^ = bos token
+        # $ = eos token
+        # § = decoder_start_token_id
+        # + = padding token
+        # Right-shifted inputs: §^This is a cat.$+++++
+        #                       ||||||||||||||||||||||
+        # Original labels       ^This is a cat.$++++++
 
         # flipped: predict previous token
-        # shift right kabeks sfor inputs
-        # inputs:  .tac a si sihT
-        #          |||||||||||\\|
-        # labels:  tac a si sihT^
+        # shift right flipped labels for input to decoder
+        # should padding be moved around?
+        # Right-shifted flipped inputs: §++++++++$.tac a si sihT
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      ++++++++$.tac a si sihT^
+        # or
+        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      $.tac a si sihT^++++++++
+
+        import pdb; pdb.set_trace()
 
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
@@ -1450,7 +1475,7 @@ class CGraphVAEForLM(BartForConditionalGeneration):
             # adj matrix is transposed
 
             decoder_outputs = self.decoder(
-                input_ids=flip(decoder_input_ids),
+                input_ids=decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
                 encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=flip(decoder_attention_mask),
