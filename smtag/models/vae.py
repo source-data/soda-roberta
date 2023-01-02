@@ -1360,14 +1360,6 @@ class CGraphVAEForLM(MyPreTrainedModel):
         self.shared = pretrained.get_input_embeddings()
         self.z_dim = self.config.z_dim
 
-    def transpose_adj_matrix(self, adj, entities) -> torch.Tensor:
-        adj_t = adj.transpose(-1, -2)  # inverse 'causality'
-        z_graph, z_entities = self.encoder.to_permutation_independent_set(adj_t, entities)
-        z_graph = z_graph.view(-1, self.encoder.num_nodes * self.encoder.num_nodes)
-        z_entities = z_entities.view(-1, self.encoder.num_entity_features * self.encoder.num_nodes)
-        z = torch.cat([z_graph, z_entities], -1)
-        return z
-
     def forward(
         self,
         input_ids=None,
@@ -1396,9 +1388,9 @@ class CGraphVAEForLM(MyPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # skip encoder if text generation has already produced encoder outputs from context/query input
         input_ids = input_ids[0]  # unflipped input_ids
-        attention_mask = attention_mask[0]  # collator prepares attention_mask for bot unflipped and flipped input_ids
+        attention_mask = attention_mask[0]  # collator prepares attention_mask for both unflipped and flipped input_ids
+        # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1427,14 +1419,6 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # "eos_token_id": 2
         # "decoder_start_token_id": 2
         # "pad_token_id": 1
-        # example
-        # [    2,     0, 48245,  4086,     9,    10,   112,     4,  2481,    12,
-        #  41238,  5708, 37903,  8200,     5,  9825, 10596,    13,   381,     4,
-        #   9119,   118, 34939,  3724, 17717,   246,    35,  2621,     9,    41,
-        #  16778,   791, 41178,  2630, 20993,   261,     4,     2,     1,     1,
-        #      1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
-        #      1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
-        #      1,     1,     1,     1]
         # ^ = bos token
         # $ = eos token
         # § = decoder_start_token_id
