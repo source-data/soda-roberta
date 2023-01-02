@@ -48,12 +48,12 @@ class Config:
 # char_level_tokenizer = AutoTokenizer.from_pretrained("google/canine-c") # "google/byt5-small") #
 # config = Config(tokenizer=char_level_tokenizer)
 
-# config for Twin
+# config for Twin or CGVAE
 config = Config(
     max_length=[64, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained= "facebook/bart-base", #"facebook/opt-1.3b", #"facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
     # fast=False, # for OPT model
-    model_type="CGVAE",  # "Autoencoder", "VAE", "GVAE", "Generator"
+    model_type="CGVAE",  # "Twin", "CGVAE"
     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 )
 
@@ -76,12 +76,16 @@ config = Config(
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
 
-# config for VAE, GVAE
+# config for VAE
 
 # config = Config(
 #     max_length=64,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
 #     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
+<<<<<<< HEAD
 #     model_type="CGVAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
+=======
+#     model_type="VAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
+>>>>>>> e8bf0e1c0be1f14dd9c49760d6675e410a909839
 #     asynchr=True  #True  # we need ordered examples while async returns results in non deterministic way
 # )
 
