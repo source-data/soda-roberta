@@ -211,10 +211,10 @@ class Tagger:
         # tokenized = self._tokenize(examples)
         # panelized = self.panelize(tokenized)
 
-        pipe = LongTextTokenClassificationPipeline(task="token-classification", 
-                            model=self.panel_model, 
+        pipe = LongTextTokenClassificationPipeline(task="token-classification",
+                            model=self.panel_model,
                             tokenizer=self.tokenizer,
-                            device=0,
+                            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                             aggregation_strategy="simple")
 
 
