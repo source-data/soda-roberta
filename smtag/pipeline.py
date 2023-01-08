@@ -218,7 +218,6 @@ class Tagger:
         pipe = LongTextTokenClassificationPipeline(task="token-classification",
                             model=self.panel_model,
                             tokenizer=self.tokenizer,
-                            device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                             device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                             aggregation_strategy="simple")
 
