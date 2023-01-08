@@ -42,8 +42,8 @@ if __name__ == "__main__":
     # The third part of the code is generating the data
     logger.info("Reading the dataset")
 
-    ds = load_dataset("json", data_files={'train': os.path.join(args.source_datap_ath, "train_v2.jsonl"),
-                                          'eval': os.path.join(args.source_datap_ath, "eval_v2.jsonl")})
+    ds = load_dataset("json", data_files={'train': os.path.join(args.source_datap_ath, "train.jsonl"),
+                                          'eval': os.path.join(args.source_datap_ath, "eval.jsonl")})
     logger.info(print(ds))
 
     def tokenize_function(examples):

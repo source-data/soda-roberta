@@ -45,7 +45,6 @@ from transformers.utils import (
 )
 from .configuration_excell_roberta import EXcellRobertaConfig
 import torch.nn.functional as F
-from torchcrf import CRF
 
 from allennlp.modules.conditional_random_field import (allowed_transitions,
                                                        ConditionalRandomField)

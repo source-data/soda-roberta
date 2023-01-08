@@ -97,8 +97,11 @@ class Serializer:
 
         j = {'smtag': []}
         for panel_group in tagged_panel_groups:
-            j_panel_group = {'panel_group': []}
-            ner_results, geneprod_roles_results, small_mol_roles_results = panel_group
+            j_panel_group = {'panel_group': {
+                "entities": []
+            }
+            }
+            ner_results, geneprod_roles_results, small_mol_roles_results, panel_text = panel_group
             num_panels = len(ner_results['input_ids'])
             for panel_idx in range(num_panels):
                 label_ids = ner_results['input_ids'][panel_idx]
@@ -169,7 +172,8 @@ class Serializer:
                         elif entity is not None:
                             entity_list.append(entity.to_dict(self.tokenizer))
                             entity = None
-                j_panel_group['panel_group'].append(entity_list)
+                j_panel_group['panel_group']['entities'].append(entity_list)
+                j_panel_group['panel_group']['panel_text'] = panel_text
             j['smtag'].append(j_panel_group)
         return json.dumps(j, indent=2)
 
@@ -214,23 +218,20 @@ class Tagger:
         pipe = LongTextTokenClassificationPipeline(task="token-classification", 
                             model=self.panel_model, 
                             tokenizer=self.tokenizer,
-                            device=0,
+                            device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                             aggregation_strategy="simple")
 
-
-        panelized = [pipe(examples[0] if isinstance(examples, list) else examples, stride=50)]
+        panelized = [pipe("Figure " + examples[0] if isinstance(examples, list) else "Figure " + examples, stride=50)]
         
-        len_ = 0
-        for panel in panelized[0]["input_ids"]:
-            len_ += len(panel)
-
-        self.panelized = panelized
-        for panel_group in panelized:
+        for panel_group in panelized[0]:
             panel_group = self._truncate(panel_group)
             ner_results = self.ner(panel_group)
             geneprod_roles_results = self.roles(ner_results, ['B-GENEPROD', 'I-GENEPROD'], self.geneprod_role_model)
             small_mol_roles_results = self.roles(ner_results, ['B-SMALL_MOLECULE', 'I-SMALL_MOLECULE'], self.small_mol_role_model)
-            tagged.append((ner_results, geneprod_roles_results, small_mol_roles_results))
+            panel_text = self.tokenizer.decode(panel_group["input_ids"][0])
+            tagged.append((ner_results, geneprod_roles_results, small_mol_roles_results, panel_text))
+        print(tagged)
+
         serialized = self.serializer(tagged, format='json')
 
         self.serialized = serialized
@@ -348,9 +349,9 @@ class Tagger:
         new_inputs = {}
         for key, value in panel_group.items():
             if key == "input_ids":
-                new_inputs[key] = [value[0][:self.panel_model.config.max_position_embeddings-1] + [self.tokenizer.sep_token_id]]
+                new_inputs[key] = [value[:self.panel_model.config.max_position_embeddings-1] + [self.tokenizer.sep_token_id]]
             else:
-                new_inputs[key] = [value[0][:self.panel_model.config.max_position_embeddings]]
+                new_inputs[key] = [value[:self.panel_model.config.max_position_embeddings]]
         return new_inputs
 
 class SmartTagger(Tagger):
@@ -597,27 +598,68 @@ class LongTextTokenClassificationPipeline(ChunkPipeline):
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
         
+        # Here we get the right output from the model. 
+        # The problem comes from the lines just
+
+        # Add first group even in it is "O"
+
+        # If panel start then add panel_start + O
+
+        # Append already tokenized
+        
         panel_group_text = []
         did_panel_start = False
-        if len(grouped_entities) == 1:
-            panel_group_text.append(grouped_entities[0]["word"])
-        else:
-            for entity in grouped_entities:
+        for n, entity in enumerate(grouped_entities):
+            if n == 0:
+                if (entity["entity_group"] == "O"):
+                    panel_group_text.append(
+                        self.tokenizer(
+                            entity["word"],
+                            return_special_tokens_mask=True,
+                            return_token_type_ids=False,
+                            return_attention_mask=False
+                        )
+                    )
+                if (entity["entity_group"] == "PANEL_START"):   
+                    did_panel_start = True
+                    group_text = entity["word"] 
+            else:
                 if entity["entity_group"] == "PANEL_START":
                     did_panel_start = True
+                    group_text = entity["word"]
                 if (entity["entity_group"] == "O") and did_panel_start:
-                    panel_group_text.append(entity["word"])
+                    group_text = group_text + " " + entity["word"]
+                    panel_group_text.append(
+                            self.tokenizer(
+                            group_text,
+                            return_special_tokens_mask=True,
+                            return_token_type_ids=False,
+                            return_attention_mask=False
+                        )
+                    )
                     did_panel_start = False
+                    group_text=""
 
-        if panel_group_text == []:
-            panel_group_text = [sentence]
+        # did_panel_start = False
+        # if len(grouped_entities) == 1:
+        #     panel_group_text.append(grouped_entities[0]["word"])
+        # else:
+        #     for entity in grouped_entities:
+        #         if entity["entity_group"] == "PANEL_START":
+        #             did_panel_start = True
+        #         if (entity["entity_group"] == "O") and did_panel_start:
+        #             panel_group_text.append(entity["word"])
+        #             did_panel_start = False
 
-        panel_groups = self.tokenizer(panel_group_text,
-                                return_special_tokens_mask=True,
-                                return_token_type_ids=False,
-                                return_attention_mask=False)
-        
-        return panel_groups
+        # if panel_group_text == []:
+        #     panel_group_text = [sentence]
+
+        # panel_groups = self.tokenizer(panel_group_text,
+        #                         return_special_tokens_mask=True,
+        #                         return_token_type_ids=False,
+        #                         return_attention_mask=False)
+
+        return panel_group_text
         
     def _to_tensor(self, inputs: List[Any]) -> Union[tf.Tensor, torch.tensor, np.ndarray]:
         if self.framework == "pt":

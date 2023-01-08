@@ -33,7 +33,8 @@ RUN apt-get update \
 && pip install ray tune  \
 && pip install evaluate \
 && pip install rouge_score \
-&& pip install wandb 
+&& pip install wandb==0.13.7 \
+&& pip install allennlp==2.10.11 
 # optional for plotting
 RUN pip install plotly 
 

@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple, Union
 from random import random
 import celery
 from tqdm import tqdm
-from lxml.etree import Element, tostring, parse
+from lxml.etree import Element, tostring, parse, Error
 from nltk import PunktSentenceTokenizer
 from .celery import app
 from .utils import innertext, cleanup
@@ -248,7 +248,10 @@ class ExtractorXML:
                 ]
                 job = celery.group(task_list)
                 results = job.apply()
-                results = results.get()
+                try:
+                    results = results.get()
+                except Error:
+                    return []
                 # remove empty sublists of examples
                 results = [r for r in results if r]
                 n = sum(results)
