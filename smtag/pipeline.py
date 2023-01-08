@@ -215,10 +215,11 @@ class Tagger:
         # tokenized = self._tokenize(examples)
         # panelized = self.panelize(tokenized)
 
-        pipe = LongTextTokenClassificationPipeline(task="token-classification", 
-                            model=self.panel_model, 
+        pipe = LongTextTokenClassificationPipeline(task="token-classification",
+                            model=self.panel_model,
                             tokenizer=self.tokenizer,
                             device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+                            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                             aggregation_strategy="simple")
 
         panelized = [pipe("Figure " + examples[0] if isinstance(examples, list) else "Figure " + examples, stride=50)]
