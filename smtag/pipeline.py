@@ -215,11 +215,13 @@ class Tagger:
         # tokenized = self._tokenize(examples)
         # panelized = self.panelize(tokenized)
 
-        pipe = LongTextTokenClassificationPipeline(task="token-classification",
-                            model=self.panel_model,
-                            tokenizer=self.tokenizer,
-                            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-                            aggregation_strategy="simple")
+        pipe = LongTextTokenClassificationPipeline(
+            task="token-classification",
+            model=self.panel_model,
+            tokenizer=self.tokenizer,
+            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            aggregation_strategy="simple"
+        )
 
         panelized = [pipe("Figure " + examples[0] if isinstance(examples, list) else "Figure " + examples, stride=50)]
         
@@ -230,7 +232,6 @@ class Tagger:
             small_mol_roles_results = self.roles(ner_results, ['B-SMALL_MOLECULE', 'I-SMALL_MOLECULE'], self.small_mol_role_model)
             panel_text = self.tokenizer.decode(panel_group["input_ids"][0])
             tagged.append((ner_results, geneprod_roles_results, small_mol_roles_results, panel_text))
-        print(tagged)
 
         serialized = self.serializer(tagged, format='json')
 
