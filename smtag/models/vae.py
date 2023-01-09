@@ -1201,7 +1201,8 @@ class GraphEncoder(BartEncoder):
         entities_representation = entities
 
         # permutation-independent sets
-        z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
+        # z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
+        z_graph, z_entities = adj, entities
 
         if self.latent_var_loss:
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities, self.latent_var_loss)
