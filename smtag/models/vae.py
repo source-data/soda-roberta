@@ -1059,14 +1059,84 @@ class MLP(nn.Module):
         return y
 
 
-def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torch.Tensor]:
-    assert adj.size(-1) == adj.size(-2), f"Expecting square matrices but received {str(adj.size())}."  # check it is a square matrix in its last dimensions
-    assert adj.size(-1) == entities.size(-1),  f"Expecting same number of nodes as entties, got {adj.size()} and {entities.size()}"
-    d = adj.size(-1)
-    indices_permutations = list(permutations(range(d)))
-    perm_adj = [adj[:, :, indices][:, indices, :] for indices in indices_permutations]
-    perm_entities = [entities[:, :, indices] for indices in indices_permutations]
-    return perm_adj, perm_entities
+# https://github.com/HyTruongSon/InvariantGraphNetworks-PyTorch
+# https://openreview.net/forum?id=Syx72jC9tm
+# equi_2_to_1
+class layer_2_to_1(nn.Module):
+    '''
+    :param name: name of layer
+    :param input_depth: D
+    :param output_depth: S
+    :param inputs: N x D x m x m tensor
+    :return: output: N x S x m tensor
+    '''
+
+    def __init__(self, input_depth, output_depth, normalization = 'inf', normalization_val = 1.0, device = 'cpu'):
+        super().__init__()
+
+        self.input_depth = input_depth
+        self.output_depth = output_depth
+        self.normalization = normalization
+        self.normalization_val = normalization_val
+        self.device = device
+
+        self.basis_dimension = 5
+
+        # initialization values for variables
+        self.coeffs = torch.nn.Parameter(torch.randn(self.input_depth, self.output_depth, self.basis_dimension) * np.sqrt(2.0) / (self.input_depth + self.output_depth), requires_grad = True).to(device = self.device)
+
+        # bias
+        self.bias = torch.nn.Parameter(torch.zeros(1, self.output_depth, 1)).to(device = self.device)
+
+        # params
+        # self.params = torch.nn.ParameterList([self.coeffs, self.bias])
+
+    def forward(self, inputs):
+        m = inputs.size(3)  # extract dimension
+
+        ops_out = contractions_2_to_1(inputs, m, normalization = self.normalization)
+        ops_out = torch.stack(ops_out, dim = 2)  # N x D x B x m
+
+        output = torch.einsum('dsb,ndbi->nsi', self.coeffs, ops_out)  # N x S x m
+
+        # bias
+        output = output + self.bias
+
+        return output
+
+
+# ops_2_to_1
+def contractions_2_to_1(inputs, dim, normalization='inf', normalization_val=1.0):  # N x D x m x m
+    diag_part = torch.diagonal(inputs, dim1 = 2, dim2 = 3)  # N x D x m
+
+    sum_diag_part = torch.sum(diag_part, dim = 2).unsqueeze(dim = 2)  # N x D x 1
+    sum_of_rows = torch.sum(inputs, dim = 3)  # N x D x m
+    sum_of_cols = torch.sum(inputs, dim = 2)  # N x D x m
+    sum_all = torch.sum(inputs, dim = (2, 3))  # N x D
+
+    # op1 - (123) - extract diag
+    op1 = diag_part  # N x D x m
+
+    # op2 - (123) + (12)(3) - tile sum of diag part
+    op2 = torch.cat([sum_diag_part for d in range(dim)], dim = 2)  # N x D x m
+
+    # op3 - (123) + (13)(2) - place sum of row i in element i
+    op3 = sum_of_rows  # N x D x m
+
+    # op4 - (123) + (23)(1) - place sum of col i in element i
+    op4 = sum_of_cols  # N x D x m
+
+    # op5 - (1)(2)(3) + (123) + (12)(3) + (13)(2) + (23)(1) - tile sum of all entries
+    op5 = torch.cat([sum_all.unsqueeze(dim = 2) for d in range(dim)], dim = 2)  # N x D x m
+
+    if normalization is not None:
+        if normalization == 'inf':
+            op2 = op2 / dim
+            op3 = op3 / dim
+            op4 = op4 / dim
+            op5 = op5 / (dim ** 2)
+
+    return [op1, op2, op3, op4, op5]
 
 
 class GraphEncoder(BartEncoder):
@@ -1231,21 +1301,7 @@ class GraphEncoder(BartEncoder):
         )
 
     def to_permutation_independent_set(self, adj, entities, with_grad: bool = True):
-        # should this be with torch.no_grad() when using in loss mmd?
-        permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
-        z_graph = self.mlp_graph_rho(
-            sum([
-                self.mlp_graph_sigma(x)
-                for x in permuted_adj
-            ])
-        )
-        z_entities = self.mlp_entity_rho(
-            sum([
-                self.mlp_entity_sigma(x)
-                for x in permuted_entities
-            ])
-        )
-        return z_graph, z_entities
+        raise NotImplementedError
 
     def compute_loss_on_latent_var(self, z_graph, z_entities, include=['mmd', 'diag', 'sparse']):
         losses = {}
@@ -1423,13 +1479,13 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # $ = eos token
         # § = decoder_start_token_id
         # + = padding token
-        # unflipped => predict next token
+        # unflipped => predict next token: causal language model
         # shift right labels for input to decoder
         # Right-shifted inputs: §^This is a cat.$+++++
         #                       ||||||||||||||||||||||
         # Original labels       ^This is a cat.$++++++
 
-        # flipped => predict *previous* token
+        # flipped => predict *previous* token: reverse causal language model
         # shift right flipped labels for input to decoder
         # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
         #                               ||||||||||||||||||||||||
