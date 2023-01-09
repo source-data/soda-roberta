@@ -270,7 +270,7 @@ def train(
                 beta=1.0,
                 gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
-                num_nodes=5,
+                num_nodes=256, #5,
                 num_entity_features=256,
                 sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
