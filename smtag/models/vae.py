@@ -1406,13 +1406,14 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # important to do this AFTER the encoding to see if labels need to be flipped before shifting them right
         # to produce decoder_input_ids
         if labels is not None:
-            if encoder_outputs.flipped:
-                labels = labels[1]  # labels pre-flipped by loader
-            else:
-                labels = labels[0]  # unflipped labels
+            unflipped_labels = labels[0]  # unflipped labels
+            flipped_labels = labels[1]  # labels pre-flipped by loader
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                unflipped_decoder_input_ids = shift_tokens_right(
+                    unflipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+                flipped_decoder_input_ids = shift_tokens_right(
+                    flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
         # what/why does shift right insert decoder_start_token_id == eos_token_id???
         # https://github.com/huggingface/transformers/issues/20842
@@ -1438,7 +1439,7 @@ class CGraphVAEForLM(MyPreTrainedModel):
 
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
-                input_ids=decoder_input_ids,
+                input_ids=unflipped_decoder_input_ids,
                 encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=decoder_attention_mask,
@@ -1452,12 +1453,28 @@ class CGraphVAEForLM(MyPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+
+            adversarial_decoder_outputs = self.decoder(
+                input_ids=flipped_decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=flip(decoder_attention_mask),
+                encoder_attention_mask=flip(attention_mask),
+                head_mask=flip(decoder_head_mask),
+                cross_attn_head_mask=flip(cross_attn_head_mask),
+                past_key_values=flip(past_key_values),
+                inputs_embeds=flip(decoder_inputs_embeds),
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
         else:
             # flipped causal model, encoder hidden states and labels are flipped
             # adj matrix is transposed
 
             decoder_outputs = self.decoder(
-                input_ids=decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
+                input_ids=flipped_decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
                 encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=flip(decoder_attention_mask),
@@ -1472,15 +1489,39 @@ class CGraphVAEForLM(MyPreTrainedModel):
                 return_dict=return_dict,
             )
 
+            adversarial_decoder_outputs = self.decoder(
+                input_ids=unflipped_decoder_input_ids,
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=decoder_attention_mask,
+                encoder_attention_mask=attention_mask,
+                head_mask=decoder_head_mask,
+                cross_attn_head_mask=cross_attn_head_mask,
+                past_key_values=past_key_values,
+                inputs_embeds=decoder_inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
         # trainable language model head
         logits = self.lm_head(decoder_outputs.last_hidden_state)
+        adversarial_logits = self.lm_head(adversarial_decoder_outputs.last_hidden_state)
         supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
 
         # calculate composite loss
 
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            if encoder_outputs.flipped:
+                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
+            else:
+                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
+                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+
+            loss_lm = loss_lm / loss_adv_lm
             loss_z = encoder_outputs.loss  # loss on latent var
             loss = loss_lm + loss_z  # combine with language modelling loss
             supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
