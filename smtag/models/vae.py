@@ -1103,20 +1103,20 @@ class GraphEncoder(BartEncoder):
         self.pad_token_id = self.model.config.pad_token_id
 
         # Rosetta tensor as parameter
-        # rosetta = torch.empty(self.seq_length, self.d_encoder)
-        # nn.init.normal_(rosetta, std=0.02)
-        # # def NormalParameter(n_in, n_out, init_scale=1.0):
-        # #     """Parameter with random normal initialization"""
-        # #     w = torch.empty(n_in, n_out)
-        # #     nn.init.normal_(w, std=0.02 * init_scale)
-        # #     return nn.Parameter(w)
-        # self.rosetta = nn.Parameter(rosetta)
-        # self.attn = BartAttention(
-        #     self.d_encoder,
-        #     config.decoder_attention_heads,
-        #     dropout=config.attention_dropout,
-        #     is_decoder=False,
-        # )
+        rosetta = torch.empty(self.seq_length, self.d_encoder)
+        nn.init.normal_(rosetta, std=0.02)
+        # def NormalParameter(n_in, n_out, init_scale=1.0):
+        #     """Parameter with random normal initialization"""
+        #     w = torch.empty(n_in, n_out)
+        #     nn.init.normal_(w, std=0.02 * init_scale)
+        #     return nn.Parameter(w)
+        self.rosetta = nn.Parameter(rosetta)
+        self.attn = BartAttention(
+            self.d_encoder,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=False,
+        )
 
         # adj matrix
         # latent vars
@@ -1159,11 +1159,11 @@ class GraphEncoder(BartEncoder):
         # causal dependencies.
         # query: rosetta
         # key_state, value_states: encoder_hidden_states
-        # rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
-        # y, cross_attn_weights, cross_attn_present_key_value = self.attn(
-        #     hidden_states=rosetta_with_batch_size,  # query
-        #     key_value_states=x  # key and value
-        # )
+        rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
+        y, cross_attn_weights, cross_attn_present_key_value = self.attn(
+            hidden_states=rosetta_with_batch_size,  # query
+            key_value_states=x  # key and value
+        )
 
         # compress
         y = self.vae_dropout(x)
@@ -1184,7 +1184,7 @@ class GraphEncoder(BartEncoder):
         if self.flip_proba > 0:
             p = random()
             if p <= self.flip_proba:
-                adj = adj.transpose(-1, -2)  # inverse 'causality'
+                adj = adj.transpose(-1, -2).contiguous()  # inverse 'causality', contiguous to allow view(-1, num_nodes ** 2)
                 x = flip(x)  # -> B x L x H_enc
                 encoder_outputs.hidden_states = flip(encoder_outputs.hidden_states)
                 encoder_outputs.attentions = flip(encoder_outputs.attentions)
@@ -1215,8 +1215,8 @@ class GraphEncoder(BartEncoder):
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
         representation = [adj_matrix_representation, entities_representation]
-        z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
-        z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        z_graph = adj.view(-1, self.num_nodes * self.num_nodes)
+        z_entities = entities.view(-1, self.num_entity_features * self.num_nodes)
         z = torch.cat([z_graph, z_entities], -1)
 
         return LatentCGraphEncoderOutput(
