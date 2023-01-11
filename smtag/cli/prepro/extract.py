@@ -10,6 +10,7 @@ def main():
     parser.add_argument('-S', '--sentence_level', action='store_true', help='Use this flag to extract individual sentence form each xml element specified by --XPAth.')
     parser.add_argument('-P', '--xpath', default='.//abstract', nargs="+", help='Space-delimited list of XPath to element to be extracted from XML file.')
     parser.add_argument('-X', '--keep_xml', action="store_true", help='Flag to keep the xml markup.')
+    parser.add_argument('-F', '--filter_xpath', default="", type=str, help='Removes XML elements with no elements matching the path defined.')
     parser.add_argument('--inclusion_probability', default=1.0, type=float, help='Probability with which an example will be included.')
 
     args = parser.parse_args()
@@ -27,10 +28,11 @@ def main():
         sentence_level=sentence_level,
         xpath=xpath,
         keep_xml=keep_xml,
-        inclusion_probability=inclusion_probability
+        inclusion_probability=inclusion_probability,
+        filter_xpath=(None if args.filter_xpath == "" else args.filter_xpath)
     )
     saved = x.extract_from_corpus()
-    print("; ".join([f"{str(k)}: {v} examples" for k, v in saved.items()]))
+    print("; \n".join([f"{str(k)}: {v[0]} examples, {v[1]-v[0]} filtered" for k, v in saved.items()]))
 
 
 if __name__ == '__main__':

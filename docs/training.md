@@ -107,7 +107,7 @@ Extract text from the abstracts:
 Note: it is possible to combine several XPath expressions with the `|` operator to extract several kinds of elements. For example, extract both abstracts and figure legends (this would be very large):
 
     python -m smtag.cli.prepro.extract \
-    /data/xml/oapmc_articles/ \
+    /data/xml/oapmc_articles/oapmc/ \
     /data/text/oapmc_abstracts_figs/ \
     --xpath ".//abstract | .//fig" \
     --inclusion_probability=1
@@ -179,7 +179,7 @@ Split the original documents into train, eval and test sets. This is done at the
 
 Extract the examples for NER and ROLES using an XPAth that identifies individual panel legends within figure legends:
 
-    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml -F 
 
 Using an XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 

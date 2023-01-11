@@ -9,7 +9,7 @@ from nltk import PunktSentenceTokenizer
 from .celery import app
 from .utils import innertext, cleanup
 from .config import config
-
+import numpy as np
 
 # Celery tasks
 def examples_from_file_task(
@@ -19,7 +19,8 @@ def examples_from_file_task(
     punkt: bool,
     keep_xml: bool,
     remove_tail: bool,
-    min_length: int = config.min_char_length
+    min_length: int = config.min_char_length,
+    filter_xpath: Union[str, 'NoneType'] = None
 ) -> int:
     """Generates text or xml examples from xml documents. 
     Examples to be extracted are found using an XPath expression.
@@ -35,8 +36,20 @@ def examples_from_file_task(
         remove_tail (bool): set this to False if the text after the element should be included.
     """
     examples = []
+    total_elements = 0
+    removed_components = 0
     if isinstance(xpath, str):
         elements = _parse_xml_file(filepath, xpath, remove_tail)
+        # total_elements += len(elements)
+        if filter_xpath:
+            filtered_elements = []
+            for element in elements:
+                total_elements += 1
+                if element.findall(filter_xpath) != []:
+                    filtered_elements.append(element)
+                else:
+                    removed_components += 1
+            elements = filtered_elements
         text = _extract_text_from_elements(elements, punkt, keep_xml, min_length=min_length)
         examples = _cleanup(text)
     elif isinstance(xpath, list):  # twin examples extracted
@@ -45,6 +58,8 @@ def examples_from_file_task(
             raise ValueError(f"xpath pair has to have exactly 2 elements (len is {len(xpath)}")
         for xp in xpath:
             elements = _parse_xml_file(filepath, xp, remove_tail)
+            if filter_xpath:
+                raise NotImplementedError
             if elements:
                 element = elements[0]  # take only the first match as element of the pair
             else:
@@ -65,8 +80,7 @@ def examples_from_file_task(
     for ex in examples:
         if ex:
             n += _save_task(ex, str(dest_file_path))
-    return n
-
+    return (n, total_elements)
 
 # switchable celery async task
 if config.asynchr:
@@ -172,7 +186,8 @@ class ExtractorXML:
         keep_xml: bool = False,
         remove_tail: bool = True,
         inclusion_probability: float = 1.0,
-        subsets: List[str] = ["train", "eval", "test"]
+        subsets: List[str] = ["train", "eval", "test"],
+        filter_xpath: Union[str, 'NoneType'] = None
     ):
         self.corpus = Path(corpus)
         self.destination_dir = destination_dir
@@ -182,6 +197,7 @@ class ExtractorXML:
         self.remove_tail = remove_tail
         self.inclusion_probability = inclusion_probability
         self.subsets = subsets
+        self.filter_xpath = filter_xpath
         if not self.destination_dir:
             basename = self.corpus.name
             self.destination_dir = Path("/data/text") / basename
@@ -236,6 +252,8 @@ class ExtractorXML:
     ) -> int:
 
         num_saved_examples = 0
+        total_elements = 0
+        removed_elements = 0
         batch_size = config.celery_batch_size
         filepaths = [f for f in source_dir_path.iterdir() if f.suffix in self.ALLOWED_EXTENSION]
         N = len(filepaths)
@@ -243,7 +261,7 @@ class ExtractorXML:
             end = min(start + batch_size, N)
             if config.asynchr:  # non deterministic results order!
                 task_list = [
-                    examples_from_file_task.s(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length)
+                    examples_from_file_task.s(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length, self.filter_xpath)
                     for indx, filepath in enumerate(filepaths[start:end])
                 ]
                 job = celery.group(task_list)
@@ -253,13 +271,12 @@ class ExtractorXML:
                 except Error:
                     return []
                 # remove empty sublists of examples
-                results = [r for r in results if r]
-                n = sum(results)
-                num_saved_examples += n
+                results = np.array([r for r in results if r])
+                total_elements += sum(results[:,1])
+                num_saved_examples += sum(results[:,0])
             else:  # deterministic
                 results = []
                 for indx, filepath in enumerate(filepaths[start:end]):
-                    n = examples_from_file_task(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length)
-                    num_saved_examples += n
-        return num_saved_examples
+                    num_saved_examples, total_elements = examples_from_file_task(str(filepath), str(dest_file_path), xpath, sentence_level, keep_xml, remove_tail, min_length, self.filter_xpath)
+        return (num_saved_examples, total_elements)
 
