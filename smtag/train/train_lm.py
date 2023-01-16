@@ -265,13 +265,14 @@ def train(
                 # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 hidden_features=768,
                 # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
+                # GraphLatentConfig().z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)
                 mlp_num_layers=1,
                 alpha=1.0,
                 beta=1.0,
                 gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
-                num_nodes=256, #5,
-                num_entity_features=256,
+                num_nodes=5,
+                num_entity_features=64,
                 sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=False,

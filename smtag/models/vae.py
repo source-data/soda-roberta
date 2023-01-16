@@ -1201,7 +1201,7 @@ class GraphEncoder(BartEncoder):
         entities_representation = entities
 
         # permutation-independent sets
-        # z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
+        z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
         z_graph, z_entities = adj, entities
 
         if self.latent_var_loss:
@@ -1515,13 +1515,13 @@ class CGraphVAEForLM(MyPreTrainedModel):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             if encoder_outputs.flipped:
-                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
-                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
-            else:
                 loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
                 loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+            else:
+                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
 
-            loss_lm = loss_lm / loss_adv_lm
+            loss_lm = loss_lm - loss_adv_lm.detach()
             loss_z = encoder_outputs.loss  # loss on latent var
             loss = loss_lm + loss_z  # combine with language modelling loss
             supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
