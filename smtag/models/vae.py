@@ -294,10 +294,11 @@ class GraphVAEConfigLM(VAEConfigLM):
         self.beta = beta
 
 
-class BartFlipConfig(BartConfig):
-    def __init__(self, flip_encoder_layers: int = 1, **kwargs):
+# class FlipBartConfig extending BartConfig to specify number of flip layers
+class FlipBartConfig(BartConfig):
+    def __init__(self, num_flip_layers=0, **kwargs):
         super().__init__(**kwargs)
-        self.flip_encoder_layers = flip_encoder_layers
+        self.num_flip_layers = num_flip_layers
 
 
 @dataclass
@@ -1615,14 +1616,14 @@ class BartFlip(MyPreTrainedModel):
 
     def __init__(
         self,
-        config: BartConfig,
+        config: FlipBartConfig,
         pretrained: BartForConditionalGeneration,
         **kwargs
     ):
         super().__init__(config)
         self.encoder = pretrained.get_encoder()
         self.decoder = pretrained.get_decoder()
-        self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.flip_encoder_layers)])
+        self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
         self.lm_head = pretrained.lm_head
         self.shared = pretrained.get_input_embeddings()
 

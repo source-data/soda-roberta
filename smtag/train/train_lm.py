@@ -32,7 +32,7 @@ from datasets import load_dataset, GenerateMode
 from ..models.vae import (
     LatentEncoder, VAEForLM, Twin, TwinSEQ2SEQ, GraphVAEForLM, CGraphVAEForLM,
     LatentConfig, VAEConfigLM, TwinConfig, TwinLMConfig, GraphVAEConfigLM,
-    BartFlip, BartFlipConfig,
+    BartFlip, FlipBartConfig,
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -203,9 +203,9 @@ def train(
         if config.from_pretrained:
             pretrained = BartForConditionalGeneration.from_pretrained(config.from_pretrained)
             model_config = pretrained.config.to_dict()
-            model_config = BartFlipConfig(
+            model_config = FlipBartConfig(
                 **model_config,
-                flip_encoder_layers=3
+                flip_num_layers=3,
             )
             model = BartFlip(
                 config=model_config,
