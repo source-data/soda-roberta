@@ -1629,10 +1629,10 @@ class BartFlip(MyPreTrainedModel):
         if self.freeze_pretrained in ['both', 'encoder']:
             for param in self.encoder.parameters():
                 param.requires_grad_(False)
-        elif self.freeze_pretrained is None or self.freeze_pretrained in ['both', 'decoder']:
+        if self.freeze_pretrained in ['both', 'decoder']:
             for param in self.decoder.parameters():
                 param.requires_grad_(False)
-        else:
+        if self.freeze_pretrained is not None and self.freeze_pretrained not in ['both', 'encoder', 'decoder']:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
 
         self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
@@ -1720,6 +1720,9 @@ class BartFlip(MyPreTrainedModel):
 
         flip = random() < 0.5
         hidden_states = encoder_outputs[0]
+
+        if self.freeze_pretrained in ['both', 'encoder']:
+            hidden_states.requires_grad_(True)
 
         # expand attention_mask
         if attention_mask is not None:

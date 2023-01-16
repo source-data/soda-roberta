@@ -205,8 +205,8 @@ def train(
             model_config = pretrained.config.to_dict()
             model_config = FlipBartConfig(
                 **model_config,
-                flip_num_layers=3,
-                freeze_pretrained='both',  # 'encoder' # 'both' # 'decoder' # None
+                flip_num_layers=6,
+                freeze_pretrained='encoder',  # 'encoder' # 'both' # 'decoder' # None
             )
             model = BartFlip(
                 config=model_config,
