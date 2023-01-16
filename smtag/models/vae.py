@@ -1,4 +1,3 @@
-import pdb
 from dataclasses import dataclass
 from itertools import permutations, product
 from random import sample, gauss, random
@@ -14,6 +13,7 @@ from transformers import (
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
     BartEncoder, BartDecoder, BartAttention,
+    _expand_mask
 )
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -23,6 +23,8 @@ from transformers.modeling_outputs import (
 from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
+from .dir_attention import FlippableBartEncoderLayer
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
@@ -290,6 +292,12 @@ class GraphVAEConfigLM(VAEConfigLM):
         self.z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)  # concat vectorized adj matrix and entity embeddings, overrides z_dim
         self.alpha = alpha
         self.beta = beta
+
+
+class BartFlipConfig(BartConfig):
+    def __init__(self, flip_encoder_layers: int = 1, **kwargs):
+        super().__init__(**kwargs)
+        self.flip_encoder_layers = flip_encoder_layers
 
 
 @dataclass
@@ -1558,4 +1566,164 @@ class CGraphVAEForLM(MyPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             flipped=encoder_outputs.flipped,
+        )
+
+
+class BartFlip(MyPreTrainedModel):
+
+    def __init__(
+        self,
+        config: BartConfig,
+        pretrained: BartForConditionalGeneration,
+        **kwargs
+    ):
+        super().__init__(config)
+        self.encoder = pretrained.get_encoder()
+        self.decoder = pretrained.get_decoder()
+        self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.flip_encoder_layers)])
+        self.lm_head = pretrained.lm_head
+        self.shared = pretrained.get_input_embeddings()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        unflipped_input_ids = input_ids[0]  # unflipped input_ids
+        flipped_input_ids = input_ids[1]  # flipped input_ids
+        unflipped_attention_mask = attention_mask[0]  # collator prepares attention_mask for both unflipped and flipped input_ids
+        flipped_attention_mask = attention_mask[1]  # collator prepares attention_mask for both unflipped and flipped input_ids
+        # skip encoder if text generation has already produced encoder outputs from context/query input
+                # to produce decoder_input_ids
+        if labels is not None:
+            unflipped_labels = labels[0]  # unflipped labels
+            flipped_labels = labels[1]  # flipped labels
+
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            unflipped_decoder_input_ids = shift_tokens_right(
+                unflipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+            flipped_decoder_input_ids = shift_tokens_right(
+                flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=unflipped_input_ids,
+                attention_mask=unflipped_attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        # what/why does shift right insert decoder_start_token_id == eos_token_id???
+        # https://github.com/huggingface/transformers/issues/20842
+        # "bos_token_id": 0,
+        # "eos_token_id": 2
+        # "decoder_start_token_id": 2
+        # "pad_token_id": 1
+        # ^ = bos token
+        # $ = eos token
+        # § = decoder_start_token_id
+        # + = padding token
+        # unflipped => predict next token: causal language model
+        # shift right labels for input to decoder
+        # Right-shifted inputs: §^This is a cat.$+++++
+        #                       ||||||||||||||||||||||
+        # Original labels       ^This is a cat.$++++++
+
+        # flipped => predict *previous* token: reverse causal language model
+        # shift right flipped labels for input to decoder
+        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      $.tac a si sihT^++++++++
+
+        flip = random() < 0.5
+        hidden_states = encoder_outputs[0]
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # dtype = (self.encoder.embed_tokens(unflipped_input_ids) * self.encoder.embed_scale).dtype
+            dtype = torch.float32
+            expanded_attention_mask = _expand_mask(unflipped_attention_mask, dtype)
+
+        for idx, encoder_flip_layer in enumerate(self.middle_flip_layers):
+            layer_outputs = encoder_flip_layer(
+                hidden_states,
+                expanded_attention_mask,
+                output_attentions=output_attentions,
+                # layer_head_mask=head_mask[idx] if head_mask is not None else None,
+                flip=flip
+            )
+            hidden_states = layer_outputs[0]
+
+        if flip:
+            labels = flipped_labels
+            decoder_input_ids = flipped_decoder_input_ids
+            attention_mask = flipped_attention_mask
+            hidden_states = hidden_states.flip(1)  # not sure about that...
+        else:
+            labels = unflipped_labels
+            decoder_input_ids = unflipped_decoder_input_ids
+            attention_mask = unflipped_attention_mask
+
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            encoder_hidden_states=hidden_states,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+            encoder_attention_mask=attention_mask,
+            return_dict=return_dict
+        )
+
+        # trainable language model head
+        logits = self.lm_head(decoder_outputs.last_hidden_state)
+        # supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
+        supp_data = {}
+
+        # calculate losss
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            # supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+        else:
+            loss = None
+            # supp_data['loss_lm'] = loss_lm = None
+
+        return CGVAELMOutput(
+            loss=loss,
+            logits=logits,
+            supp_data=supp_data,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            flipped=torch.tensor(flip).cuda() if torch.cuda.is_available() else torch.tensor(flip)
         )
