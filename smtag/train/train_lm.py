@@ -32,6 +32,7 @@ from datasets import load_dataset, GenerateMode
 from ..models.vae import (
     LatentEncoder, VAEForLM, Twin, TwinSEQ2SEQ, GraphVAEForLM, CGraphVAEForLM,
     LatentConfig, VAEConfigLM, TwinConfig, TwinLMConfig, GraphVAEConfigLM,
+    BartFlip, BartFlipConfig,
 )
 from ..data_collator import (
     DataCollatorForTargetedMasking,
@@ -141,7 +142,7 @@ def train(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
-        elif model_type in ["Twin", "CGVAE"]:  # CGVAE and Twin have 2 inputs
+        elif model_type in ["Twin", "CGVAE", "FlipEncoderDecoder"]:  # CGVAE, FlipEndocderDecoder and Twin have 2 inputs
             data_collator = MyDataCollatorForTwinSeq2Seq(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
@@ -178,7 +179,7 @@ def train(
 
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
-
+            
     if model_type == "Autoencoder":
         if config.from_pretrained:
             if data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
@@ -198,6 +199,20 @@ def train(
                 type_vocab_size=1,
             )
             model = RobertaForMaskedLM(config=model_config)
+    elif model_type == "FlipEncoderDecoder":
+        if config.from_pretrained:
+            pretrained = BartForConditionalGeneration.from_pretrained(config.from_pretrained)
+            model_config = pretrained.config.to_dict()
+            model_config = BartFlipConfig(
+                **model_config,
+                flip_encoder_layers=3
+            )
+            model = BartFlip(
+                config=model_config,
+                pretrained=pretrained
+            )
+        else:
+            raise ValueError("No FlipEncoderDecoder from scratch possible.")
     elif model_type == "Generator":
         if config.from_pretrained:
             model = BartForConditionalGeneration.from_pretrained(from_pretrained)
@@ -333,7 +348,7 @@ def train(
         show_callbacks = [ShowExampleTwinLM(tokenizer)] if data_config_name in ["SEQ2SEQ", "MLM"] else None
     elif model_type in ["VAE", "GVAE", "Generator"] and data_config_name in ["SEQ2SEQ", "QandA", "AandQ", "NEXT", "MULTITASK"]:
         show_callbacks = [ShowExampleTextGeneration(tokenizer)]
-    elif model_type in ["CGVAE"]:
+    elif model_type in ["CGVAE", "FlipEncoderDecoder"]:
         show_callbacks = [ShowExampleCGraphVAEForLM(tokenizer)]  # [ShowExampleCGraphVAEForLM(tokenizer)]
     else:
         show_callbacks = [ShowExampleLM(tokenizer)]

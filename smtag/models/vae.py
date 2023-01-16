@@ -1,4 +1,3 @@
-import pdb
 from dataclasses import dataclass
 from itertools import permutations, product
 from random import sample, gauss, random
@@ -14,6 +13,7 @@ from transformers import (
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
     BartEncoder, BartDecoder, BartAttention,
+    _expand_mask
 )
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -23,6 +23,8 @@ from transformers.modeling_outputs import (
 from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
+from .dir_attention import FlippableBartEncoderLayer
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
@@ -290,6 +292,12 @@ class GraphVAEConfigLM(VAEConfigLM):
         self.z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)  # concat vectorized adj matrix and entity embeddings, overrides z_dim
         self.alpha = alpha
         self.beta = beta
+
+
+class BartFlipConfig(BartConfig):
+    def __init__(self, flip_encoder_layers: int = 1, **kwargs):
+        super().__init__(**kwargs)
+        self.flip_encoder_layers = flip_encoder_layers
 
 
 @dataclass
@@ -1059,14 +1067,84 @@ class MLP(nn.Module):
         return y
 
 
-def permute_columns_rows(adj: torch.Tensor, entities: torch.Tensor) -> List[torch.Tensor]:
-    assert adj.size(-1) == adj.size(-2), f"Expecting square matrices but received {str(adj.size())}."  # check it is a square matrix in its last dimensions
-    assert adj.size(-1) == entities.size(-1),  f"Expecting same number of nodes as entties, got {adj.size()} and {entities.size()}"
-    d = adj.size(-1)
-    indices_permutations = list(permutations(range(d)))
-    perm_adj = [adj[:, :, indices][:, indices, :] for indices in indices_permutations]
-    perm_entities = [entities[:, :, indices] for indices in indices_permutations]
-    return perm_adj, perm_entities
+# https://github.com/HyTruongSon/InvariantGraphNetworks-PyTorch
+# https://openreview.net/forum?id=Syx72jC9tm
+# equi_2_to_1
+class layer_2_to_1(nn.Module):
+    '''
+    :param name: name of layer
+    :param input_depth: D
+    :param output_depth: S
+    :param inputs: N x D x m x m tensor
+    :return: output: N x S x m tensor
+    '''
+
+    def __init__(self, input_depth, output_depth, normalization = 'inf', normalization_val = 1.0, device = 'cpu'):
+        super().__init__()
+
+        self.input_depth = input_depth
+        self.output_depth = output_depth
+        self.normalization = normalization
+        self.normalization_val = normalization_val
+        self.device = device
+
+        self.basis_dimension = 5
+
+        # initialization values for variables
+        self.coeffs = torch.nn.Parameter(torch.randn(self.input_depth, self.output_depth, self.basis_dimension) * np.sqrt(2.0) / (self.input_depth + self.output_depth), requires_grad = True).to(device = self.device)
+
+        # bias
+        self.bias = torch.nn.Parameter(torch.zeros(1, self.output_depth, 1)).to(device = self.device)
+
+        # params
+        # self.params = torch.nn.ParameterList([self.coeffs, self.bias])
+
+    def forward(self, inputs):
+        m = inputs.size(3)  # extract dimension
+
+        ops_out = contractions_2_to_1(inputs, m, normalization = self.normalization)
+        ops_out = torch.stack(ops_out, dim = 2)  # N x D x B x m
+
+        output = torch.einsum('dsb,ndbi->nsi', self.coeffs, ops_out)  # N x S x m
+
+        # bias
+        output = output + self.bias
+
+        return output
+
+
+# ops_2_to_1
+def contractions_2_to_1(inputs, dim, normalization='inf', normalization_val=1.0):  # N x D x m x m
+    diag_part = torch.diagonal(inputs, dim1 = 2, dim2 = 3)  # N x D x m
+
+    sum_diag_part = torch.sum(diag_part, dim = 2).unsqueeze(dim = 2)  # N x D x 1
+    sum_of_rows = torch.sum(inputs, dim = 3)  # N x D x m
+    sum_of_cols = torch.sum(inputs, dim = 2)  # N x D x m
+    sum_all = torch.sum(inputs, dim = (2, 3))  # N x D
+
+    # op1 - (123) - extract diag
+    op1 = diag_part  # N x D x m
+
+    # op2 - (123) + (12)(3) - tile sum of diag part
+    op2 = torch.cat([sum_diag_part for d in range(dim)], dim = 2)  # N x D x m
+
+    # op3 - (123) + (13)(2) - place sum of row i in element i
+    op3 = sum_of_rows  # N x D x m
+
+    # op4 - (123) + (23)(1) - place sum of col i in element i
+    op4 = sum_of_cols  # N x D x m
+
+    # op5 - (1)(2)(3) + (123) + (12)(3) + (13)(2) + (23)(1) - tile sum of all entries
+    op5 = torch.cat([sum_all.unsqueeze(dim = 2) for d in range(dim)], dim = 2)  # N x D x m
+
+    if normalization is not None:
+        if normalization == 'inf':
+            op2 = op2 / dim
+            op3 = op3 / dim
+            op4 = op4 / dim
+            op5 = op5 / (dim ** 2)
+
+    return [op1, op2, op3, op4, op5]
 
 
 class GraphEncoder(BartEncoder):
@@ -1232,21 +1310,7 @@ class GraphEncoder(BartEncoder):
         )
 
     def to_permutation_independent_set(self, adj, entities, with_grad: bool = True):
-        # should this be with torch.no_grad() when using in loss mmd?
-        permuted_adj, permuted_entities = permute_columns_rows(adj, entities)
-        z_graph = self.mlp_graph_rho(
-            sum([
-                self.mlp_graph_sigma(x)
-                for x in permuted_adj
-            ])
-        )
-        z_entities = self.mlp_entity_rho(
-            sum([
-                self.mlp_entity_sigma(x)
-                for x in permuted_entities
-            ])
-        )
-        return z_graph, z_entities
+        raise NotImplementedError
 
     def compute_loss_on_latent_var(self, z_graph, z_entities, include=['mmd', 'diag', 'sparse']):
         losses = {}
@@ -1425,13 +1489,13 @@ class CGraphVAEForLM(MyPreTrainedModel):
         # $ = eos token
         # § = decoder_start_token_id
         # + = padding token
-        # unflipped => predict next token
+        # unflipped => predict next token: causal language model
         # shift right labels for input to decoder
         # Right-shifted inputs: §^This is a cat.$+++++
         #                       ||||||||||||||||||||||
         # Original labels       ^This is a cat.$++++++
 
-        # flipped => predict *previous* token
+        # flipped => predict *previous* token: reverse causal language model
         # shift right flipped labels for input to decoder
         # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
         #                               ||||||||||||||||||||||||
@@ -1544,4 +1608,164 @@ class CGraphVAEForLM(MyPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             flipped=encoder_outputs.flipped,
+        )
+
+
+class BartFlip(MyPreTrainedModel):
+
+    def __init__(
+        self,
+        config: BartConfig,
+        pretrained: BartForConditionalGeneration,
+        **kwargs
+    ):
+        super().__init__(config)
+        self.encoder = pretrained.get_encoder()
+        self.decoder = pretrained.get_decoder()
+        self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.flip_encoder_layers)])
+        self.lm_head = pretrained.lm_head
+        self.shared = pretrained.get_input_embeddings()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        unflipped_input_ids = input_ids[0]  # unflipped input_ids
+        flipped_input_ids = input_ids[1]  # flipped input_ids
+        unflipped_attention_mask = attention_mask[0]  # collator prepares attention_mask for both unflipped and flipped input_ids
+        flipped_attention_mask = attention_mask[1]  # collator prepares attention_mask for both unflipped and flipped input_ids
+        # skip encoder if text generation has already produced encoder outputs from context/query input
+                # to produce decoder_input_ids
+        if labels is not None:
+            unflipped_labels = labels[0]  # unflipped labels
+            flipped_labels = labels[1]  # flipped labels
+
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            unflipped_decoder_input_ids = shift_tokens_right(
+                unflipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+            flipped_decoder_input_ids = shift_tokens_right(
+                flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=unflipped_input_ids,
+                attention_mask=unflipped_attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        # what/why does shift right insert decoder_start_token_id == eos_token_id???
+        # https://github.com/huggingface/transformers/issues/20842
+        # "bos_token_id": 0,
+        # "eos_token_id": 2
+        # "decoder_start_token_id": 2
+        # "pad_token_id": 1
+        # ^ = bos token
+        # $ = eos token
+        # § = decoder_start_token_id
+        # + = padding token
+        # unflipped => predict next token: causal language model
+        # shift right labels for input to decoder
+        # Right-shifted inputs: §^This is a cat.$+++++
+        #                       ||||||||||||||||||||||
+        # Original labels       ^This is a cat.$++++++
+
+        # flipped => predict *previous* token: reverse causal language model
+        # shift right flipped labels for input to decoder
+        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      $.tac a si sihT^++++++++
+
+        flip = random() < 0.5
+        hidden_states = encoder_outputs[0]
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # dtype = (self.encoder.embed_tokens(unflipped_input_ids) * self.encoder.embed_scale).dtype
+            dtype = torch.float32
+            expanded_attention_mask = _expand_mask(unflipped_attention_mask, dtype)
+
+        for idx, encoder_flip_layer in enumerate(self.middle_flip_layers):
+            layer_outputs = encoder_flip_layer(
+                hidden_states,
+                expanded_attention_mask,
+                output_attentions=output_attentions,
+                # layer_head_mask=head_mask[idx] if head_mask is not None else None,
+                flip=flip
+            )
+            hidden_states = layer_outputs[0]
+
+        if flip:
+            labels = flipped_labels
+            decoder_input_ids = flipped_decoder_input_ids
+            attention_mask = flipped_attention_mask
+            hidden_states = hidden_states.flip(1)  # not sure about that...
+        else:
+            labels = unflipped_labels
+            decoder_input_ids = unflipped_decoder_input_ids
+            attention_mask = unflipped_attention_mask
+
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            encoder_hidden_states=hidden_states,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+            encoder_attention_mask=attention_mask,
+            return_dict=return_dict
+        )
+
+        # trainable language model head
+        logits = self.lm_head(decoder_outputs.last_hidden_state)
+        # supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
+        supp_data = {}
+
+        # calculate losss
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            # supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+        else:
+            loss = None
+            # supp_data['loss_lm'] = loss_lm = None
+
+        return CGVAELMOutput(
+            loss=loss,
+            logits=logits,
+            supp_data=supp_data,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            flipped=torch.tensor(flip).cuda() if torch.cuda.is_available() else torch.tensor(flip)
         )
