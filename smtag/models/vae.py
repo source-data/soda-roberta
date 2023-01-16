@@ -296,9 +296,10 @@ class GraphVAEConfigLM(VAEConfigLM):
 
 # class FlipBartConfig extending BartConfig to specify number of flip layers
 class FlipBartConfig(BartConfig):
-    def __init__(self, num_flip_layers=0, **kwargs):
+    def __init__(self, num_flip_layers=0, freeze_pretrained: str='both', **kwargs):
         super().__init__(**kwargs)
         self.num_flip_layers = num_flip_layers
+        self.freeze_pretrained = freeze_pretrained
 
 
 @dataclass
@@ -1623,6 +1624,17 @@ class BartFlip(MyPreTrainedModel):
         super().__init__(config)
         self.encoder = pretrained.get_encoder()
         self.decoder = pretrained.get_decoder()
+        self.freeze_pretrained = self.config.freeze_pretrained
+        # freeze the pretrained model
+        if self.freeze_pretrained in ['both', 'encoder']:
+            for param in self.encoder.parameters():
+                param.requires_grad_(False)
+        elif self.freeze_pretrained is None or self.freeze_pretrained in ['both', 'decoder']:
+            for param in self.decoder.parameters():
+                param.requires_grad_(False)
+        else:
+            raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
+
         self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
         self.lm_head = pretrained.lm_head
         self.shared = pretrained.get_input_embeddings()

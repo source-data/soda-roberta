@@ -206,6 +206,7 @@ def train(
             model_config = FlipBartConfig(
                 **model_config,
                 flip_num_layers=3,
+                freeze_pretrained='both',  # 'encoder' # 'both' # 'decoder' # None
             )
             model = BartFlip(
                 config=model_config,
