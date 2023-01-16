@@ -24,7 +24,7 @@ from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
-from .dir_attention import FlippableBartEncoderLayer
+from .dir_attention import FlippableBartEncoder
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
@@ -1622,20 +1622,21 @@ class BartFlip(MyPreTrainedModel):
         **kwargs
     ):
         super().__init__(config)
-        self.encoder = pretrained.get_encoder()
+        # self.encoder = pretrained.get_encoder()
+        self.encoder = FlippableBartEncoder(config)
         self.decoder = pretrained.get_decoder()
         self.freeze_pretrained = self.config.freeze_pretrained
         # freeze the pretrained model
         if self.freeze_pretrained in ['both', 'encoder']:
             for param in self.encoder.parameters():
                 param.requires_grad_(False)
-        if self.freeze_pretrained in ['both', 'decoder']:
-            for param in self.decoder.parameters():
-                param.requires_grad_(False)
+        # if self.freeze_pretrained in ['both', 'decoder']:
+        #     for param in self.decoder.parameters():
+        #         param.requires_grad_(False)
         if self.freeze_pretrained is not None and self.freeze_pretrained not in ['both', 'encoder', 'decoder']:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
 
-        self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
+        # self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
         self.lm_head = pretrained.lm_head
         self.shared = pretrained.get_input_embeddings()
 
@@ -1684,7 +1685,7 @@ class BartFlip(MyPreTrainedModel):
             flipped_decoder_input_ids = shift_tokens_right(
                 flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
-
+        flip = random() < 0.5
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=unflipped_input_ids,
@@ -1694,6 +1695,7 @@ class BartFlip(MyPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                flip=flip
             )
 
         # what/why does shift right insert decoder_start_token_id == eos_token_id???
@@ -1718,34 +1720,33 @@ class BartFlip(MyPreTrainedModel):
         #                               ||||||||||||||||||||||||
         # Flipped original labels:      $.tac a si sihT^++++++++
 
-        flip = random() < 0.5
         hidden_states = encoder_outputs[0]
 
         if self.freeze_pretrained in ['both', 'encoder']:
             hidden_states.requires_grad_(True)
 
         # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            # dtype = (self.encoder.embed_tokens(unflipped_input_ids) * self.encoder.embed_scale).dtype
-            dtype = torch.float32
-            expanded_attention_mask = _expand_mask(unflipped_attention_mask, dtype)
+        # if attention_mask is not None:
+        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        #     # dtype = (self.encoder.embed_tokens(unflipped_input_ids) * self.encoder.embed_scale).dtype
+        #     dtype = torch.float32
+        #     expanded_attention_mask = _expand_mask(unflipped_attention_mask, dtype)
 
-        for idx, encoder_flip_layer in enumerate(self.middle_flip_layers):
-            layer_outputs = encoder_flip_layer(
-                hidden_states,
-                expanded_attention_mask,
-                output_attentions=output_attentions,
-                # layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                flip=flip
-            )
-            hidden_states = layer_outputs[0]
+        # for idx, encoder_flip_layer in enumerate(self.middle_flip_layers):
+        #     layer_outputs = encoder_flip_layer(
+        #         hidden_states,
+        #         expanded_attention_mask,
+        #         output_attentions=output_attentions,
+        #         # layer_head_mask=head_mask[idx] if head_mask is not None else None,
+        #         flip=flip
+        #     )
+        #     hidden_states = layer_outputs[0]
 
         if flip:
             labels = flipped_labels
             decoder_input_ids = flipped_decoder_input_ids
             attention_mask = flipped_attention_mask
-            hidden_states = hidden_states.flip(1)  # not sure about that...
+            # hidden_states = hidden_states.flip(1)  # not sure about that...
         else:
             labels = unflipped_labels
             decoder_input_ids = unflipped_decoder_input_ids
@@ -1766,6 +1767,7 @@ class BartFlip(MyPreTrainedModel):
         # calculate losss
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
+            # Could add losses on the attention weights (sparsity, diganoal off diagnoal, DAG structure)
             loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             # supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
         else:
