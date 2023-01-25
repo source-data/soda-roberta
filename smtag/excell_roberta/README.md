@@ -906,23 +906,20 @@ Roberta -Excell-roberta     PMB
 python -m smtag.excell_roberta.generate_training_data \
     /app/excell-roberta-tokenizer/ \
     /app/data/json/excell_roberta/ \
-    /app/data/json/excell_roberta_training/block_size_512_v2/ \
+    /app/data/json/excell_roberta_training/block_size_512/ \
     --block_size 510
 
-python -m smtag.excell_roberta.generate_training_data \
-    /app/excell-roberta-tokenizer/ \
-    /app/data/json/excell_roberta/ \
-    /app/data/json/excell_roberta_training/block_size_128_v2/ \
-    --block_size 128
-   
+l   
 ```
 # 3. Train the first epoch on blocksize of 128 tokens
 
 ```
 python -m smtag.excell_roberta.train \
     /app/excell-roberta-tokenizer/ \
-    /app/data/json/excell_roberta_training/block_size_128_v2/ \
+    /app/data/json/excell_roberta_training/block_size_128/ \
     --per_device_train_batch_size 64 \
+    --per_device_eval_batch_size 64 \
+    --max_steps 50001 \
     --learning_rate 0.00025 \
     --lr_scheduler_type "linear" \
     --warmup_steps 1000 \
@@ -933,8 +930,8 @@ python -m smtag.excell_roberta.train \
     --whole_word_masking \
     --activation gelu \
     --loglevel info \
-    --save_strategy "epoch" \
-    --save_steps 1 \
+    --save_strategy "steps" \
+    --save_steps 10000 \
     --evaluation_strategy "steps" \
     --eval_steps 5000 \
     --gradient_accumulation_steps 1 \
@@ -942,13 +939,13 @@ python -m smtag.excell_roberta.train \
     --logging_strategy "steps" \
     --logging_steps 50 \
     --logging_first_step \
-    --output_dir "/app/excell-robetra/lm_models/v2-training-step-128" \
-    --wandb_name "v2-training-v2-epoch-1-128bs"
+    --output_dir "/app/excell-roberta/lm_models/v3-training-step-128" \
+    --wandb_name "v3-training-v2-epoch-1-128bs"
 ```
 
 Doing a checkup on the fine-tuning task:
 
-```
+``` bash
 python -m smtag.excell_roberta.token_classification \
     --data "EMBO/sd-nlp-non-tokenized" \
     --task NER \
@@ -967,37 +964,89 @@ PubMedBERT - 77, BioLinkBERT - 76, SoDa-lm - 75, BioMegatron - 74
 ### Fully connected head
 
                 precision    recall  f1-score   support
-
-          CELL       0.69      0.82      0.75      2202
-     EXP_ASSAY       0.54      0.62      0.58      4091
-      GENEPROD       0.73      0.89      0.80      6520
-      ORGANISM       0.70      0.82      0.76      1003
-SMALL_MOLECULE       0.64      0.78      0.71      1320
-   SUBCELLULAR       0.63      0.69      0.66       883
-        TISSUE       0.65      0.78      0.71      1030
-
-     micro avg       0.66      0.79      0.72     17049
-     macro avg       0.66      0.77      0.71     17049
-  weighted avg       0.66      0.79      0.72     17049
+                                                                                                                                                                                                                                                                                                                                                                          
+          CELL       0.83      0.86      0.84      2202 
+       DISEASE       0.57      0.60      0.58       197
+     EXP_ASSAY       0.65      0.72      0.69      4091  
+      GENEPROD       0.90      0.93      0.91      6520 
+      ORGANISM       0.80      0.89      0.84      1003
+SMALL_MOLECULE       0.76      0.85      0.80      1320
+   SUBCELLULAR       0.75      0.74      0.74       883
+        TISSUE       0.75      0.78      0.76      1030
+        
+     micro avg       0.79      0.84      0.82     17246
+     macro avg       0.75      0.80      0.77     17246
+  weighted avg       0.79      0.84      0.82     17246
 
 
 ### Fully connected and CRF head
 
 
                 precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-          CELL       0.71      0.81      0.76      2202
-     EXP_ASSAY       0.56      0.62      0.59      4091
-      GENEPROD       0.75      0.88      0.81      6520
-      ORGANISM       0.70      0.83      0.76      1003
-SMALL_MOLECULE       0.66      0.79      0.72      1320
-   SUBCELLULAR       0.68      0.68      0.68       883
-        TISSUE       0.66      0.75      0.70      1030
+                                                                                                                                                                                                                                                                                                                                                                          
+          CELL       0.84      0.86      0.85      2202
+       DISEASE       0.62      0.59      0.61       197
+     EXP_ASSAY       0.66      0.73      0.69      4091
+      GENEPROD       0.90      0.93      0.92      6520
+      ORGANISM       0.81      0.89      0.85      1003
+SMALL_MOLECULE       0.77      0.84      0.81      1320
+   SUBCELLULAR       0.78      0.75      0.77       883
+        TISSUE       0.76      0.79      0.78      1030 
+        
+     micro avg       0.80      0.84      0.82     17246
+     macro avg       0.77      0.80      0.78     17246
+  weighted avg       0.80      0.84      0.82     17246
 
-     micro avg       0.68      0.78      0.73     17049
-     macro avg       0.67      0.77      0.72     17049
-  weighted avg       0.68      0.78      0.73     17049
- 
+### Fully connected and CRF head and include start end transitions
+
+                precision    recall  f1-score   support
+
+```          CELL       0.83      0.86      0.84      2202``` 
+```       DISEASE       0.63      0.60      0.62       197``` 
+```     EXP_ASSAY       0.66      0.72      0.69      4091```
+```      GENEPROD       0.91      0.93      0.92      6520```
+      ORGANISM       0.83      0.90      0.86      1003
+SMALL_MOLECULE       0.78      0.84      0.81      1320
+   SUBCELLULAR       0.78      0.74      0.76       883
+        TISSUE       0.77      0.79      0.78      1030
+
+     micro avg       0.80      0.84      0.82     17246
+     macro avg       0.77      0.80      0.78     17246
+  weighted avg       0.81      0.84      0.82     17246
+
+### PubMedBERT comparison
+
+                precision    recall  f1-score   support
+                                                                                                                                                                                                                                                                                                                                                                          
+          CELL       0.81      0.84      0.82      4948
+       DISEASE       0.49      0.47      0.48       463
+     EXP_ASSAY       0.67      0.68      0.68      9885
+      GENEPROD       0.90      0.93      0.91     21865
+```      ORGANISM       0.84      0.89      0.87      3464```
+```SMALL_MOLECULE       0.83      0.85      0.84      6431```
+```   SUBCELLULAR       0.80      0.78      0.79      3850```
+```        TISSUE       0.76      0.78      0.77      2975```
+
+     micro avg       0.82      0.84      0.83     53881
+     macro avg       0.76      0.78      0.77     53881
+  weighted avg       0.82      0.84      0.83     53881
+
+### Biolink bert large
+                precision    recall  f1-score   support
+
+          CELL       0.83      0.84      0.83      4948
+       DISEASE       0.46      0.66      0.54       463
+     EXP_ASSAY       0.66      0.69      0.68      9885
+      GENEPROD       0.91      0.94      0.92     21865
+      ORGANISM       0.83      0.91      0.87      3464
+SMALL_MOLECULE       0.83      0.87      0.85      6431
+   SUBCELLULAR       0.78      0.81      0.80      3850
+        TISSUE       0.76      0.81      0.78      2975
+
+     micro avg       0.82      0.86      0.84     53881
+     macro avg       0.76      0.82      0.78     53881
+  weighted avg       0.82      0.86      0.84     53881
+
 ## BC2GM
 
 PubMedBERT - 84
@@ -1015,32 +1064,26 @@ weighted avg       0.76      0.81      0.78      3659
 ### Fully connected and CRF head
 
               precision    recall  f1-score   support
-        GENE       0.78      0.81      0.80      3659
-   micro avg       0.78      0.81      0.80      3659
-   macro avg       0.78      0.81      0.80      3659
-weighted avg       0.78      0.81      0.80      3659
+
+        GENE       0.80      0.81      0.81      3659
+
+   micro avg       0.80      0.81      0.81      3659
+   macro avg       0.80      0.81      0.81      3659
+weighted avg       0.80      0.81      0.81      3659
 
 ## BC5CDR Chem
 
 BioLinkBERT (large) - 94
 
-### Fully connected head
-
-              precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-    Chemical       0.87      0.92      0.89      3559
-   micro avg       0.87      0.92      0.89      3559
-   macro avg       0.87      0.92      0.89      3559
-weighted avg       0.87      0.92      0.89      3559
-
 ### Fully connected and CRF head
 
-              precision    recall  f1-score   support 
-                                                                                                                                                                                                                    
-    Chemical       0.91      0.92      0.92      3559
-   micro avg       0.91      0.92      0.92
-   macro avg       0.91      0.92      0.92
-weighted avg       0.91      0.92      0.92      3559
+              precision    recall  f1-score   support
+
+    Chemical       0.91      0.95      0.93      3559
+
+   micro avg       0.91      0.95      0.93      3559
+   macro avg       0.91      0.95      0.93      3559
+weighted avg       0.91      0.95      0.93      3559
 
 ## BC5CDR Disease
 BioLinkBERT (large) - 86.4, BioMegatron (88.5)
@@ -1057,8 +1100,12 @@ weighted avg       0.75      0.82      0.79      2861
 ### Fully connected and CRF head
 
               precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-     Disease       0.79      0.83      0.81      2861
+
+     Disease       0.74      0.84      0.79      2861
+
+   micro avg       0.74      0.84      0.79      2861
+   macro avg       0.74      0.84      0.79      2861
+weighted avg       0.74      0.84      0.79      2861
 
 ## JNLPBA
 
@@ -1066,48 +1113,87 @@ BioLinkBERT (large) - 80.06, PubMedBERT - 79.1
 
 ### Fully connected head
 
-              precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-         DNA       0.68      0.75      0.72       597 
-         RNA       0.68      0.76      0.72        71 
-   cell_line       0.67      0.67      0.67       202
-   cell_type       0.74      0.76      0.75       293 
-     protein       0.76      0.80      0.78      1454
-     
-   micro avg       0.73      0.77      0.75      2617
-   macro avg       0.71      0.75      0.73      2617
-weighted avg       0.73      0.77      0.75      2617
 
 ### Fully connected and CRF head
 
-              precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-         DNA       0.71      0.76      0.73       597
-         RNA       0.74      0.79      0.76        71
-   cell_line       0.74      0.68      0.71       202 
-   cell_type       0.73      0.76      0.74       293
-     protein       0.79      0.81      0.80      1454
-
-   micro avg       0.76      0.78      0.77      2617
-   macro avg       0.74      0.76      0.75      2617
-weighted avg       0.76      0.78      0.77      2617
 
 ## NCBI Disease
 BioBERT - 89.71
 
-### Fully connected head
-              precision    recall  f1-score   support
-                                                                                                                                                                                                                    
-     Disease       0.78      0.87      0.82       574 
-   micro avg       0.78      0.87      0.82       574
-   macro avg       0.78      0.87      0.82       574
-weighted avg       0.78      0.87      0.82       574
 
 ### Fully connected and CRF head
 
-              precision    recall  f1-score   support 
-                                                                                                                                                                                                                    
-     Disease       0.84      0.87      0.85       574 
-   micro avg       0.84      0.87      0.85       574
-   macro avg       0.84      0.87      0.85       574
-weighted avg       0.84      0.87      0.85       574
+              precision    recall  f1-score   support
+
+     Disease       0.81      0.90      0.85       574
+
+   micro avg       0.81      0.90      0.85       574
+   macro avg       0.81      0.90      0.85       574
+weighted avg       0.81      0.90      0.85       574
+
+## Checking the generic roles with EXcell-RoBERTa
+
+``` bash
+python -m smtag.excell_roberta.token_classification \
+    --data "EMBO/sd-nlp-non-tokenized" \
+    --task ROLES \
+    --model "/lm_models/excell-roberta/v3-training-512bs/checkpoint-2716290" \
+    --add_prefix_space \
+    --num_train_epochs 2.
+
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.76      0.82      0.79      1952
+  MEASURED_VAR       0.85      0.93      0.89     23440
+
+     micro avg       0.84      0.92      0.88     25392
+     macro avg       0.80      0.87      0.84     25392
+  weighted avg       0.84      0.92      0.88     25392
+
+```
+
+## Checking the panelization with EXcell-RoBERTa
+
+``` bash
+python -m smtag.excell_roberta.token_classification \
+    --data "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --model "/lm_models/excell-roberta/v3-training-512bs/checkpoint-2716290" \
+    --add_prefix_space \
+    --num_train_epochs 1. \
+    --run_name "sd-panelization-v2" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-panelization-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+                  precision    recall  f1-score   support
+
+ PANEL_START       0.97      0.99      0.98      1307
+
+   micro avg       0.97      0.99      0.98      1307
+   macro avg       0.97      0.99      0.98      1307
+weighted avg       0.97      0.99      0.98      1307
+
+```
+
+
+# Entire change on the process due to tokenization issues
+
+```
+python -m smtag.excell_roberta.token_classification "/data/xml/sd_panels_filtered/" \
+    --task NER \
+    --tokenizer "/app/excell-roberta-tokenizer/" \
+    --model "/lm_models/excell-roberta/v3-training-512bs/checkpoint-2716290" \
+    --max_length 500 \
+    --num_train_epochs 1.0
+```
+
+```
+python -m smtag.excell_roberta.token_classification "/data/xml/sd_panelization_filtered/" \
+    --task PANELIZATION \
+    --tokenizer "/app/excell-roberta-tokenizer/" \
+    --model "/lm_models/excell-roberta/v3-training-512bs/checkpoint-2716290" \
+    --max_length 512
+```

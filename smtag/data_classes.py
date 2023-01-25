@@ -7,7 +7,7 @@ from smtag import TOKCL_MODEL_PATH, SEQ2SEQ_MODEL_PATH, LM_MODEL_PATH
 class TrainingArgumentsTOKCL(TrainingArguments):
     output_dir: str = field(default=f"{TOKCL_MODEL_PATH}/excell-roberta-fine-tuned")
     # Main Hyperparameters to tune
-    learning_rate: float = field(default=1e-4)
+    learning_rate: float = field(default=5e-5)
     lr_schedule: str = field(default='cosine')
     per_device_train_batch_size: int = field(default=16)
     per_device_eval_batch_size: int = field(default=64)
@@ -21,7 +21,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
 
     # Logging and evaluation strategy
     evaluation_strategy: IntervalStrategy = field(default="epoch")
-    eval_steps: int = field(default=1)
+    eval_steps: int = field(default=0.5)
     prediction_loss_only: bool = field(default=False)
     eval_accumulation_steps: Optional[int] = field(default=None)
     log_level: Optional[str] = field(default="passive")

@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument("--loader_path", 
                         help="Path of the loader.")
     parser.add_argument("--task", 
-                        choices=["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION"], 
+                        choices=["NER", "GENEPROD_ROLES", "SMALL_MOL_ROLES", "BORING", "PANELIZATION", "ROLES"], 
                         help="The task for which we want to train the token classification.")
     parser.add_argument("--data_dir", 
                         help="The dir for the dataset files to use for training. Only needed if local data must be loaded.")

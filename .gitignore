@@ -150,3 +150,6 @@ excell-roberta-tokenizer/
 excell-roberta-lm/
 test-own-tokenizer.json
 *.csv
+
+install.sh
+git-lfs

@@ -1983,12 +1983,37 @@ SMALL_MOLECULE       0.71      0.86      0.77      6431
 samples_per_second': 93.505, 'test_steps_per_second': 0.375}
 
 ```
-giacomomiolo/electramed_base_scivocab_1M
+
+
+# After cleaning the dataset from unlabeled examples
+
+## PubMedBERT (abstract)
+
+### NER
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.0001 \
+    --per_device_train_batch_size 16 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "" \
+    --hub_model_id "EMBO/sd-ner-v2"
+
 
 python -m smtag.cli.tokcl.train \
     --loader_path "EMBO/sd-nlp-non-tokenized" \
     --task NER \
-    --from_pretrained "giacomomiolo/electramed_base_scivocab_1M" \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
     --add_prefix_space \
     --num_train_epochs 2.0 \
     --disable_tqdm False \
@@ -2000,7 +2025,204 @@ python -m smtag.cli.tokcl.train \
     --learning_rate 0.00005 \
     --lr_schedule "cosine" \
     --disable_tqdm False \
-    --run_name "ner-electramed" \
+    --run_name "ner-biolinkbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --hub_strategy "end" \
+    --hub_token "" \
+    --hub_model_id "EMBO/sd-ner-v2"
+
+```
+
+### GENEPROD ROLES
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "" \
+    --hub_model_id "EMBO/sd-geneprod-roles-v2"
+```
+
+                precision    recall  f1-score   support
+                                                                                                                                                                                                                                                                                                                                                                          
+          CELL       0.81      0.84      0.82      4948
+       DISEASE       0.49      0.47      0.48       463
+     EXP_ASSAY       0.67      0.68      0.68      9885
+      GENEPROD       0.90      0.93      0.91     21865
+      ORGANISM       0.84      0.89      0.87      3464
+SMALL_MOLECULE       0.83      0.85      0.84      6431
+   SUBCELLULAR       0.80      0.78      0.79      3850
+        TISSUE       0.76      0.78      0.77      2975
+
+     micro avg       0.82      0.84      0.83     53881
+     macro avg       0.76      0.78      0.77     53881
+  weighted avg       0.82      0.84      0.83     53881
+
+### PANELIZATION
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "" \
+    --hub_model_id "EMBO/sd-panelization-v3"
+```
+
+### SMALL_MOL_ROLES
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "" \
+    --hub_model_id "EMBO/sd-smallmol-roles-v2"
+```
+
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --learning_rate 0.00005 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --run_name "sd-geneprod-roles-v2" \
+    --push_to_hub \
+    --hub_model_id "EMBO/sd-geneprod-roles-v2" \
+    --hub_strategy "end" \
+    --hub_token ""
+
+
+# Generating now the dataset including $GENEPROD$ and $SMALL_MOLECULE$ for roles
+
+```bash
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels_filtered/ /data/json/sd_panels_filtered_generic_roles
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panelization_filtered /data/json/sd_panelization_filtered_generic_roles
+```
+
+# Training on roles changing entities by their classes
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task ROLES \
+    --from_pretrained "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.0001 \
+    --per_device_train_batch_size 16 \
+    --disable_tqdm False \
     --do_train \
     --do_eval \
     --do_predict 
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.82      0.88      0.85     10508
+  MEASURED_VAR       0.88      0.91      0.89     90027
+
+     micro avg       0.87      0.91      0.89    100535
+     macro avg       0.85      0.90      0.87    100535
+  weighted avg       0.87      0.91      0.89    100535
+
+```
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.0001 \
+    --per_device_train_batch_size 16 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict 
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.83      0.88      0.86     10508
+  MEASURED_VAR       0.88      0.91      0.90     90027
+
+     micro avg       0.88      0.91      0.89    100535
+     macro avg       0.86      0.90      0.88    100535
+  weighted avg       0.88      0.91      0.89    100535
+
+```
+
+```bash
+
+python -m smtag.excell_roberta.token_classification \
+    --data "EMBO/sd-nlp-non-tokenized" \
+    --task ROLES \
+    --model "/lm_models/excell-roberta/v3-training-512bs/checkpoint-2716290" \
+    --add_prefix_space \
+    --num_train_epochs 2.
+
+                precision    recall  f1-score   support
+
+CONTROLLED_VAR       0.76      0.82      0.79      1952
+  MEASURED_VAR       0.85      0.93      0.89     23440
+
+     micro avg       0.84      0.92      0.88     25392
+     macro avg       0.80      0.87      0.84     25392
+  weighted avg       0.84      0.92      0.88     25392
+```
+
+
+# Possible annotation issues:
+
+```
+Alexa447 -> EXP_ASSAY
+number -> EXP_ASSAY
+DIPA -> EXP_ASSAY (4, 6-diamidino-2-phenylindole, nothing)
+Tukey's test -> O
+```

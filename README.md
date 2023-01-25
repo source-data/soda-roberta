@@ -1,116 +1,190 @@
+# Git Large File Storage
 
-SoDa-RoBERTa
-============
+![CI status][1]
 
-SODA-RoBERTa is a **So**urce **Da**ta resource for training __RoBERTa__ transformers for natural language processing tasks in cell and molecular biology.
+[1]: https://github.com/git-lfs/git-lfs/workflows/CI/badge.svg
 
-SourceData database: https://sourcedata.io, "SourceData: a semantic platform for curating and searching figures"
-Liechti R, George N, Götz L, El-Gebali S, Chasapi A, Crespo I, Xenarios I, Lemberger T, Nature Methods, https://doi.org/10.1038/nmeth.4471
+[Git LFS](https://git-lfs.github.com) is a command line extension and
+[specification](docs/spec.md) for managing large files with Git.
 
-RoBERTa transformer is a BERT derivative: https://huggingface.co/transformers/model_doc/roberta.html, "RoBERTa: A Robustly Optimized BERT Pretraining Approach" by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov
+The client is written in Go, with pre-compiled binaries available for Mac,
+Windows, Linux, and FreeBSD. Check out the [website](http://git-lfs.github.com)
+for an overview of features.
 
-SODA-RoBERTa uses the huggingface (https://huggingface.co) and PyTorch (https://pytorch.org/) frameworks.
+## Getting Started
 
-The models trained below are used in the SmartTag engine that tags biological entities and their experimental roles in figure legends.
+### Downloading
 
-Tagging biological entities and classifying their role as measured vs controlled variables (i.e. target of controlled experimental interventions) allows to  derive a knowledge graph representing causal scientific hypotheses that are tested in specific experiments.
+You can install the Git LFS client in several different ways, depending on your
+setup and preferences.
 
-SmartTag uses a 3-step pipeline:
+* **Linux users**. Debian and RPM packages are available from
+  [PackageCloud](https://packagecloud.io/github/git-lfs/install).
+* **macOS users**. [Homebrew](https://brew.sh) bottles are distributed, and can
+  be installed via `brew install git-lfs`.
+* **Windows users**. Git LFS is included in the distribution of
+  [Git for Windows](https://gitforwindows.org/). Alternatively, you can
+  install a recent version of Git LFS from the [Chocolatey](https://chocolatey.org/) package manager.
+* **Binary packages**. In addition, [binary packages](https://github.com/git-lfs/git-lfs/releases) are
+available for Linux, macOS, Windows, and FreeBSD.
+* **Building from source**. [This repository](https://github.com/git-lfs/git-lfs.git) can also be
+built from source using the latest version of [Go](https://golang.org), and the
+available instructions in our
+[Wiki](https://github.com/git-lfs/git-lfs/wiki/Installation#source).
 
-1. Segmentation of the text of figure legends into sub-panel legends.
-2. Named Entity Recognition of bioentities and experimental methods.
-3. Semantic tagging of the experimental role of gene products and small molecules as measured variable or controlled variable.
+### Installing
 
-Accordingly, a specialized language model for scientific biological language is fine tuned into 4 models for the respective tasks: PANELIZATION, NER, GENEPROD_ROLES and SMALL_MOL_ROLES. These models are based on the fine-tuning of a language model trained on abstracts and figure legends of scientific articles available in PubMedCentral (http://europepmc.org/).
+#### From binary
 
-The datasets and trained models are available at https://huggingface.co/EMBO.
+The [binary packages](https://github.com/git-lfs/git-lfs/releases) include a script which will:
 
-We provide in `docs/` instructions to train the language model by fine tuning a pretrained Roberta transformer on text from PubMedCentral and by training the 4 specific token classification models using the SourceData datset. Training can be done using the command line available at the `smtag.cli` module or in jupyter notebooks (see [`training_protocol_LM.ipynb`](./training_protocol_LM.ipynb) and [`training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) notebook).
+- Install Git LFS binaries onto the system `$PATH`
+- Run `git lfs install` to
+perform required global configuration changes.
 
-The training raw data is in the form of XML files. SODA-ROBERTA provides tools to convert XML into tagged datasets that can be used for training transformer models. At inference stage, the tagged text is serialized back into json.
+```ShellSession
+$ ./install.sh
+```
 
+#### From source
 
-# Quick access to the pretrained SmartTag pipeline
+- Place the `git-lfs` binary on your system’s executable `$PATH` or equivalent.
+- Git LFS requires global configuration changes once per-machine. This can be done by
+running:
 
-Setup a Python virtual environment:
+```ShellSession
+$ git lfs install
+```
 
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install --upgrade pip
+## Example Usage
 
-Install `docker` (https://docs.docker.com/engine/install/).
-Install`docker-compose` (https://docs.docker.com/compose/install/).
+To begin using Git LFS within a Git repository that is not already configured
+for Git LFS, you can indicate which files you would like Git LFS to manage.
+This can be done by running the following _from within a Git repository_:
 
-    pip install docker-compose==1.28.5
+```bash
+$ git lfs track "*.psd"
+```
 
-SmartTag can used with this command:
+(Where `*.psd` is the pattern of filenames that you wish to track. You can read
+more about this pattern syntax
+[here](https://git-scm.com/docs/gitattributes)).
 
-    docker-compose -f smtag.yml run --rm smtag "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
+> *Note:* the quotation marks surrounding the pattern are important to
+> prevent the glob pattern from being expanded by the shell.
 
-This will pull automatically the docker image `tlemberger/smarttag:latest` from [dockerhub](https://hub.docker.com/).
+After any invocation of `git-lfs-track(1)` or `git-lfs-untrack(1)`, you _must
+commit changes to your `.gitattributes` file_. This can be done by running:
 
-The first time the image is run, the models and tokenizers will be downloaded automatically from https://huggingface.co/EMBO and cached in the Docker-managed volume `/cache`.
+```bash
+$ git add .gitattributes
+$ git commit -m "track *.psd files using Git LFS"
+```
 
-SmarTag can be included in separate projects via its Docker image:
+You can now interact with your Git repository as usual, and Git LFS will take
+care of managing your large files. For example, changing a file named `my.psd`
+(tracked above via `*.psd`):
 
-    FROM tlemberger/smarttag:latest
-    # rest of the project's Dockerfile
+```bash
+$ git add my.psd
+$ git commit -m "add psd"
+```
 
-The tagger can be importer in python:
+> _Tip:_ if you have large files already in your repository's history, `git lfs
+> track` will _not_ track them retroactively. To migrate existing large files
+> in your history to use Git LFS, use `git lfs migrate`. For example:
+>
+> ```
+> $ git lfs migrate import --include="*.psd"
+> ```
+>
+> For more information, read [`git-lfs-migrate(1)`](https://github.com/git-lfs/git-lfs/blob/master/docs/man/git-lfs-migrate.1.ronn).
 
-    from smtag.pipeline import SmartTagger
-    smtg = SmartTagger()
-    text = "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
-    tagged = smtg.tag(text)  # json output
+You can confirm that Git LFS is managing your PSD file:
 
-Or via the command line:
+```bash
+$ git lfs ls-files
+3c2f7aedfb * my.psd
+```
 
-    python -m smtag.cli.inference.tag "We studied mice with genetic ablation of the ERK1 gene in brain and muscle."
+Once you've made your commits, push your files to the Git remote:
 
-To build a new image for smarttag for dockerhub user `anotheruser`:
+```bash
+$ git push origin master
+Uploading LFS objects: 100% (1/1), 810 B, 1.2 KB/s
+# ...
+To https://github.com/git-lfs/git-lfs-test
+   67fcf6a..47b2002  master -> master
+```
 
-    docker buildx build --platform "linux/amd64" -t anotheruser/smarttag:latest -f DockerfileSmartTag smtag
+Note: Git LFS requires at least Git 1.8.2 on Linux or 1.8.5 on macOS.
 
-Supported platforms are "linux/amd64" and "linux/arm64".
+## Limitations
 
-Push to dockerhub:
+Git LFS maintains a list of currently known limitations, which you can find and
+edit [here](https://github.com/git-lfs/git-lfs/wiki/Limitations).
 
-    docker login --username=anotheruser
-    docker push anotheruser/smarttag:tagname
+## Need Help?
 
-# Quick overview
+You can get help on specific commands directly:
 
-In a nutshell the following modules are involved in training and inference:
+```bash
+$ git lfs help <subcommand>
+```
 
-- `config` specifies application-wide preferences such as the type of model and tokenizer, exmaple lengths, etc...
-- the sourcedata datasets is downloaded with `smartnode`
-- examples are parsed from the xml with `extract`
-- `dataprep` tokenizes examples and encodes (`encoder`) xml elements as labels with `xml2labels` maps
-- `train` uses `loader` to load the dataset in the form expected by transformers and uses `datacollator` to generate batches and masks according to the task selected for training the model
-- `tb_callback` customizes display of training and validation losses during traiing and `metrics` is run on the test set at the end of the training 
-- `pipeline` integrates all the models in a single inference pipeline
+The [official documentation](docs) has command references and specifications for
+the tool.
 
-Language modeling and token classification have their speclized training (`train_lm` vs `train_tokcl`) and loading (`loader_lm` vs `loader_tokcl`) modules.
+You can always [open an issue](https://github.com/git-lfs/git-lfs/issues), and
+one of the Core Team members will respond to you. Please be sure to include:
 
-Language modeling uses a task we call 'targeted masked language modeling', whereby specific part-of-speech tokens are masked probabilitically. The current configurations allow the following masking:
+1. The output of `git lfs env`, which displays helpful information about your
+   Git repository useful in debugging.
+2. Any failed commands re-run with `GIT_TRACE=1` in the environment, which
+   displays additional information pertaining to why a command crashed.
 
-- DET: determinant
-- VERBS: verbs
-- SMALL: any determinants, conjunctions, prepositions or pronouns
+## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for info on working on Git LFS and
+sending patches. Related projects are listed on the [Implementations wiki
+page](https://github.com/git-lfs/git-lfs/wiki/Implementations).
 
-# Training
+## Core Team
 
-See the [`./training_protocol_TOKCL.ipynb`](./training_protocol_TOKCL.ipynb) Jupyter notebook or [`./docs/training.md`](/docs/training.md) on training the models.
+These are the humans that form the Git LFS core team, which runs the project.
 
+In alphabetical order:
 
-To start the notebook
+| [@bk2204][bk2204-user] | [@larsxschneider][larsxschneider-user] | [@PastelMobileSuit][PastelMobileSuit-user] |
+|---|---|---|
+| [![][bk2204-img]][bk2204-user] | [![][larsxschneider-img]][larsxschneider-user] | [![][PastelMobileSuit-img]][PastelMobileSuit-user] |
 
-    tmux  # optional but practical
-    docker-compose up -d
-    docker-compose exec nlp bash
-    jupyter notebook list  # -> Currently running servers: http://0.0.0.0:8888/?token=<tokenid>
+[bk2204-img]: https://avatars1.githubusercontent.com/u/497054?s=100&v=4
+[larsxschneider-img]: https://avatars1.githubusercontent.com/u/477434?s=100&v=4
+[PastelMobileSuit-img]: https://avatars2.githubusercontent.com/u/37254014?s=100&v=4
+[bk2204-user]: https://github.com/bk2204
+[larsxschneider-user]: https://github.com/larsxschneider
+[PastelMobileSuit-user]: https://github.com/PastelMobileSuit
 
-# Posting dataset and models
+### Alumni
 
-See [`./docs/dataset_sharing.md`](./docs/dataset_sharing.md) on posting dataset and models.
+These are the humans that have in the past formed the Git LFS core team, or
+have otherwise contributed a significant amount to the project. Git LFS would
+not be possible without them.
+
+In alphabetical order:
+
+| [@andyneff][andyneff-user] | [@rubyist][rubyist-user] | [@sinbad][sinbad-user] | [@technoweenie][technoweenie-user] | [@ttaylorr][ttaylorr-user] |
+|---|---|---|---|---|
+| [![][andyneff-img]][andyneff-user] | [![][rubyist-img]][rubyist-user] | [![][sinbad-img]][sinbad-user] | [![][technoweenie-img]][technoweenie-user] | [![][ttaylorr-img]][ttaylorr-user] |
+
+[andyneff-img]: https://avatars1.githubusercontent.com/u/7596961?v=3&s=100
+[rubyist-img]: https://avatars1.githubusercontent.com/u/143?v=3&s=100
+[sinbad-img]: https://avatars1.githubusercontent.com/u/142735?v=3&s=100
+[technoweenie-img]: https://avatars3.githubusercontent.com/u/21?v=3&s=100
+[ttaylorr-img]: https://avatars2.githubusercontent.com/u/443245?s=100&v=4
+[andyneff-user]: https://github.com/andyneff
+[sinbad-user]: https://github.com/sinbad
+[rubyist-user]: https://github.com/rubyist
+[technoweenie-user]: https://github.com/technoweenie
+[ttaylorr-user]: https://github.com/ttaylorr

@@ -20,7 +20,7 @@ from ..models.experimental import (
 )
 from ..data_collator import DataCollatorForMaskedTokenClassification
 from ..trainer import MyTrainer, ClassWeightTokenClassificationTrainer
-from ..metrics import MetricsTOKCL
+from ..metrics import MetricsTOKCL, MetricsCRFTOKCL
 from ..show import ShowExampleTOKCL
 from ..tb_callback import MyTensorBoardCallback
 from ..config import config
@@ -93,13 +93,16 @@ class TrainTokenClassification:
         logger.info(f"Instantiating model for token classification {self.from_pretrained}.")
         if "excell-roberta" in self.from_pretrained:
             self.model = EXcellRobertaForTokenClassification.from_pretrained(
-                                                                        self.from_pretrained,
-                                                                        num_labels=len(list(self.label2id.keys())),
-                                                                        max_position_embeddings=self._max_position_embeddings(),
-                                                                        id2label=self.id2label,
-                                                                        label2id=self.label2id,
-                                                                        # classifier_dropout=self.training_args.classifier_dropout,
-                                                                        max_length=self.max_length)
+                self.from_pretrained, 
+                use_crf=False, 
+                num_labels=len(list(self.label2id.keys())),
+                id2label=self.id2label,
+                label2id=self.label2id,
+                return_dict=False,
+                include_start_end_transitions=False
+            )
+            # self.compute_metrics = MetricsCRFTOKCL(label_list=list(self.label2id.keys()))
+
         else:
             self.model = AutoModelForTokenClassification.from_pretrained(
                                                                         self.from_pretrained,
@@ -197,6 +200,7 @@ class TrainTokenClassification:
         if self.training_args.do_predict:
             logger.info(f"Testing on {len(self.test_dataset)}.")
             self.trainer.args.prediction_loss_only = False
+            print(f"Testing on {len(self.test_dataset)}.")
             pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
 
         if self.training_args.push_to_hub:

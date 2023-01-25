@@ -260,9 +260,9 @@ class PreparatorTOKCL:
         source_dir_path: str,
         dest_dir_path: str,
         code_maps: List[CodeMap],
-        tokenizer: AutoTokenizer = config.tokenizer,
+        tokenizer: AutoTokenizer = None,
         max_length: int = config.max_length,
-        subsets: List[str] = ["train", "eval", "test"]
+        subsets: List[str] = ["train", "eval", "test"],
     ):
         self.source_dir_path = Path(source_dir_path)
         self.subsets = subsets
@@ -282,6 +282,10 @@ class PreparatorTOKCL:
         self.code_maps = code_maps
         self.max_length = max_length
         self.tokenizer = tokenizer
+        self.roberta = False
+        if (self.tokenizer != "") and ("roberta" in self.tokenizer.__class__.__name__.lower()):
+            self.roberta = True
+
 
     def run(self):
         """Runs the coding and labeling of xml examples.
@@ -296,39 +300,93 @@ class PreparatorTOKCL:
                 lines = f.readlines()
                 for line in tqdm(lines):
                     xml_example: Element = fromstring(line)
-                    tokens, token_level_labels, text = self._encode_example(xml_example)
+                    tokens, token_level_labels, text, panel_id = self._encode_example(xml_example)
+
                     examples.append({
+                        'panel_id': panel_id,
                         'words': tokens,
                         'text': text,
-                        'label_ids': token_level_labels})
+                        'label_ids': token_level_labels,
+                    }
+                    )
+                        
             self._save_json(examples, dest_file_path)
-
-    def _remove_duplicate_panels():
-        pass
 
     def _encode_example(self, xml: Element) -> Tuple[BatchEncoding, Dict]:
         xml_encoder = XMLEncoder(xml)
+        panel_id = xml_encoder.element.attrib.get("panel_id", None)
         inner_text = innertext(xml_encoder.element)
         token_level_labels_dict = {}
 
         for code_map in self.code_maps:
             xml_encoded = xml_encoder.encode(code_map)
+
+            
             if code_map.name != "panel_start":
                 char_level_labels = xml_encoded['label_ids']
-                words, token_level_labels = self._from_char_to_token_level_labels(code_map,
-                                                                                  list(inner_text),
-                                                                                  char_level_labels)
+                if self.roberta:
+                    words, token_level_labels = self._from_char_to_token_level_labels_roberta(code_map,
+                                                                                    list(inner_text),
+                                                                                    char_level_labels)
+                else:
+                    words, token_level_labels = self._from_char_to_token_level_labels(code_map,
+                                                                                    list(inner_text),
+                                                                                    char_level_labels)
             else:
                 char_level_labels = ["O"] * len(xml_encoded['label_ids'])
                 offsets = xml_encoded["offsets"]
                 for offset in offsets:
                     char_level_labels[offset[0]] = "B-PANEL_START"
-                words, token_level_labels = self._from_char_to_token_level_labels_panel(list(inner_text),
-                                                                                        char_level_labels)
 
+                if self.roberta:
+                    words, token_level_labels = self._from_char_to_token_level_labels_panel_roberta(list(inner_text),
+                                                                                            char_level_labels)
+                else:
+                    words, token_level_labels = self._from_char_to_token_level_labels_panel(list(inner_text),
+                                                                                            char_level_labels)
             token_level_labels_dict[code_map.name] = token_level_labels
 
-        return words,  token_level_labels_dict, inner_text
+        return words,  token_level_labels_dict, inner_text, panel_id
+
+    def _from_char_to_token_level_labels_roberta(self, code_map: CodeMap, text: List[str], labels: List) -> List: # Checked
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying Tthe XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of the characters inside the text of the XML elements
+            labels List:        List of labels for each character inside the XML elements. They will be
+                                a mix of integers and None
+
+        Returns:
+            List[str]           Word-level tokenized labels for the input text
+        """
+
+        labels_ = [0 if label == None else label for label in labels]
+            
+        tokens = self.tokenizer("".join(text), truncation=True, max_length=512)
+        
+        new_labels = []
+        for i in range(len(tokens["input_ids"])):
+            if tokens.token_to_chars(i):
+                token_char_map = labels_[tokens.token_to_chars(i).start: tokens.token_to_chars(i).end]
+                if  token_char_map != []:
+                    if all(x==token_char_map[0] for x in token_char_map):
+                        new_labels.append(token_char_map[0])
+                    else:
+                        token_char_map_composed = [value for value in token_char_map if value != 0]
+                        new_labels.append(token_char_map_composed[0])
+                else:
+                    new_labels.append(0)
+            else:
+                new_labels.append(0)
+
+        assert len(tokens["input_ids"]) == len(new_labels), f"Length of labels and words not identical!"
+       
+        new_labels = self._labels_to_iob2_roberta(code_map, new_labels, tokens["input_ids"])
+
+
+        return tokens["input_ids"], new_labels
+        
 
     def _from_char_to_token_level_labels(self, code_map: CodeMap, text: List[str], labels: List) -> List: # Checked
         """
@@ -366,7 +424,7 @@ class PreparatorTOKCL:
                 word = ''
                 label_word = ''
 
-        word_level_iob2_labels = self._labels_to_iob2(code_map, word_level_words, word_level_labels)
+        word_level_iob2_labels = self._labels_to_iob2(code_map, word_level_labels)
         assert len(word_level_words) == len(word_level_iob2_labels), "Length of labels and words not identical!"
         return word_level_words, word_level_iob2_labels
 
@@ -412,9 +470,30 @@ class PreparatorTOKCL:
 
         return word_level_words, word_level_labels
 
+    def _from_char_to_token_level_labels_panel_roberta(self, chars, labels):    
+        text = "".join(chars)
+        
+        tokens = self.tokenizer(text)
+        
+        new_labels = []
+        for i in range(len(tokens["input_ids"])):
+            if i == 1:
+                new_labels.append("B-PANEL_START")
+            elif tokens.token_to_chars(i):
+                token_char_map = labels[tokens.token_to_chars(i).start: tokens.token_to_chars(i).end]
+                if "B-PANEL_START" in token_char_map:
+                    new_labels.append("B-PANEL_START")
+                else:
+                    new_labels.append("O")
+            else:
+                new_labels.append("O")
+            
+        assert len(tokens["input_ids"]) == len(new_labels)
+        return tokens["input_ids"], new_labels
+
 
     @staticmethod
-    def _labels_to_iob2(code_map: CodeMap, words: List[str], labels: List) -> List: # Checked
+    def _labels_to_iob2(code_map: CodeMap, labels: List) -> List: # Checked
         """
         Args:
             code_map (CodeMap): CodeMap, each specifying The XML-to-code mapping of label codes
@@ -446,37 +525,45 @@ class PreparatorTOKCL:
 
         return iob2_labels
 
+    def _labels_to_iob2_roberta(self, code_map, labels: List[int], tokens: List[int]): # Checked
+        """
+        Args:
+            code_map (CodeMap): CodeMap, each specifying The XML-to-code mapping of label codes
+                                to specific combinations of tag name and attribute values.
+            text List[str]:     List of separated words
+            labels List:        List of labels for each word inside the XML elements.
+
+        Returns:
+            List[str]           Word-level tokenized labels in IOB2 format
+
+        """
+        iob2_labels = []
+
+        for idx, (label, token) in enumerate(zip(labels, tokens)):
+            if code_map.name == "panel_start":
+                (iob2_labels.append("O") if idx != 1 else iob2_labels.append("B-PANEL_START"))
+            else:
+                if token in list(self.tokenizer.special_tokens_map.values()):
+                    iob2_labels.append("O")
+                if label == 0:
+                    iob2_labels.append("O")
+                if label != 0:
+                    if idx == 0:
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] != label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2 - 1])
+                    if (idx > 0) and (labels[idx - 1] == label):
+                        iob2_labels.append(code_map.iob2_labels[int(label) * 2])
+
+        return iob2_labels
+
     @staticmethod
     def _save_json(examples: List, dest_file_path: Path):
         # saving line by line to json-line file
         with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
-                f.write(f"{json.dumps(example)}\n")
-
-    @staticmethod
-    def _cleaning_rules(text, alternative):
-        if '"button"' in text:
-            text = alternative
-        to_replace = {
-            "’": "'",
-            "–": "-",
-            "\xa0": " ",
-            "&amp;": "&",
-            "&amp;amp;": "&",
-            "&nbsp;": " ",
-            "\u2009": " ",
-            "&gt;": ">",
-            "&lt;": "<",
-            "amp;": "",
-            ") ": ")",
-        }
-
-        text = text.strip()
-        for x, y in to_replace.items():
-            text = text.replace(x, y)
-
-        return text
+                f.write(f"{json.dumps(example, ensure_ascii=False)}\n")
 
 
 class PreparatorCharacterTOKCL:

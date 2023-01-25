@@ -179,18 +179,16 @@ Split the original documents into train, eval and test sets. This is done at the
 
 Extract the examples for NER and ROLES using an XPAth that identifies individual panel legends within figure legends:
 
-    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels -P .//sd-panel --keep_xml -F 
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panels_filtered -P .//sd-panel --keep_xml -F .//sd-tag
 
 Using an XPath for entire figure legends encompassing several panel legends. This will be used to learn segmentation of figure legends into panel legends:
 
-    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panelization --xpath .//fig --keep_xml
+    python -m smtag.cli.prepro.extract /data/xml/sourcedata /data/xml/sd_panelization_filtered --xpath .//fig --keep_xml -F .//sd-tag
 
 Prepare the datasets for NER, ROLES and PANELIZATION. This step generates the data. This step will generate `JSONlines` files for the `train`, `test`, and `eval` splits. They will be word pre-tokenized and wth IOB labels for each word. This way of organizing the data is compatible with the best practices for token classification in the 🤗 framework. Note that it is important at this point to have the `config.py` file properly configured.
 
-    mkdir /data/json/sd_panels
-    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels /data/json/sd_panels
-    mkdir /data/json/sd_panelization
-    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panels_filtered/ /data/json/sd_panels_filtered
+    python -m smtag.cli.tokcl.dataprep /data/xml/sd_panelization /data/json/sd_panelization_filtered
 
 ### Character-level data
 
@@ -253,6 +251,28 @@ In the case of unbalanced dstssets, the option `--class_weights` can be added an
         --do_predict
 ```
 
+
+### Generic roles
+
+The previous GENEPROD_ROLES and SMALL_MOL_ROLES will get only GENEPROD or SMALL_MOLECULES, change the entities 
+by a single `[MASK]` token. We now provide a way to train a model simultaneously on both entities. 
+It will change the entity names by their generic class: `$GENEPROD$` or `$SMALL_MOLECULE$` and train it simultaneously.
+
+
+```bash
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.0001 \
+    --per_device_train_batch_size 16 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict 
+```
 
 ### Selecting labels to be trained
 
