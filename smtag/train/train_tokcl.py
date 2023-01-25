@@ -39,7 +39,6 @@ import itertools
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, minmax_scale
 from sklearn.utils.class_weight import compute_class_weight
-from ..excell_roberta.modeling_excell_roberta import EXcellRobertaForTokenClassification
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -91,24 +90,14 @@ class TrainTokenClassification:
 
         # Define the model 
         logger.info(f"Instantiating model for token classification {self.from_pretrained}.")
-        if "excell-roberta" in self.from_pretrained:
-            self.model = EXcellRobertaForTokenClassification.from_pretrained(
-                                                                        self.from_pretrained,
-                                                                        num_labels=len(list(self.label2id.keys())),
-                                                                        max_position_embeddings=self._max_position_embeddings(),
-                                                                        id2label=self.id2label,
-                                                                        label2id=self.label2id,
-                                                                        # classifier_dropout=self.training_args.classifier_dropout,
-                                                                        max_length=self.max_length)
-        else:
-            self.model = AutoModelForTokenClassification.from_pretrained(
-                                                                        self.from_pretrained,
-                                                                        num_labels=len(list(self.label2id.keys())),
-                                                                        max_position_embeddings=self._max_position_embeddings(),
-                                                                        id2label=self.id2label,
-                                                                        label2id=self.label2id,
-                                                                        # classifier_dropout=self.training_args.classifier_dropout,
-                                                                        max_length=self.max_length)
+        self.model = AutoModelForTokenClassification.from_pretrained(
+                                                                    self.from_pretrained,
+                                                                    num_labels=len(list(self.label2id.keys())),
+                                                                    max_position_embeddings=self._max_position_embeddings(),
+                                                                    id2label=self.id2label,
+                                                                    label2id=self.label2id,
+                                                                    # classifier_dropout=self.training_args.classifier_dropout,
+                                                                    max_length=self.max_length)
     
         # Define the trainer
         if self.model_type == "Autoencoder":

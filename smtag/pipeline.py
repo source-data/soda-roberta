@@ -1,5 +1,5 @@
 from transformers import (
-    AutoModelForTokenClassification, AutoTokenizer
+    AutoModelForTokenClassification, AutoTokenizer, RobertaTokenizerFast
 )
 import numpy as np
 import json
@@ -8,7 +8,6 @@ from typing import Optional, List, Tuple, Union, Any, Dict
 from .xml2labels import CodeMap, SourceDataCodes as sd
 from transformers.pipelines.token_classification import (TokenClassificationArgumentHandler, 
                                                          TokenClassificationPipeline, AggregationStrategy )
-
 from transformers import Pipeline
 from torch import Tensor
 from transformers.pipelines.base import ChunkPipeline
@@ -19,165 +18,6 @@ from transformers.models.bert.tokenization_bert import BasicTokenizer
 from math import ceil
 import warnings
 
-class Entity:
-
-    def __init__(
-        self,
-        input_id: int,
-        ner_label: str,
-        role_geneprod_label: str,
-        role_small_mol_label: str,
-        ner_code_map: CodeMap,
-        geneprod_role_code_map: CodeMap,
-        small_mol_role_code_map: CodeMap,
-        type_score: List[float],
-        geneprod_role_score: List[float],
-        molecule_role_score: List[float],
-        
-    ):
-        self.input_ids = [input_id]
-        self.ner_label = ner_label
-        self.role_geneprod_label = role_geneprod_label
-        self.role_small_mol_label = role_small_mol_label
-        self.type_score = type_score
-        self.geneprod_role_score = geneprod_role_score
-        self.molecule_role_score = molecule_role_score
-        ner_constraint = ner_code_map.from_label(ner_label)
-        # keep only first value of attributes for serialization
-        self.attrib = {attr: val[0] for attr, val in ner_constraint['attributes'].items()}
-        if role_geneprod_label:
-            role_constraint = geneprod_role_code_map.from_label(role_geneprod_label)
-            self.attrib = {attr: val[0] for attr, val in role_constraint['attributes'].items()}
-        if role_small_mol_label:
-            role_constraint = small_mol_role_code_map.from_label(role_small_mol_label)
-            self.attrib = {attr: val[0] for attr, val in role_constraint['attributes'].items()}
-        self.text = ''
-
-    def to_dict(self, tokenizer):
-        self.text = tokenizer.decode(self.input_ids)
-        d = {'text': self.text.strip()}  # removes the leading space from the RobertaTokenizer
-        for k, v in self.attrib.items():
-            d[k] = v
-        try:
-            d["type"] = d.pop("entity_type")
-        except KeyError:
-            pass
-
-        d["type_score"] = np.array(self.type_score).mean()
-
-        if d.get("type", "") in ["geneprod", "gene", "protein"]:
-            d["role_score"] = np.array(self.geneprod_role_score).mean()
-
-        if d.get("type", "") in ['molecule']:
-            d["role_score"] = np.array(self.molecule_role_score).mean()
-        return d
-
-
-class Serializer:
-
-    def __init__(
-        self,
-        tokenizer,
-        ner_code_map,
-        geneprod_role_code_map,
-        small_mol_role_code_map
-    ):
-        self.tokenizer = tokenizer
-        self.ner_code_map = ner_code_map
-        self.geneprod_role_code_map = geneprod_role_code_map
-        self.small_mol_role_code_map = small_mol_role_code_map
-
-    def __call__(self, *args, format: str = "json") -> str:
-        if format == "json":
-            return self.to_json(*args)
-        else:
-            return input
-
-    def to_json(self, tagged_panel_groups: List[Tuple[Dict[str, torch.Tensor]]]) -> str:
-
-        j = {'smtag': []}
-        for panel_group in tagged_panel_groups:
-            j_panel_group = {'panel_group': {
-                "entities": []
-            }
-            }
-            ner_results, geneprod_roles_results, small_mol_roles_results, panel_text = panel_group
-            num_panels = len(ner_results['input_ids'])
-            for panel_idx in range(num_panels):
-                label_ids = ner_results['input_ids'][panel_idx]
-                entity_types = ner_results['labels'][panel_idx]
-                special_tokens_mask = ner_results['special_tokens_mask'][panel_idx]
-                entity_geneprod_roles = geneprod_roles_results['labels'][panel_idx]
-                entity_small_mol_roles = small_mol_roles_results['labels'][panel_idx]
-                ner_scores = ner_results['scores'][panel_idx]
-                geneprod_roles_scores = geneprod_roles_results['scores'][panel_idx]
-                small_mol_roles_scores = small_mol_roles_results['scores'][panel_idx]
-                entity_list = []
-                entity = None
-                for i in range(len(label_ids)):
-                    try:
-                        special_token = special_tokens_mask[i]
-                    except IndexError:
-                        special_token = 1
-                    # ignore positions that are special tokens
-                    if special_token == 0:
-                        input_id_ner = label_ids[i]
-                        label_ner = entity_types[i]
-                        score_ner = ner_scores[i]
-                        score_geneprod_roles = geneprod_roles_scores[i]
-                        score_small_mol_roles = small_mol_roles_scores[i]
-                        iob_ner = self.ner_code_map.iob2_labels[label_ner]  # convert label idx into IOB2 label
-                        label_geneprod_role = entity_geneprod_roles[i]
-                        label_small_mol_role = entity_small_mol_roles[i]
-                        iob_geneprod_role = self.geneprod_role_code_map.iob2_labels[label_geneprod_role]
-                        iob_small_mol_role = self.small_mol_role_code_map.iob2_labels[label_small_mol_role]
-                        if iob_ner != "O":  # begining or inside an entity, for ex B-GENEPROD
-                            prefix = iob_ner[0:2]  # for example B-
-                            label_ner = iob_ner[2:]  # for example GENEPROD
-                            if prefix == "B-":  # begining of a new entity
-                                if entity is not None:  # save current entity before creating new one
-                                    entity_dict = entity.to_dict(self.tokenizer)
-                                    # This is the place where scores should be added to the entity
-
-                                    entity_list.append(entity_dict)
-                                entity = Entity(
-                                    input_id=input_id_ner,
-                                    ner_label=label_ner,
-                                    role_geneprod_label=iob_geneprod_role[2:] if iob_geneprod_role != "O" else "",
-                                    role_small_mol_label=iob_small_mol_role[2:] if iob_small_mol_role != "O" else "",
-                                    ner_code_map=self.ner_code_map,
-                                    geneprod_role_code_map=self.geneprod_role_code_map,
-                                    small_mol_role_code_map=self.small_mol_role_code_map,
-                                    type_score=[score_ner],
-                                    geneprod_role_score=[score_geneprod_roles],
-                                    molecule_role_score=[score_small_mol_roles],
-                                )
-                            elif prefix == "I-" and entity is not None:  # already inside an entity, continue add token ids
-                                entity.input_ids.append(input_id_ner)
-                                entity.type_score.append(score_ner)
-                                entity.geneprod_role_score.append(score_geneprod_roles)
-                                entity.molecule_role_score.append(score_small_mol_roles)
-                            # if currently I-nside and entity predicted but no prior B-eginging detected.
-                            # Would be an inference mistake.
-                            elif prefix == "I-" and entity is None:  # should not happen, but who knows...
-                                # It is happening sometimes, giving text like ##token
-                                # Simply passing avoids it 
-                                # Avoding this would leave a cleaner graph.
-                                pass
-                            else:
-                                # something is wrong...
-                                print(f"Something is wrong at token {input_id_ner} with IOB label {iob_ner}.")
-                                print(j)
-                                raise Exception("serialization failed")
-                        elif entity is not None:
-                            entity_list.append(entity.to_dict(self.tokenizer))
-                            entity = None
-                j_panel_group['panel_group']['entities'].append(entity_list)
-                j_panel_group['panel_group']['panel_text'] = panel_text
-            j['smtag'].append(j_panel_group)
-        return json.dumps(j, indent=2)
-
-
 class Tagger:
 
     def __init__(
@@ -185,8 +25,8 @@ class Tagger:
         tokenizer,
         panel_model,
         ner_model,
-        geneprod_role_model,
-        small_mol_role_model,
+        geneprod_role_model=None,
+        small_mol_role_model=None,
     ):
         self.tokenizer = tokenizer  # for encoding
         self.panel_model = panel_model
@@ -197,12 +37,6 @@ class Tagger:
         self.ner_code_map = sd.ENTITY_TYPES
         self.geneprod_role_code_map = sd.GENEPROD_ROLES
         self.small_mol_role_code_map = sd.SMALL_MOL_ROLES
-        self.serializer = Serializer(
-            self.tokenizer,
-            self.ner_code_map,
-            self.geneprod_role_code_map,
-            self.small_mol_role_code_map
-        )
 
     def __call__(self, examples: Union[str, List[str]]) -> str:
         if isinstance(examples, list):
@@ -210,33 +44,70 @@ class Tagger:
         else:
             return self._pipeline([examples])
 
-    def _pipeline(self, examples: List[str]) -> List:
-        tagged = []
-        # tokenized = self._tokenize(examples)
-        # panelized = self.panelize(tokenized)
+    def _pipeline(self, examples: Union[List[str], str]) -> List:
 
-        pipe = LongTextTokenClassificationPipeline(
+        panelize_output = self._panelize_pipeline(examples)
+
+        ner_output, geneprod_mask, small_mol_mask = self._ner_pipeline(examples, panelize_output)
+
+        pipeline_output = self._roles_pipeline(examples, ner_output, geneprod_mask, small_mol_mask)
+
+        serialized = json.dumps(pipeline_output, ensure_ascii=False, indent=2)
+
+        return serialized
+        
+
+    def _panelize_pipeline(self, examples: Union[List[str], str]):
+
+        panel_pipe = LongTextTokenClassificationPipeline(
             task="token-classification",
             model=self.panel_model,
             tokenizer=self.tokenizer,
-            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            device=torch.device(0 if torch.cuda.is_available() else "cpu"),
             aggregation_strategy="simple"
         )
 
-        panelized = [pipe("Figure " + examples[0] if isinstance(examples, list) else "Figure " + examples, stride=50)]
-        
-        for panel_group in panelized[0]:
-            panel_group = self._truncate(panel_group)
-            ner_results = self.ner(panel_group)
-            geneprod_roles_results = self.roles(ner_results, ['B-GENEPROD', 'I-GENEPROD'], self.geneprod_role_model)
-            small_mol_roles_results = self.roles(ner_results, ['B-SMALL_MOLECULE', 'I-SMALL_MOLECULE'], self.small_mol_role_model)
-            panel_text = self.tokenizer.decode(panel_group["input_ids"][0])
-            tagged.append((ner_results, geneprod_roles_results, small_mol_roles_results, panel_text))
+        panelized = panel_pipe("Figure " + examples[0] if isinstance(examples, list) else "Figure " + examples, stride=50)
 
-        serialized = self.serializer(tagged, format='json')
+        panelize_output = self._panelize_postprocess(panelized, examples[0] if isinstance(examples, list) else examples)
 
-        self.serialized = serialized
-        return serialized
+        return panelize_output
+
+    def _ner_pipeline(self, examples: Union[List[str], str], panelize_output: List[Dict[str, Any]]):
+        ner_pipe = LongTextTokenClassificationPipeline(
+            task="token-classification",
+            model=self.ner_model,
+            tokenizer=self.tokenizer,
+            device=torch.device(0 if torch.cuda.is_available() else "cpu"),
+            aggregation_strategy="simple"
+        )
+
+        ner_tagged = ner_pipe(examples[0] if isinstance(examples, list) else examples, stride=100)
+
+        ner_output, geneprod_mask, small_mol_mask = self._ner_postprocess(
+            ner_tagged, 
+            panelize_output,
+            examples[0] if isinstance(examples, list) else examples
+            )
+
+        return ner_output, geneprod_mask, small_mol_mask
+
+    def _roles_pipeline(self, examples: Union[List[str], str], ner_output: List[Dict[str, Any]], geneprod_mask: List[Tuple[int,int]], small_mol_mask: List[Tuple[int,int]]) -> List[Dict[str, Any]]:
+        geneprod_output = self._get_roles(
+            examples[0] if isinstance(examples, list) else examples,
+            geneprod_mask,
+            self.geneprod_role_model
+        )
+
+        small_mol_output = self._get_roles(
+            examples[0] if isinstance(examples, list) else examples,
+            small_mol_mask,
+            self.small_mol_role_model
+        )
+
+        pipeline_output = self._roles_post_process(ner_output, geneprod_output, small_mol_output)
+
+        return pipeline_output
 
     def _tokenize(self, examples: List[str]) -> Dict[str, List[int]]:
         tokenized = self.tokenizer(
@@ -248,112 +119,155 @@ class Tagger:
         )
         return tokenized
 
-    def panelize(self, inputs: Dict[str, List[int]]) -> List[Dict[str, List[int]]]:
-        panel_start_label_code = self.panel_code_map.iob2_labels.index('B-PANEL_START')
-        predictions = self.predict(inputs, self.panel_model)
-        batch = []
-        # each element of the predictions['input_ids'] list is a group of panels
-        # each group of panel need to be segmented into individual panels using the predicted B-PANEL_START tag
-        for input_ids, labels in zip(predictions['input_ids'], predictions['labels']):
-            panel_group = {
-                'input_ids': [],
-                # 'attention_mask': [],
-                'special_tokens_mask': []
-            }
-            panel = []
-            for input_id, label in zip(input_ids, labels):
-                # need to skip beginging and end of sentence tokens
-                if input_id not in [self.tokenizer.bos_token_id, self.tokenizer.eos_token_id]:
-                    # are we at the start of a new panel?
-                    if label == panel_start_label_code:
-                        # have we accumulated input_ids to make a panel?
-                        if panel:
-                            # it is time to add the panel to the current panel group
-                            encoded_panel = self._tokenize(self.tokenizer.decode(panel))  # nicely return tensors and special tokens
-                            panel_group['input_ids'].append(encoded_panel['input_ids'])
-                            # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
-                            panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
-                            panel = []
-                    panel.append(input_id)
-            # don't forget to include last accumulated panel
-            if panel:
-                encoded_panel = self._tokenize(self.tokenizer.decode(panel))
-                panel_group['input_ids'].append(encoded_panel['input_ids'])
-                # panel_group['attention_mask'].append(encoded_panel['attention_mask'])
-                panel_group['special_tokens_mask'].append(encoded_panel['special_tokens_mask'])
-                panel = []
-            batch.append(panel_group)
-        return batch
+    def _panelize_postprocess(self, inputs: List[Dict[str, Any]], original_sentence: str) -> List[Dict[str, Any]]:
+        # TODO I should generate a dataclass for the output of this function
 
-    def ner(self, inputs: Dict[str, List[int]]) -> Dict[str, List[int]]: 
-        return self.predict(inputs, self.ner_model)
+        panelize_output = []
+        did_panel_start = False
+        restore_original = len("Figure ")
+        group_text = ""
 
-    def roles(
-        self,
-        inputs: Dict[str, List[int]],
-        labels_to_mask: List[str],
-        role_model
-    ) -> Dict[str, List[int]]:
-        masked_inputs = {
-            "input_ids": torch.tensor(inputs["input_ids"], dtype=torch.long),
-            "special_tokens_mask": torch.tensor(inputs["special_tokens_mask"], dtype=torch.uint8)
-        }
-        # tensorify labels
-        labels = torch.tensor(inputs["labels"])
-        for label in labels_to_mask:
-            masking_id = self.ner_code_map.iob2_labels.index(label)
-            mask = labels == masking_id
-            masked_inputs['input_ids'][mask] = self.tokenizer.mask_token_id
-        outputs = self.predict(masked_inputs, role_model)
-        return outputs
-
-    def predict(self, inputs: Dict[str, List[int]], model) -> Dict[str, List[int]]:
-        # what follows is inspired from TokenClassificationPipeline but avoiding transforming labels_idx into str
-        model.eval()
-        # pad lists to same length and tensorify
-        if isinstance(inputs["input_ids"], (list, tuple)):
-            examples = self.tokenizer.pad(
-                inputs,
-                return_tensors="pt",
-                padding=True,  # this will pad to the max length in the batch
-            )
-        else:
-            # already as tensor; need to clone before popping things out
-            examples = {
-                "input_ids": inputs["input_ids"].clone(),
-                "special_tokens_mask": inputs["special_tokens_mask"].clone()
-            }
-        # pop() to remove from examples but keep for later
-        special_tokens_mask = examples.pop("special_tokens_mask")
-        with torch.no_grad():
-            # tokens = self.ensure_tensor_on_device(**tokens)
-            try:
-                outputs = model(**examples)
-            except RuntimeError as e:
-                print(e)
-                import pdb; pdb.set_trace()
-            logits = outputs[0].cpu()  # B x L H
-            proba = logits.softmax(-1)  # B x L x H
-            input_ids = examples["input_ids"].cpu()
-            labels = logits.argmax(-1)  # B x L
-            scores = proba.take_along_dim(labels.unsqueeze(-1), -1)  # pytorch v 1.10 !!
-            scores.squeeze_(-1)
-        predictions = {
-            "input_ids": input_ids.tolist(),
-            "scores": scores.tolist(),
-            "labels": labels.tolist(),
-            "special_tokens_mask": special_tokens_mask.tolist(),
-        }
-        return predictions
-    
-    def _truncate(self, panel_group):
-        new_inputs = {}
-        for key, value in panel_group.items():
-            if key == "input_ids":
-                new_inputs[key] = [value[:self.panel_model.config.max_position_embeddings-1] + [self.tokenizer.sep_token_id]]
+        for n, entity in enumerate(inputs):
+            # Dealing with the first panel_group, typically empty
+            if n == 0:
+                if (entity["entity_group"] == "O"):
+                    pass
+                    if entity["end"]-restore_original >= 0:
+                        panelize_output.append(
+                            {
+                                "panel": 0,
+                                "text": original_sentence[entity["start"]: entity["end"]],
+                                "start": entity["start"]-restore_original,
+                                "end": entity["end"]-restore_original,
+                            }
+                        )
+                    
+                if (entity["entity_group"] == "PANEL_START"):   
+                    did_panel_start = True
+                    start = entity["start"]-restore_original
             else:
-                new_inputs[key] = [value[:self.panel_model.config.max_position_embeddings]]
-        return new_inputs
+                if entity["entity_group"] == "PANEL_START":
+                    did_panel_start = True
+                    start = entity["start"]-restore_original
+                    panel_group = len(panelize_output)
+
+                if (entity["entity_group"] == "O") and did_panel_start:
+                    end = entity["end"]-restore_original
+                    panelize_output.append(
+                        {
+                            "panel": panel_group,
+                            "text": original_sentence[start: end],
+                            "start": start,
+                            "end": end,
+                        }
+                    )
+
+                    did_panel_start = False
+
+        return panelize_output
+
+    def _ner_postprocess(self, entities: List[Dict[str, Any]], panels: List[Dict[str, Any]], sentence: str) -> Tuple[List[Dict[str, Any]], List[Tuple[int,int]], List[Tuple[int,int]]]:
+        ner_output = []
+        geneprod_masked = []
+        small_mol_masked = []
+        for panel in panels:
+            panel_entities = []
+            for entity in entities:
+                if (entity['start'] >= panel['start']) and (entity['start'] < panel['end']) and (entity['end'] <= panel['end']):
+                    if entity['entity_group'] != 'O':
+                        if entity['entity_group'] in ["EXP_ASSAY", "DISEASE"]:
+                            categories = {"EXP_ASSAY": "assay", "DISEASE": "disease"}
+                            panel_entities.append(
+                                {
+                                    "text": sentence[entity["start"]: entity["end"]],
+                                    "type": "",
+                                    "category": categories.get(entity["entity_group"], ""),
+                                    "type_score": "",
+                                    "category_score": float(entity["score"]),
+                                    "start": entity["start"],
+                                    "end": entity["end"]
+                                }
+                            )
+                        else:
+                            if entity["entity_group"] == "GENEPROD":
+                                geneprod_masked.append((entity["start"], entity["end"]))
+                            if entity["entity_group"] == "SMALL_MOLECULE":
+                                small_mol_masked.append((entity["start"], entity["end"]))
+                            panel_entities.append(
+                                {
+                                    "text": sentence[entity["start"]: entity["end"]],
+                                    "type": entity["entity_group"],
+                                    "category": "",
+                                    "type_score": float(entity["score"]),
+                                    "category_score": "",
+                                    "start": entity["start"],
+                                    "end": entity["end"]
+                                }
+                            )
+            panel["entities"] = panel_entities
+            ner_output.append(panel)
+
+
+        return (ner_output, geneprod_masked, small_mol_masked)
+
+    def _get_roles(self, sentence: str, mask: List[Tuple[int,int]], model: AutoModelForTokenClassification) -> List[Dict[str, Any]]:
+        masked_sentence = self._get_masked_sentence(sentence, mask)
+        roles_pipe = LongTextTokenClassificationPipeline(
+            task="token-classification",
+            model=model,
+            tokenizer=self.tokenizer,
+            device=torch.device(0 if torch.cuda.is_available() else "cpu"),
+            aggregation_strategy="simple"
+        )
+        roles_output = roles_pipe(masked_sentence)
+        roles_clean = []
+        for result in roles_output:
+            if result["entity_group"] != "O":
+                roles_clean.append(result)
+        assert len(roles_clean) == len(mask)
+        for entity, role in zip(mask, roles_clean):
+            role["start"] = entity[0]
+            role["end"] = entity[1]
+        return roles_clean
+
+
+    @staticmethod
+    def _get_masked_sentence(sentence: str, mask: List[Tuple[int,int]]) -> str:
+        sentence_list = list(sentence)
+        ranges_to_mask = []
+        output_list = []
+        for (start, end) in mask:
+            for idx in range(start, end):
+                ranges_to_mask.append(idx)
+        for idx, char in enumerate(sentence_list):
+            if idx not in ranges_to_mask:
+                output_list.append(char)
+            elif (idx in ranges_to_mask) and( output_list[-1] != "[MASK]"):
+                output_list.append("[MASK]")
+            elif (idx in ranges_to_mask) and( output_list[-1] == "[MASK]"):
+                continue
+            else:
+                raise NotImplementedError
+
+        return "".join(output_list)
+
+    @staticmethod
+    def _roles_post_process(ner, geneprods, small_mols):
+        for panel in ner:
+            for entity in panel["entities"]:
+                if entity["type"] == "GENEPROD":
+                    for geneprod in geneprods:
+                        if (geneprod["start"] == entity["start"]) and (geneprod["end"] == entity["end"]):
+                            entity["role"] = geneprod['entity_group']
+                            entity["role_score"] = float(geneprod['score'])
+
+                if entity["type"] == "SMALL_MOLECULE":
+                    for small_mol in small_mols:
+                        if (small_mol["start"] == entity["start"]) and (small_mol["end"] == entity["end"]):
+                            entity["role_score"] = float(small_mol['score'])
+                            entity["role"] = small_mol['entity_group']
+        return ner
+
 
 class SmartTagger(Tagger):
 
@@ -364,18 +278,18 @@ class SmartTagger(Tagger):
         ner_source: str = "EMBO/sd-ner-v2",
         geneprod_roles_source: str = "EMBO/sd-geneprod-roles-v2",
         small_mol_roles_source: str = "EMBO/sd-smallmol-roles-v2",
-        add_prefix_space: bool = True
+        add_prefix_space: bool = True,
     ):
+
         self.add_prefix_space = add_prefix_space
         super().__init__( 
             AutoTokenizer.from_pretrained(tokenizer_source, 
-                                          is_pretokenized=True, 
-                                          add_prefix_space=self.add_prefix_space
-                                          ),
+                                        add_prefix_space=self.add_prefix_space
+                                        ),
             AutoModelForTokenClassification.from_pretrained(panelizer_source),
             AutoModelForTokenClassification.from_pretrained(ner_source),
             AutoModelForTokenClassification.from_pretrained(geneprod_roles_source),
-            AutoModelForTokenClassification.from_pretrained(small_mol_roles_source)
+            AutoModelForTokenClassification.from_pretrained(small_mol_roles_source),
         )
 
 class LongTextTokenClassificationPipeline(ChunkPipeline):
@@ -399,7 +313,6 @@ class LongTextTokenClassificationPipeline(ChunkPipeline):
             if self.framework == "tf"
             else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
         )
-
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
         if not self.tokenizer.is_fast:
@@ -598,69 +511,10 @@ class LongTextTokenClassificationPipeline(ChunkPipeline):
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
-        
-        # Here we get the right output from the model. 
-        # The problem comes from the lines just
+        # TODO! I should generate a dataclass for this! ! !
 
-        # Add first group even in it is "O"
+        return grouped_entities
 
-        # If panel start then add panel_start + O
-
-        # Append already tokenized
-        
-        panel_group_text = []
-        did_panel_start = False
-        for n, entity in enumerate(grouped_entities):
-            if n == 0:
-                if (entity["entity_group"] == "O"):
-                    panel_group_text.append(
-                        self.tokenizer(
-                            entity["word"],
-                            return_special_tokens_mask=True,
-                            return_token_type_ids=False,
-                            return_attention_mask=False
-                        )
-                    )
-                if (entity["entity_group"] == "PANEL_START"):   
-                    did_panel_start = True
-                    group_text = entity["word"] 
-            else:
-                if entity["entity_group"] == "PANEL_START":
-                    did_panel_start = True
-                    group_text = entity["word"]
-                if (entity["entity_group"] == "O") and did_panel_start:
-                    group_text = group_text + " " + entity["word"]
-                    panel_group_text.append(
-                            self.tokenizer(
-                            group_text,
-                            return_special_tokens_mask=True,
-                            return_token_type_ids=False,
-                            return_attention_mask=False
-                        )
-                    )
-                    did_panel_start = False
-                    group_text=""
-
-        # did_panel_start = False
-        # if len(grouped_entities) == 1:
-        #     panel_group_text.append(grouped_entities[0]["word"])
-        # else:
-        #     for entity in grouped_entities:
-        #         if entity["entity_group"] == "PANEL_START":
-        #             did_panel_start = True
-        #         if (entity["entity_group"] == "O") and did_panel_start:
-        #             panel_group_text.append(entity["word"])
-        #             did_panel_start = False
-
-        # if panel_group_text == []:
-        #     panel_group_text = [sentence]
-
-        # panel_groups = self.tokenizer(panel_group_text,
-        #                         return_special_tokens_mask=True,
-        #                         return_token_type_ids=False,
-        #                         return_attention_mask=False)
-
-        return panel_group_text
         
     def _to_tensor(self, inputs: List[Any]) -> Union[tf.Tensor, torch.tensor, np.ndarray]:
         if self.framework == "pt":
@@ -910,3 +764,4 @@ class LongTextTokenClassificationPipeline(ChunkPipeline):
             entity_groups.append(self.group_sub_entities(entity_group_disagg))
 
         return entity_groups
+

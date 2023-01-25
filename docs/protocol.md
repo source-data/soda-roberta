@@ -2004,3 +2004,82 @@ python -m smtag.cli.tokcl.train \
     --do_train \
     --do_eval \
     --do_predict 
+
+
+# Fixing the SMTAG models
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task SMALL_MOL_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "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" \
+    --hub_model_id "EMBO/sd-smallmol-roles-v2"
+
+   python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task PANELIZATION \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --disable_tqdm False \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "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" \
+    --hub_model_id "EMBO/sd-panelization-v2"
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task GENEPROD_ROLES \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 1.0 \
+    --learning_rate 0.00005 \
+    --per_device_train_batch_size 8 \
+    --disable_tqdm False \
+    --masked_data_collator \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --push_to_hub \
+    --hub_strategy "end" \
+    --hub_token "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" \
+    --hub_model_id "EMBO/sd-geneprod-roles-v2"
+
+python -m smtag.cli.tokcl.train \
+    --loader_path "EMBO/sd-nlp-non-tokenized" \
+    --task NER \
+    --from_pretrained "michiyasunaga/BioLinkBERT-large" \
+    --add_prefix_space \
+    --num_train_epochs 2.0 \
+    --disable_tqdm False \
+    --label_smoothing_factor 0.5 \
+    --class_weights \
+    --per_device_train_batch_size 8 \
+    --save_strategy "epoch" \
+    --evaluation_strategy "epoch" \
+    --learning_rate 0.00005 \
+    --lr_schedule "cosine" \
+    --disable_tqdm False \
+    --run_name "ner-biolinkbert-labelsmoothing" \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --hub_strategy "end" \
+    --hub_token "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" \
+    --hub_model_id "EMBO/sd-ner-v2"
