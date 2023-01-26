@@ -21,7 +21,7 @@ class TrainingArgumentsTOKCL(TrainingArguments):
 
     # Logging and evaluation strategy
     evaluation_strategy: IntervalStrategy = field(default="epoch")
-    eval_steps: int = field(default=1)
+    eval_steps: int = field(default=0.5)
     prediction_loss_only: bool = field(default=False)
     eval_accumulation_steps: Optional[int] = field(default=None)
     log_level: Optional[str] = field(default="passive")
