@@ -17,7 +17,7 @@ setuptools.setup(
     install_requires=[
         "torch",
         "tensorflow",
-        "transformers",
+        "transformers<=4.20",
         "datasets",
         "nltk",
         "scikit-learn",
