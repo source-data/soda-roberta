@@ -137,18 +137,18 @@ class Tagger:
                             {
                                 "panel": 0,
                                 "text": original_sentence[entity["start"]: entity["end"]],
-                                "start": entity["start"]-restore_original,
+                                "start": max(0, entity["start"]-restore_original),
                                 "end": entity["end"]-restore_original,
                             }
                         )
                     
                 if (entity["entity_group"] == "PANEL_START"):   
                     did_panel_start = True
-                    start = entity["start"]-restore_original
+                    start = max(0, entity["start"]-restore_original)
             else:
                 if entity["entity_group"] == "PANEL_START":
                     did_panel_start = True
-                    start = entity["start"]-restore_original
+                    start = max(0, entity["start"]-restore_original)
                     panel_group = len(panelize_output)
 
                 if (entity["entity_group"] == "O") and did_panel_start:
@@ -173,37 +173,38 @@ class Tagger:
         for panel in panels:
             panel_entities = []
             for entity in entities:
-                if (entity['start'] >= panel['start']) and (entity['start'] < panel['end']) and (entity['end'] <= panel['end']):
-                    if entity['entity_group'] != 'O':
-                        if entity['entity_group'] in ["EXP_ASSAY", "DISEASE"]:
-                            categories = {"EXP_ASSAY": "assay", "DISEASE": "disease"}
-                            panel_entities.append(
-                                {
-                                    "text": sentence[entity["start"]: entity["end"]],
-                                    "type": "",
-                                    "category": categories.get(entity["entity_group"], ""),
-                                    "type_score": "",
-                                    "category_score": float(entity["score"]),
-                                    "start": entity["start"],
-                                    "end": entity["end"]
-                                }
-                            )
-                        else:
-                            if entity["entity_group"] == "GENEPROD":
-                                geneprod_masked.append((entity["start"], entity["end"]))
-                            if entity["entity_group"] == "SMALL_MOLECULE":
-                                small_mol_masked.append((entity["start"], entity["end"]))
-                            panel_entities.append(
-                                {
-                                    "text": sentence[entity["start"]: entity["end"]],
-                                    "type": entity["entity_group"],
-                                    "category": "",
-                                    "type_score": float(entity["score"]),
-                                    "category_score": "",
-                                    "start": entity["start"],
-                                    "end": entity["end"]
-                                }
-                            )
+                if entity["word"] not in ["-"]:
+                    if (entity['start'] >= panel['start']) and (entity['start'] < panel['end']) and (entity['end'] <= panel['end']):
+                        if entity['entity_group'] != 'O':
+                            if entity['entity_group'] in ["EXP_ASSAY", "DISEASE"]:
+                                categories = {"EXP_ASSAY": "assay", "DISEASE": "disease"}
+                                panel_entities.append(
+                                    {
+                                        "text": sentence[entity["start"]: entity["end"]],
+                                        "type": "",
+                                        "category": categories.get(entity["entity_group"], ""),
+                                        "type_score": "",
+                                        "category_score": float(entity["score"]),
+                                        "start": entity["start"],
+                                        "end": entity["end"]
+                                    }
+                                )
+                            else:
+                                if entity["entity_group"] == "GENEPROD":
+                                    geneprod_masked.append((entity["start"], entity["end"]))
+                                if entity["entity_group"] == "SMALL_MOLECULE":
+                                    small_mol_masked.append((entity["start"], entity["end"]))
+                                panel_entities.append(
+                                    {
+                                        "text": sentence[entity["start"]: entity["end"]],
+                                        "type": entity["entity_group"],
+                                        "category": "",
+                                        "type_score": float(entity["score"]),
+                                        "category_score": "",
+                                        "start": entity["start"],
+                                        "end": entity["end"]
+                                    }
+                                )
             panel["entities"] = panel_entities
             ner_output.append(panel)
 
@@ -222,8 +223,10 @@ class Tagger:
         roles_output = roles_pipe(masked_sentence)
         roles_clean = []
         for result in roles_output:
-            if result["entity_group"] != "O":
+            if result["word"] == "[MASK]":
                 roles_clean.append(result)
+        for mask_ in mask:
+            print(sentence[mask_[0]: mask_[1]])
         assert len(roles_clean) == len(mask)
         for entity, role in zip(mask, roles_clean):
             role["start"] = entity[0]
@@ -235,21 +238,33 @@ class Tagger:
     def _get_masked_sentence(sentence: str, mask: List[Tuple[int,int]]) -> str:
         sentence_list = list(sentence)
         ranges_to_mask = []
-        output_list = []
-        for (start, end) in mask:
-            for idx in range(start, end):
-                ranges_to_mask.append(idx)
-        for idx, char in enumerate(sentence_list):
-            if idx not in ranges_to_mask:
-                output_list.append(char)
-            elif (idx in ranges_to_mask) and( output_list[-1] != "[MASK]"):
-                output_list.append("[MASK]")
-            elif (idx in ranges_to_mask) and( output_list[-1] == "[MASK]"):
-                continue
-            else:
-                raise NotImplementedError
+        output_string = ""
 
-        return "".join(output_list)
+        if mask == []:
+            output_string = sentence
+        else:
+            for idx, (start, end) in enumerate(mask):
+                if idx == 0:
+                    output_string += sentence[0: start] + "[MASK]"
+                    prev_end = end
+                elif idx == len(mask)-1:
+                    output_string += sentence[prev_end: start] + "[MASK]" + sentence[end:]
+                else:
+                    output_string += sentence[prev_end: start] + "[MASK]"
+                    prev_end = end
+
+        #         ranges_to_mask.append(idx)
+        # for idx, char in enumerate(sentence_list):
+        #     if idx not in ranges_to_mask:
+        #         output_list.append(char)
+        #     elif (idx in ranges_to_mask) and( output_list[-1] != "[MASK]"):
+        #         output_list.append("[MASK]")
+        #     elif (idx in ranges_to_mask) and( output_list[-1] == "[MASK]"):
+        #         continue
+        #     else:
+        #         raise NotImplementedError
+
+        return output_string
 
     @staticmethod
     def _roles_post_process(ner, geneprods, small_mols):
