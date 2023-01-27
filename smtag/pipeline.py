@@ -225,8 +225,16 @@ class Tagger:
         for result in roles_output:
             if result["word"] == "[MASK]":
                 roles_clean.append(result)
-        for mask_ in mask:
-            print(sentence[mask_[0]: mask_[1]])
+
+        # print(sentence)
+
+        # print(masked_sentence)
+
+        # print(mask)
+
+        # for mask_ in mask:
+        #     print(sentence[mask_[0]: mask_[1]])
+
         assert len(roles_clean) == len(mask)
         for entity, role in zip(mask, roles_clean):
             role["start"] = entity[0]
@@ -244,14 +252,17 @@ class Tagger:
             output_string = sentence
         else:
             for idx, (start, end) in enumerate(mask):
-                if idx == 0:
-                    output_string += sentence[0: start] + "[MASK]"
-                    prev_end = end
-                elif idx == len(mask)-1:
-                    output_string += sentence[prev_end: start] + "[MASK]" + sentence[end:]
+                if len(mask)==1:
+                    output_string += sentence[0: start] + "[MASK]" + sentence[end: ]
                 else:
-                    output_string += sentence[prev_end: start] + "[MASK]"
-                    prev_end = end
+                    if idx == 0:
+                        output_string += sentence[0: start] + "[MASK]"
+                        prev_end = end
+                    elif idx == len(mask)-1:
+                        output_string += sentence[prev_end: start] + "[MASK]" + sentence[end: ]
+                    else:
+                        output_string += sentence[prev_end: start] + "[MASK]"
+                        prev_end = end
 
         #         ranges_to_mask.append(idx)
         # for idx, char in enumerate(sentence_list):
