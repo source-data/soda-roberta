@@ -50,7 +50,7 @@ class Config:
 
 # config for FlipBart
 config = Config(
-    max_length=[64, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    max_length=[71, 71],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
     model_type="FlipEncoderDecoder",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
     asynchr=True  # we need ordered examples while async returns results in non deterministic way

@@ -24,7 +24,7 @@ from transformers.file_utils import ModelOutput
 import logging
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
-from .dir_attention import FlippableBartEncoder
+from .dir_attention import FlippableBartDecoder
 
 
 # https://github.com/napsternxg/pytorch-practice/blob/master/Pytorch%20-%20MMD%20VAE.ipynb
@@ -296,10 +296,18 @@ class GraphVAEConfigLM(VAEConfigLM):
 
 # class FlipBartConfig extending BartConfig to specify number of flip layers
 class FlipBartConfig(BartConfig):
-    def __init__(self, num_flip_layers=0, freeze_pretrained: str='both', **kwargs):
+    def __init__(
+        self,
+        freeze_pretrained: str='both',
+        include_attn_loss: str='DAG',
+        gamma: float = 1.0,
+        **kwargs
+    ):
         super().__init__(**kwargs)
-        self.num_flip_layers = num_flip_layers
         self.freeze_pretrained = freeze_pretrained
+        self.include_attn_loss = include_attn_loss
+        self.gamma = gamma
+        
 
 
 @dataclass
@@ -1623,8 +1631,8 @@ class BartFlip(MyPreTrainedModel):
     ):
         super().__init__(config)
         # self.encoder = pretrained.get_encoder()
-        self.encoder = FlippableBartEncoder(config)
-        self.decoder = pretrained.get_decoder()
+        self.encoder = pretrained.get_encoder()
+        self.decoder = FlippableBartDecoder(config)
         self.freeze_pretrained = self.config.freeze_pretrained
         # freeze the pretrained model
         if self.freeze_pretrained in ['both', 'encoder']:
@@ -1636,7 +1644,8 @@ class BartFlip(MyPreTrainedModel):
         if self.freeze_pretrained is not None and self.freeze_pretrained not in ['both', 'encoder', 'decoder']:
             raise ValueError(f"not sure what to freeze or not with freeze_pretrained={self.freeze_pretrained}")
 
-        # self.middle_flip_layers = nn.ModuleList([FlippableBartEncoderLayer(config) for _ in range(config.num_flip_layers)])
+        self.include_attn_loss = self.config.include_attn_loss.split('-') if self.config.include_attn_loss is not None else None
+        self.gamma = self.config.gamma
         self.lm_head = pretrained.lm_head
         self.shared = pretrained.get_input_embeddings()
 
@@ -1673,7 +1682,7 @@ class BartFlip(MyPreTrainedModel):
         unflipped_attention_mask = attention_mask[0]  # collator prepares attention_mask for both unflipped and flipped input_ids
         flipped_attention_mask = attention_mask[1]  # collator prepares attention_mask for both unflipped and flipped input_ids
         # skip encoder if text generation has already produced encoder outputs from context/query input
-                # to produce decoder_input_ids
+        # to produce decoder_input_ids
         if labels is not None:
             unflipped_labels = labels[0]  # unflipped labels
             flipped_labels = labels[1]  # flipped labels
@@ -1695,7 +1704,6 @@ class BartFlip(MyPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                flip=flip
             )
 
         # what/why does shift right insert decoder_start_token_id == eos_token_id???
@@ -1751,12 +1759,14 @@ class BartFlip(MyPreTrainedModel):
             labels = unflipped_labels
             decoder_input_ids = unflipped_decoder_input_ids
             attention_mask = unflipped_attention_mask
-
+        
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=hidden_states,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
             encoder_attention_mask=attention_mask,
-            return_dict=return_dict
+            return_dict=return_dict,
+            output_attentions=True,  # experimenting with losses on attention weight tensors
+            flip=flip,
         )
 
         # trainable language model head
@@ -1768,8 +1778,10 @@ class BartFlip(MyPreTrainedModel):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             # Could add losses on the attention weights (sparsity, diganoal off diagnoal, DAG structure)
-            loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
-            # supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+            loss_attn, supp_data = self.compute_loss_on_attention_weights(decoder_outputs.attentions)
+            loss_lm = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
+            loss = loss_attn + self.gamma * loss_lm
         else:
             loss = None
             # supp_data['loss_lm'] = loss_lm = None
@@ -1787,3 +1799,54 @@ class BartFlip(MyPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
             flipped=torch.tensor(flip).cuda() if torch.cuda.is_available() else torch.tensor(flip)
         )
+
+    def compute_loss_on_attention_weights(self, attn_weights, include=['diag', 'sparse']):
+        losses = {}
+
+        attn_weights = torch.stack(attn_weights)
+        seq_len = attn_weights.size(-1)
+        assert attn_weights.size(-1) == attn_weights.size(-2)  # square matrix
+
+        if 'diag' in include:
+            diag = attn_weights.diagonal(-1, -2)
+            loss_diag = diag ** 2
+            losses['loss_attn_diag'] = loss_diag.sum() / (seq_len ** 2)  # num elements of diag scales as n
+
+        if 'sparse' in include:
+            losses['loss_attn_sparse'] = attn_weights.abs().mean()
+
+        if 'DAG' in include:
+            # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
+            # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
+            # # naive (me...):
+            d = seq_len  # cosmetic
+            W = attn_weights  # cosmetic
+            batch_size = W.size(0)
+            I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
+            if torch.cuda.is_available():
+                W = W.cuda()
+                I = I.cuda()
+            mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
+            trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
+            L_dag = trace - d
+            losses['loss_attn_DAG'] = L_dag.mean()
+
+            # Zheng et al 2018 DAG with NOTEARS
+            # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
+            # Section 3.2 The general case: Weighted adjacency matrices
+            # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
+            # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
+            # L_dag = h.mean()
+            # in NOTEARS github code:
+            # A different formulation, slightly faster at the cost odf numerical stability
+            # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
+            # M = np.eye(d) + W * W / d
+            # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
+            # h = (E.T * M).sum() - d
+
+        loss = sum(losses.values())
+        supp_data = {
+            "loss_attn": loss,
+            **losses,
+        }
+        return loss, supp_data
