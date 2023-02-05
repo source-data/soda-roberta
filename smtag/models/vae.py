@@ -1754,7 +1754,7 @@ class BartFlip(MyPreTrainedModel):
             labels = flipped_labels
             decoder_input_ids = flipped_decoder_input_ids
             attention_mask = flipped_attention_mask
-            hidden_states = hidden_states.flip(1)  # not sure about that...
+            # hidden_states = hidden_states.flip(1)  # not sure about that...
         else:
             labels = unflipped_labels
             decoder_input_ids = unflipped_decoder_input_ids
