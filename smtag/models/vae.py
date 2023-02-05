@@ -298,12 +298,14 @@ class GraphVAEConfigLM(VAEConfigLM):
 class FlipBartConfig(BartConfig):
     def __init__(
         self,
+        end_token_id: int = 2,  # </s> in Roberta vocabulary
         freeze_pretrained: str='both',
         include_attn_loss: str='DAG',
         gamma: float = 1.0,
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.end_token_id = end_token_id
         self.freeze_pretrained = freeze_pretrained
         self.include_attn_loss = include_attn_loss
         self.gamma = gamma
@@ -1489,6 +1491,7 @@ class CGraphVAEForLM(MyPreTrainedModel):
                 flipped_decoder_input_ids = shift_tokens_right(
                     flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
+
         # what/why does shift right insert decoder_start_token_id == eos_token_id???
         # https://github.com/huggingface/transformers/issues/20842
         # "bos_token_id": 0,
@@ -1689,12 +1692,13 @@ class BartFlip(MyPreTrainedModel):
 
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             unflipped_decoder_input_ids = shift_tokens_right(
-                unflipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                # THIS IS CHANGED FROM PRETRAINED 
+                unflipped_labels, self.config.pad_token_id, self.config.bos_token_id
             )
             flipped_decoder_input_ids = shift_tokens_right(
-                flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                # THIS IS CHANGED FROM PRETRAINED 
+                flipped_labels, self.config.pad_token_id, self.config.eos_token_id
             )
-        flip = random() < 0.5
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=unflipped_input_ids,
@@ -1706,6 +1710,7 @@ class BartFlip(MyPreTrainedModel):
                 return_dict=return_dict,
             )
 
+        # THIS IS NOW CHANGED ABOVE!
         # what/why does shift right insert decoder_start_token_id == eos_token_id???
         # https://github.com/huggingface/transformers/issues/20842
         # "bos_token_id": 0,
@@ -1750,6 +1755,7 @@ class BartFlip(MyPreTrainedModel):
         #     )
         #     hidden_states = layer_outputs[0]
 
+        flip = random() < 0.5
         if flip:
             labels = flipped_labels
             decoder_input_ids = flipped_decoder_input_ids
