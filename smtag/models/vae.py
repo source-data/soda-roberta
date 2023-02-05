@@ -1784,7 +1784,7 @@ class BartFlip(MyPreTrainedModel):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             # Could add losses on the attention weights (sparsity, diganoal off diagnoal, DAG structure)
-            loss_attn, supp_data = self.compute_loss_on_attention_weights(decoder_outputs.attentions)
+            loss_attn, supp_data = self.compute_loss_on_attention_weights(decoder_outputs.attentions, self.include_attn_loss)
             loss_lm = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
             supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard
             loss = loss_attn + self.gamma * loss_lm
@@ -1810,8 +1810,8 @@ class BartFlip(MyPreTrainedModel):
         losses = {}
 
         attn_weights = torch.stack(attn_weights)
-        seq_len = attn_weights.size(-1)
         assert attn_weights.size(-1) == attn_weights.size(-2)  # square matrix
+        num_layers, bsz, num_heads, seq_len, _ = attn_weights.size()
 
         if 'diag' in include:
             diag = attn_weights.diagonal(-1, -2)
@@ -1826,9 +1826,8 @@ class BartFlip(MyPreTrainedModel):
             # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
             # # naive (me...):
             d = seq_len  # cosmetic
-            W = attn_weights  # cosmetic
-            batch_size = W.size(0)
-            I = torch.eye(d).unsqueeze(0).expand(batch_size, d, d)
+            W = attn_weights.view(num_layers * bsz * num_heads, d, d)
+            I = torch.eye(d).unsqueeze(0).expand(num_layers * bsz * num_heads, d, d)
             if torch.cuda.is_available():
                 W = W.cuda()
                 I = I.cuda()

@@ -207,6 +207,7 @@ def train(
                 **model_config,
                 freeze_pretrained='encoder',  # 'encoder' # 'both' # 'decoder' # None
                 include_attn_loss='DAG-diag-sparse',
+                gamma = 0.1,
             )
             model = BartFlip(
                 config=model_config,
