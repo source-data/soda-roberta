@@ -1350,7 +1350,7 @@ class GraphEncoder(BartEncoder):
             )
 
         if 'diag' in include:
-            diag = z_graph.diagonal()
+            diag = z_graph.diagonal(dim1=-1, dim2=-2)
             loss_diag = diag ** 2
             losses['diag_loss'] = loss_diag.sum() / (self.num_nodes ** 2)  # num elements of diag scales as n
 
@@ -1814,12 +1814,12 @@ class BartFlip(MyPreTrainedModel):
         num_layers, bsz, num_heads, seq_len, _ = attn_weights.size()
 
         if 'diag' in include:
-            diag = attn_weights.diagonal(-1, -2)
+            diag = attn_weights.diagonal(dim1=-1, dim2=-2)
             loss_diag = (diag ** 2).sum() / seq_len  # num elements of diag scales as n
             losses['loss_attn_diag'] = loss_diag
 
         if 'off_diag' in include:
-            diag = attn_weights.diagonal(-1, -2)
+            diag = attn_weights.diagonal(dim1=-1, dim2=-2)
             off_diag = attn_weights - torch.diag_embed(diag)
             loss_off_diag = ((off_diag - 1) ** 2).sum() / ((seq_len ** 2) - seq_len)  # num elements off_diag roughly scales as n^2 - n
             losses['loss_attn_off_diag'] = loss_off_diag
