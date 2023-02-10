@@ -1765,7 +1765,7 @@ class BartFlip(MyPreTrainedModel):
             labels = unflipped_labels
             decoder_input_ids = unflipped_decoder_input_ids
             attention_mask = unflipped_attention_mask
-        
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=hidden_states,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
@@ -1816,9 +1816,13 @@ class BartFlip(MyPreTrainedModel):
         if 'diag' in include:
             diag = attn_weights.diagonal(-1, -2)
             loss_diag = (diag ** 2).sum() / seq_len  # num elements of diag scales as n
-            # off_diag = attn_weights - torch.diag_embed(diag)
-            # loss_off_diag = ((off_diag - 1) ** 2).sum() / ((seq_len ** 2) - seq_len)  # num elements off_diag roughly scales as n^2 - n
-            losses['loss_attn_diag'] = loss_diag  # + loss_off_diag
+            losses['loss_attn_diag'] = loss_diag
+
+        if 'off_diag' in include:
+            diag = attn_weights.diagonal(-1, -2)
+            off_diag = attn_weights - torch.diag_embed(diag)
+            loss_off_diag = ((off_diag - 1) ** 2).sum() / ((seq_len ** 2) - seq_len)  # num elements off_diag roughly scales as n^2 - n
+            losses['loss_attn_off_diag'] = loss_off_diag
 
         if 'sparse' in include:
             losses['loss_attn_sparse'] = attn_weights.abs().mean()

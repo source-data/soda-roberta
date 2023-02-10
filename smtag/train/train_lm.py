@@ -179,7 +179,7 @@ def train(
 
     print(f"\nTraining with {len(train_dataset)} examples.")
     print(f"Evaluating on {len(eval_dataset)} examples.")
-            
+
     if model_type == "Autoencoder":
         if config.from_pretrained:
             if data_config_name in ["QandA", "AandQ", "NEXT", "MULTITASK"]:
@@ -206,7 +206,7 @@ def train(
             model_config = FlipBartConfig(
                 **model_config,
                 freeze_pretrained='encoder',  # 'encoder' # 'both' # 'decoder' # None
-                include_attn_loss='DAG-diag',
+                include_attn_loss='off_diag',
                 gamma=0.1,
             )
             model = BartFlip(
