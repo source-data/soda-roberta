@@ -122,8 +122,8 @@ class FlippableBartAttention(nn.Module):
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(key_states, query_states.transpose(1, 2))
-        # if flip:
-        #     attn_weights = attn_weights.transpose(1, 2)
+        if flip:
+            attn_weights = attn_weights.transpose(1, 2)
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len,src_len):
             raise ValueError(
