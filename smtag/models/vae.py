@@ -1815,8 +1815,10 @@ class BartFlip(MyPreTrainedModel):
 
         if 'diag' in include:
             diag = attn_weights.diagonal(-1, -2)
-            loss_diag = diag ** 2
-            losses['loss_attn_diag'] = loss_diag.sum() / (seq_len ** 2)  # num elements of diag scales as n
+            loss_diag = (diag ** 2).sum() / seq_len  # num elements of diag scales as n
+            # off_diag = attn_weights - torch.diag_embed(diag)
+            # loss_off_diag = ((off_diag - 1) ** 2).sum() / ((seq_len ** 2) - seq_len)  # num elements off_diag roughly scales as n^2 - n
+            losses['loss_attn_diag'] = loss_diag  # + loss_off_diag
 
         if 'sparse' in include:
             losses['loss_attn_sparse'] = attn_weights.abs().mean()
