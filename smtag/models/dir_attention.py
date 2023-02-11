@@ -54,6 +54,8 @@ class FlippableBartAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+        self.activation = ACT2FN["gelu_new"]
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -74,35 +76,11 @@ class FlippableBartAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
 
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        # torch.bmm(Q, K.transpose(-1, -2)) --> torch.zero_as(hidden_states)
-        # bmm(Q, K^T) - bmm(K, Q^T).transpose(-1, -2) --> 0
-
-        # get query proj
-        # query_states = self.q_proj(hidden_states) * self.scaling
-        # # get key, value proj
-        # if is_cross_attention and past_key_value is not None:
-        #     # reuse k,v, cross_attentions
-        #     key_states = past_key_value[0]
-        #     value_states = past_key_value[1]
-        # elif is_cross_attention:
-        #     # cross_attentions
-        #     key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-        #     value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        # elif past_key_value is not None:
-        #     # reuse k, v, self_attention
-        #     key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        #     value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-        #     key_states = torch.cat([past_key_value[0], key_states], dim=2)
-        #     value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        # else:
-        #     # self_attention
-        #     key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        #     value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        query_states = self._shape(self.activation(self.q_proj(hidden_states) * self.scaling), tgt_len, bsz)
+        key_states = self._shape(self.activation(self.k_proj(hidden_states)), -1, bsz)
+        value_states = self._shape(self.activation(self.v_proj(hidden_states)), -1, bsz)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -114,8 +92,6 @@ class FlippableBartAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        # query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         query_states = query_states.view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
