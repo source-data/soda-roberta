@@ -78,9 +78,9 @@ class FlippableBartAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
 
-        query_states = self._shape(self.activation(self.q_proj(hidden_states) * self.scaling), tgt_len, bsz)
-        key_states = self._shape(self.activation(self.k_proj(hidden_states)), -1, bsz)
-        value_states = self._shape(self.activation(self.v_proj(hidden_states)), -1, bsz)
+        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
