@@ -1830,30 +1830,31 @@ class BartFlip(MyPreTrainedModel):
         if 'DAG' in include:
             # # https://github.com/fishmoon1234/DAG-GNN/blob/master/src/train.py
             # # https://discuss.pytorch.org/t/get-the-trace-for-a-batch-of-matrices/108504
-            # # naive (me...):
             d = seq_len  # cosmetic
             W = attn_weights.view(num_layers * bsz * num_heads, d, d)
-            I = torch.eye(d).unsqueeze(0).expand(num_layers * bsz * num_heads, d, d)
             if torch.cuda.is_available():
                 W = W.cuda()
-                I = I.cuda()
-            mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
-            trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
-            L_dag = trace - d
-            losses['loss_attn_DAG'] = L_dag.mean()
+            # # naive (me...):
+            # I = torch.eye(d).unsqueeze(0).expand(num_layers * bsz * num_heads, d, d)
+            # if torch.cuda.is_available():
+            #     I = I.cuda()
+            # mat_power_d = torch.matrix_power(I + (W * W ) / d, d)  # based on below Yu et al
+            # trace = mat_power_d.diagonal(dim1=-1, dim2=-2).sum(-1)
+            # L_dag = (trace - d).mean()
 
             # Zheng et al 2018 DAG with NOTEARS
             # implementation in https://github.com/xunzheng/notears/blob/master/notears/linear.py
             # Section 3.2 The general case: Weighted adjacency matrices
-            # E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
-            # h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
-            # L_dag = h.mean()
+            E = torch.matrix_exp(W * W)  # (Zheng et al. 2018)
+            h = E.diagonal(dim1=-1, dim2=-2).sum(-1) - d
+            L_dag = h.mean()
             # in NOTEARS github code:
             # A different formulation, slightly faster at the cost odf numerical stability
             # (Yu et al. 2019) DAG-GNN: DAG Structure Learning with Graph Neural Networks
             # M = np.eye(d) + W * W / d
             # E = np.linalg.matrix_power(M, d - 1)  # why d -1 with matrix power and then element wise E.T * M below?
             # h = (E.T * M).sum() - d
+            losses['loss_attn_DAG'] = L_dag
 
         loss = sum(losses.values())
         supp_data = {

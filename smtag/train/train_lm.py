@@ -206,7 +206,7 @@ def train(
             model_config = FlipBartConfig(
                 **model_config,
                 freeze_pretrained='encoder',  # 'encoder' # 'both' # 'decoder' # None
-                include_attn_loss='diag',
+                include_attn_loss='DAG',
                 gamma=0.1,
             )
             model = BartFlip(
