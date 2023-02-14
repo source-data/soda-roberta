@@ -20,7 +20,7 @@ from ..models.experimental import (
 )
 from ..data_collator import DataCollatorForMaskedTokenClassification
 from ..trainer import MyTrainer, ClassWeightTokenClassificationTrainer
-from ..metrics import MetricsTOKCL
+from ..metrics import MetricsTOKCL, MetricsCRFTOKCL
 from ..show import ShowExampleTOKCL
 from ..tb_callback import MyTensorBoardCallback
 from ..config import config
@@ -39,6 +39,12 @@ import itertools
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, minmax_scale
 from sklearn.utils.class_weight import compute_class_weight
+from smtag.modelling import CRFforTokenClassification
+from seqeval.metrics import (
+    accuracy_score, f1_score, precision_score, recall_score,
+    classification_report
+)
+from seqeval.scheme import IOB1, IOB2
 
 logger = logging.getLogger('soda-roberta.trainer.TOKCL')
 
@@ -54,6 +60,7 @@ class TrainTokenClassification:
                 no_cache: bool = True,
                 tokenizer: str = None,
                 add_prefix_space: bool = False,
+                use_crf: bool = False,
                 ner_labels: Union[str, List[str]] = "all"
                ):
 
@@ -67,6 +74,7 @@ class TrainTokenClassification:
         self.no_cache = no_cache
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.config = config
+        self.use_crf = use_crf
         self.tokenizer_pretrained = tokenizer.name_or_path
         self.add_prefix_space = add_prefix_space
         self.ner_labels = ner_labels
@@ -86,18 +94,33 @@ class TrainTokenClassification:
         self.data_collator = self._get_data_collator()
 
         # Define the metrics to be computed
-        self.compute_metrics = MetricsTOKCL(label_list=list(self.label2id.keys()))
+        if self.use_crf:
+            self.compute_metrics = MetricsCRFTOKCL(label_list=list(self.label2id.keys()))
+        else:
+            self.compute_metrics = MetricsTOKCL(label_list=list(self.label2id.keys()))
 
         # Define the model 
         logger.info(f"Instantiating model for token classification {self.from_pretrained}.")
-        self.model = AutoModelForTokenClassification.from_pretrained(
-                                                                    self.from_pretrained,
-                                                                    num_labels=len(list(self.label2id.keys())),
-                                                                    max_position_embeddings=self._max_position_embeddings(),
-                                                                    id2label=self.id2label,
-                                                                    label2id=self.label2id,
-                                                                    # classifier_dropout=self.training_args.classifier_dropout,
-                                                                    max_length=self.max_length)
+        if self.use_crf:
+            self.model = CRFforTokenClassification.from_pretrained(
+                                                                        self.from_pretrained,
+                                                                        num_labels=len(list(self.label2id.keys())),
+                                                                        max_position_embeddings=self._max_position_embeddings(),
+                                                                        id2label=self.id2label,
+                                                                        label2id=self.label2id,
+                                                                        # classifier_dropout=self.training_args.classifier_dropout,
+                                                                        max_length=self.max_length,
+                                                                        return_dict=False)
+
+        else:
+            self.model = AutoModelForTokenClassification.from_pretrained(
+                                                                        self.from_pretrained,
+                                                                        num_labels=len(list(self.label2id.keys())),
+                                                                        max_position_embeddings=self._max_position_embeddings(),
+                                                                        id2label=self.id2label,
+                                                                        label2id=self.label2id,
+                                                                        # classifier_dropout=self.training_args.classifier_dropout,
+                                                                        max_length=self.max_length)
     
         # Define the trainer
         if self.model_type == "Autoencoder":
@@ -108,10 +131,7 @@ class TrainTokenClassification:
                 train_dataset=self.train_dataset,
                 eval_dataset=self.eval_dataset,
                 compute_metrics=self.compute_metrics,
-                callbacks=[DefaultFlowCallback,
-                        EarlyStoppingCallback(early_stopping_patience=2,
-                                                early_stopping_threshold=0.0),
-                            ShowExampleTOKCL(self.tokenizer)]
+                callbacks=[DefaultFlowCallback]
             )
 
             if self.training_args.class_weights:
@@ -185,8 +205,29 @@ class TrainTokenClassification:
         # Define do_test
         if self.training_args.do_predict:
             logger.info(f"Testing on {len(self.test_dataset)}.")
-            self.trainer.args.prediction_loss_only = False
-            pred: NamedTuple = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
+            # self.trainer.args.prediction_loss_only = False
+            (_, all_predictions), all_labels, _  = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
+            
+            only_in_test_pad = []
+            for idx, example in enumerate(self.test_dataset["only_in_test"]):
+                only_in_test_pad.append(example)
+                while len(only_in_test_pad[idx]) < all_predictions.shape[1]:
+                    only_in_test_pad[idx].append(-100)
+            
+            only_in_test_pad = np.array(only_in_test_pad)
+            
+            generalized_predictions = all_predictions * only_in_test_pad
+            memorized_predictions = all_predictions * ((only_in_test_pad - 1) * (-1))
+
+            generalized_labels = all_labels * only_in_test_pad
+            memorized_labels = all_labels * ((only_in_test_pad - 1) * (-1))
+
+            # Here is were to prepare the results for memorization and not memorization
+            print("******* Memorization classification report *****")
+            memorization_metrics = self._get_metrics(memorized_predictions, memorized_labels)
+            print("******* Generalization classification report *****")
+            generalization_metrics = self._get_metrics(generalized_predictions, generalized_labels)
+
 
         if self.training_args.push_to_hub:
             print(f"Uploading the model {self.trainer.model} and tokenizer {self.trainer.tokenizer} to HuggingFace")
@@ -216,6 +257,41 @@ class TrainTokenClassification:
                             device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                             dtype=torch.float,
                             )
+
+    def _get_metrics(self, predictions, labels):
+
+        label_list = list(self.label2id.keys())
+
+        true_predictions, true_labels = [], []
+
+        for prediction, label in zip(predictions, labels):
+            preds, labs = [], []
+            for p, l in zip(prediction, label):
+                preds.append(self.id2label.get(p, 'O'))
+                labs.append(self.id2label.get(l, 'O'))
+            true_predictions.append(preds)
+            true_labels.append(labs)
+
+        # true_predictions = [
+        #     [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        #     for prediction, label in zip(predictions, labels)
+        # ]
+        # true_labels = [
+        #     [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        #     for prediction, label in zip(predictions, labels)
+        # ]
+        print("\n"+" " * 80)
+        try:
+            print(classification_report(true_labels, true_predictions, digits=4, mode="strict", scheme=IOB2))
+        except ValueError as e:
+            print(e)
+            import pdb; pdb.set_trace()
+        return {
+            "accuracy_score": accuracy_score(true_labels, true_predictions),
+            "precision": precision_score(true_labels, true_predictions),
+            "recall": recall_score(true_labels, true_predictions),
+            "f1": f1_score(true_labels, true_predictions),
+        }
 
     def _get_tokenizer(self):
         if "Megatron" in self.from_pretrained:
@@ -259,6 +335,15 @@ class TrainTokenClassification:
         logger.info(f"Training with {len(data['train'])} examples.")
         logger.info(f"Evaluating on {len(data['validation'])} examples.")
 
+        self.training_entities = self._get_entity_list(data, splits=["train", "validation"])
+        self.test_entities = self._get_entity_list(data, splits=["test"])  
+
+        self.test_only_entities = self.test_entities - self.training_entities
+
+        only_in_test = self._get_test_only_mask(data)
+        for split in ["train", "validation", "test"]:
+            data[split] = data[split].add_column('only_in_test',only_in_test[split])
+
         if self.loader_path == "EMBO/sd-character-level-ner":
             data = data.rename_column("text", "words")
 
@@ -274,6 +359,7 @@ class TrainTokenClassification:
                     columns_to_remove = ['words', 'tag_mask']
                 else:
                     columns_to_remove = ['words']
+
             tokenized_data = data.map(
                 self._tokenize_and_align_labels,
                 batched=True,
@@ -285,6 +371,62 @@ class TrainTokenClassification:
                 batched=True)
 
         return tokenized_data["train"], tokenized_data['validation'], tokenized_data['test']
+
+    def _get_entity_idx_dict(self, words, labels, ):
+        entities_in_example = {}
+        entity_index = []
+        inside_word=False
+        for idx, (word, label) in enumerate(zip(words, labels)):
+            if self.id2label[label].startswith("B-") and not inside_word:
+                inside_word = [word]
+                entity_index.append(idx)
+            elif self.id2label[label].startswith("B-") and inside_word:
+                if " ".join(inside_word) in self.test_only_entities:
+                    if " ".join(inside_word) in list(entities_in_example.keys()):
+                        for token in entity_index:
+                            entities_in_example[" ".join(inside_word)].append(token)
+                    else:
+                        entities_in_example[" ".join(inside_word)] = entity_index
+                inside_word = [word]
+                entity_index = [idx]
+            elif self.id2label[label].startswith("I-"):
+                inside_word.append(word)
+                entity_index.append(idx)
+            elif (label in [0,"O","0"]) and inside_word:
+                if " ".join(inside_word) in self.test_only_entities:
+                    if " ".join(inside_word) in list(entities_in_example.keys()):
+                        for token in entity_index:
+                            entities_in_example[" ".join(inside_word)].append(token)
+                    else:
+                        entities_in_example[" ".join(inside_word)] = entity_index
+                inside_word = False
+                entity_index = []
+
+        for entity in list(entities_in_example.keys()):
+            assert entity not in self.training_entities
+        return entities_in_example
+
+    def _get_test_only_mask(self, data):
+        output = {"train": [], "test": [], "validation": []}
+        for split in ["train", "test", "validation"]:
+            for _, example in enumerate(data[split]):
+                example_flag = []
+                if split in ["train", "validation"]:
+                    output[split].append([0] * len(example["labels"]))
+                else:
+                    entity_idx_dict = self._get_entity_idx_dict(example["words"], example["labels"])
+
+                    # do a zeros numpy array, the length of labels
+                    example_flag = np.zeros_like(example["labels"])
+
+                    # assign 1 to the idx values of entities not in training
+                    for _, index in entity_idx_dict.items():
+                        for idx in index:
+                            example_flag[idx] = 1
+
+                    output[split].append(list(example_flag))
+                    assert len(example_flag) == len(example["words"]),  f"Labels: {example['labels']} \n Flags: {example_flag}"
+        return output
 
     def _substitute_training_labels(self, examples):
         
@@ -335,24 +477,29 @@ class TrainTokenClassification:
         
 
         if self.loader_path != "EMBO/sd-character-level-ner":
+
             tokenized_inputs = self.tokenizer(examples['words'],
                                             truncation=True,
                                             is_split_into_words=True,
                                             max_length=self.max_length)
             all_labels = examples['labels']
+            all_flags = examples['only_in_test']
             new_labels = []
             tag_mask = []
-            for i, labels in enumerate(all_labels):
+            new_only_in_test_flag = []
+            for i, (labels, flags) in enumerate(zip(all_labels, all_flags)):
                 word_ids = tokenized_inputs.word_ids(i)
                 new_labels.append(self._align_labels_with_tokens(labels, word_ids))
+                new_only_in_test_flag.append(self._align_only_test_flag_with_tokens(flags, word_ids))
                 tag_mask.append([0 if tag == 0 else 1 for tag in new_labels[-1]])
             tokenized_inputs['labels'] = new_labels
             tokenized_inputs['tag_mask'] = tag_mask
+            tokenized_inputs['only_in_test'] = new_only_in_test_flag
         else:
             tokenized_inputs = self.tokenizer(examples['words'],
                                             truncation=True,
                                             padding=True,
-                                            is_split_into_words=False,
+                                            is_split_into_words=True,
                                             max_length=self.max_length)
             all_labels = examples['labels']
             tag_mask = []
@@ -361,6 +508,31 @@ class TrainTokenClassification:
             tokenized_inputs['tag_mask'] = tag_mask
 
         return tokenized_inputs
+
+    def _get_entity_list(self, dataset, splits):
+        words_in_training = []
+        inside_word = False
+        for split in splits:
+            for example in dataset[split]:
+                for word, label in zip(example["words"], example["labels"]):
+                    if self.id2label[label].startswith("B-") and not inside_word:
+                        inside_word = [word]
+                        class_ = self.id2label[label].replace("B-", "")
+                    elif self.id2label[label].startswith("B-") and inside_word:
+                        words_in_training.append(" ".join(inside_word))
+                        inside_word = [word]
+                        class_ = self.id2label[label].replace("B-", "")
+                    elif self.id2label[label].startswith("I-"):
+                        inside_word.append(word)
+                    elif (label in [0,"O","0"]) and inside_word:
+                        words_in_training.append(" ".join(inside_word))
+                        inside_word = False
+                        class_ = None
+                    else:
+                        continue
+
+
+        return set(words_in_training)
 
     @staticmethod
     def _shift_label(label):
@@ -390,6 +562,30 @@ class TrainTokenClassification:
                 new_labels.append(labels[word_id])
             else:
                 new_labels.append(self._shift_label(labels[word_id]))
+
+        return new_labels
+
+    def _align_only_test_flag_with_tokens(self, labels, word_ids):
+        """
+        Expands the only test flag tags once the sub-word tokenization is added.
+        Arguments
+        ---------
+        labels list[int]:
+        word_ids list[int]
+        """
+        new_labels = []
+        current_word = None
+        for word_id in word_ids:
+            if word_id is None:
+                new_labels.append(-100)
+            elif word_id != current_word:
+                # Start of a new word!
+                current_word = word_id
+                # As far as word_id matches the index of the current word
+                # We append the same label
+                new_labels.append(labels[word_id])
+            else:
+                new_labels.append(labels[word_id])
 
         return new_labels
 

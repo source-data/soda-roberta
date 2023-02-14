@@ -8,6 +8,7 @@ from seqeval.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report
 )
+from seqeval.scheme import IOB1, IOB2
 import re
 
 def compute_metrics_lm(eval_pred: EvalPrediction):
@@ -55,8 +56,12 @@ class MetricsTOKCL:
         ]
 
         print("\n"+" " * 80)
+        
         try:
-            print(classification_report(true_labels, true_predictions))
+            print("*******Classical classification report*****")
+            print(classification_report(true_labels, true_predictions, digits=4))
+            print("*******Strict classification report*****")
+            print(classification_report(true_labels, true_predictions, digits=4, mode="strict", scheme=IOB2))
         except ValueError as e:
             print(e)
             import pdb; pdb.set_trace()
@@ -69,7 +74,6 @@ class MetricsTOKCL:
 
 class MetricsCRFTOKCL:
     """Computes metrics for token classifications. Assumes the labels follow the IOB2 scheme.
-
     Args:
         label_list: the list of IOB2 string labels.
     """
@@ -79,16 +83,15 @@ class MetricsCRFTOKCL:
     def __call__(self, eval_pred: EvalPrediction) -> Dict:
         """Computes accuracy precision, recall and f1 based on the list of IOB2 labels. 
         Positions with labels with a value of -100 will be filtered out both from true labela dn prediction.
-
         Args:
             eval_pred (EvalPrediction): the predictions and targets to be matched as np.ndarrays.
-
         Returns:
             (Dict): a dictionary with accuracy_score, precision, recall and f1.
         """
         predictions, labels = eval_pred
-        # predictions = np.argmax(predictions, axis=-1)
-        # Remove ignored index (special tokens)
+
+        predictions = np.argmax(predictions[0], axis=-1)
+
         true_predictions = [
             [self.label_list[p] for (p, l) in zip(prediction, label) if l != -100]
             for prediction, label in zip(predictions, labels)
@@ -97,10 +100,13 @@ class MetricsCRFTOKCL:
             [self.label_list[l] for (p, l) in zip(prediction, label) if l != -100]
             for prediction, label in zip(predictions, labels)
         ]
-
         print("\n"+" " * 80)
         try:
-            print(classification_report(true_labels, true_predictions))
+            
+            # print("*******Classical classification report*****")
+            # print(classification_report(true_labels, true_predictions, digits=4))
+            print("*******Strict classification report*****")
+            print(classification_report(true_labels, true_predictions, digits=4, mode="strict", scheme=IOB2))
         except ValueError as e:
             print(e)
             import pdb; pdb.set_trace()

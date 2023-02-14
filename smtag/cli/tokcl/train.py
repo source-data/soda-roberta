@@ -37,6 +37,9 @@ if __name__ == "__main__":
                         type=str,
                         default="all" ,
                         help="Which NER entities are to be classify. Choose all or any combination of: [GENEPROD, TISSUE, ORGANISM, SMALL_MOLECULE, EXP_ASSAY, CELL, SUBCELLULAR].")
+    parser.add_argument("--use_crf",
+                        action="store_true", 
+                        help="Adds a CRF to the classification layer.")
     parser.add_argument("--hyperparameter_search", 
                         action="store_true", 
                         help="""Activates the hyperparameter search for the model.
@@ -150,7 +153,8 @@ if __name__ == "__main__":
             no_cache=no_cache,
             tokenizer=tokenizer,
             add_prefix_space=add_prefix_space,
-            ner_labels=labels
+            ner_labels=labels,
+            use_crf=(True if args.use_crf else False)
         )
 
         trainer()

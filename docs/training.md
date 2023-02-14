@@ -391,3 +391,7 @@ This is an example on how to use `biobart-base` to do the panelization task. The
 
 With the module `smtag.cli.seq2seq.gpt3_finetune` the files used for the seq2seq can be prepared to be
 used in the OpenAI API. Check the notebook `Fine tuning GPT 3.ipynb` for more details on how to use the data.
+
+
+
+
