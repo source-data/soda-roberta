@@ -13,29 +13,10 @@ labels=( \
         "DISEASE" \
     )
 
-small_model_list=("microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract" \
-            "michiyasunaga/BioLinkBERT-base" \
-            "roberta-base" \
-            "bert-base-cased" \
-            "bert-base-uncased" \
-            "dmis-lab/biobert-base-cased-v1.2" \
-            "allenai/biomed_roberta_base")
-
-small_model_names=("PubMedBERT-base-uncased-abstract" \
-            "BioLinkBERT-base" \
-            "roberta-base" \
-            "bert-base-cased" \
-            "bert-base-uncased" \
-            "biobert-base-cased")
-
-large_model_list=(
-            "michiyasunaga/BioLinkBERT-large" \
-            "dmis-lab/biobert-large-cased-v1.1" \
-            "EMBO/BioMegatron345mUncased")
-large_model_names=(
-            "BioLinkBERT-large" \
-            "biobert-large-cased" \
-            "BioMegatron345mUncased")
+small_model_list=("microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract")
+small_model_names=("PubMedBERT-base-uncased-abstract")
+large_model_list=("michiyasunaga/BioLinkBERT-large")
+large_model_names=("BioLinkBERT-large")
 
 mkdir data/results/ner_single_task
 
@@ -45,10 +26,10 @@ for i in ${!labels[@]}; do
             --loader_path "EMBO/sd-nlp-non-tokenized" \
             --task NER \
             --from_pretrained ${small_model_list[$j]} \
-            --per_device_train_batch_size 8 \
+            --per_device_train_batch_size 16 \
             --add_prefix_space \
             --num_train_epochs 2.0 \
-            --learning_rate 0.00005 \
+            --learning_rate 0.0001 \
             --disable_tqdm False \
             --report_to none \
             --ner_labels ${labels[$i]} \
@@ -84,10 +65,10 @@ for i in ${!labels[@]}; do
             --task NER \
             --from_pretrained ${small_model_list[$j]} \
             --use_crf \
-            --per_device_train_batch_size 8 \
+            --per_device_train_batch_size 16 \
             --add_prefix_space \
             --num_train_epochs 2.0 \
-            --learning_rate 0.00005 \
+            --learning_rate 0.0001 \
             --disable_tqdm False \
             --report_to none \
             --ner_labels ${labels[$i]} \
@@ -115,5 +96,3 @@ for i in ${!labels[@]}; do
             --run_name "${large_model_names[$j]}_${labels[$i]}_NER_single_task_CRF" > "data/results/ner_single_task/${large_model_names[$j]}_${labels[$i]}_ner_CRF.txt"
     done
 done
-
-

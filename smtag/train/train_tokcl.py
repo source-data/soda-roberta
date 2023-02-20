@@ -206,7 +206,11 @@ class TrainTokenClassification:
         if self.training_args.do_predict:
             logger.info(f"Testing on {len(self.test_dataset)}.")
             # self.trainer.args.prediction_loss_only = False
-            (_, all_predictions), all_labels, _  = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
+            if self.use_crf:
+                (_, all_predictions), all_labels, _  = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
+            else:
+                all_predictions, all_labels, _  = self.trainer.predict(self.test_dataset, metric_key_prefix='test')
+                all_predictions = np.argmax(all_predictions, axis=-1)
             
             only_in_test_pad = []
             for idx, example in enumerate(self.test_dataset["only_in_test"]):
@@ -261,7 +265,6 @@ class TrainTokenClassification:
     def _get_metrics(self, predictions, labels):
 
         label_list = list(self.label2id.keys())
-
         true_predictions, true_labels = [], []
 
         for prediction, label in zip(predictions, labels):
@@ -272,14 +275,6 @@ class TrainTokenClassification:
             true_predictions.append(preds)
             true_labels.append(labs)
 
-        # true_predictions = [
-        #     [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-        #     for prediction, label in zip(predictions, labels)
-        # ]
-        # true_labels = [
-        #     [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-        #     for prediction, label in zip(predictions, labels)
-        # ]
         print("\n"+" " * 80)
         try:
             print(classification_report(true_labels, true_predictions, digits=4, mode="strict", scheme=IOB2))
@@ -377,10 +372,10 @@ class TrainTokenClassification:
         entity_index = []
         inside_word=False
         for idx, (word, label) in enumerate(zip(words, labels)):
-            if self.id2label[label].startswith("B-") and not inside_word:
+            if self.dataset_id2label[label].startswith("B-") and not inside_word:
                 inside_word = [word]
                 entity_index.append(idx)
-            elif self.id2label[label].startswith("B-") and inside_word:
+            elif self.dataset_id2label[label].startswith("B-") and inside_word:
                 if " ".join(inside_word) in self.test_only_entities:
                     if " ".join(inside_word) in list(entities_in_example.keys()):
                         for token in entity_index:
@@ -389,7 +384,7 @@ class TrainTokenClassification:
                         entities_in_example[" ".join(inside_word)] = entity_index
                 inside_word = [word]
                 entity_index = [idx]
-            elif self.id2label[label].startswith("I-"):
+            elif self.dataset_id2label[label].startswith("I-"):
                 inside_word.append(word)
                 entity_index.append(idx)
             elif (label in [0,"O","0"]) and inside_word:
@@ -515,14 +510,14 @@ class TrainTokenClassification:
         for split in splits:
             for example in dataset[split]:
                 for word, label in zip(example["words"], example["labels"]):
-                    if self.id2label[label].startswith("B-") and not inside_word:
+                    if self.dataset_id2label[label].startswith("B-") and not inside_word:
                         inside_word = [word]
-                        class_ = self.id2label[label].replace("B-", "")
-                    elif self.id2label[label].startswith("B-") and inside_word:
+                        class_ = self.dataset_id2label[label].replace("B-", "")
+                    elif self.dataset_id2label[label].startswith("B-") and inside_word:
                         words_in_training.append(" ".join(inside_word))
                         inside_word = [word]
-                        class_ = self.id2label[label].replace("B-", "")
-                    elif self.id2label[label].startswith("I-"):
+                        class_ = self.dataset_id2label[label].replace("B-", "")
+                    elif self.dataset_id2label[label].startswith("I-"):
                         inside_word.append(word)
                     elif (label in [0,"O","0"]) and inside_word:
                         words_in_training.append(" ".join(inside_word))
