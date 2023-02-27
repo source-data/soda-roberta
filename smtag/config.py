@@ -49,13 +49,13 @@ class Config:
 # config = Config(tokenizer=char_level_tokenizer)
 
 # config for Twin
-# config = Config(
-#     max_length=[64, 64],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-#     from_pretrained= "facebook/bart-base", #"facebook/opt-1.3b", #"facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
-#     # fast=False, # for OPT model
-#     model_type="Twin",  # "Autoencoder", "VAE", "GVAE", "Generator"
-#     asynchr=True  # we need ordered examples while async returns results in non deterministic way
-# )
+config = Config(
+    max_length=[256, 256],  #[64, 512],  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+    from_pretrained= "facebook/bart-base", #"facebook/opt-1.3b", #"facebook/bart-base", # t5-base  # leave empty if training a language model from scratch
+    # fast=False, # for OPT model
+    model_type="Twin",  # "Autoencoder", "VAE", "GVAE", "Generator"
+    asynchr=True  # we need ordered examples while async returns results in non deterministic way
+)
 
 
 # config for QandA
@@ -78,12 +78,12 @@ class Config:
 
 # config for VAE, GVAE
 
-config = Config(
-    max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
-    from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
-    model_type="CGVAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
-    asynchr=True  #True  # we need ordered examples while async returns results in non deterministic way
-)
+# config = Config(
+#     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
+#     from_pretrained="facebook/bart-base",  # leave empty if training a language model from scratch
+#     model_type="CGVAE",  # "VAE" #  "Twin"  # "Autoencoder" # Generator
+#     asynchr=True  #True  # we need ordered examples while async returns results in non deterministic way
+# )
 
 # config for normal language model
 # config = Config(
