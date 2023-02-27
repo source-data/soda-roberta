@@ -141,12 +141,12 @@ def train(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
             )
-        elif model_type == "Twin":
+        elif model_type in ["Twin", "CGVAE"]:  # CGVAE and Twin have 2 inputs
             data_collator = MyDataCollatorForTwinSeq2Seq(
                 tokenizer=tokenizer,
                 max_length_list=config.max_length
             )
-        elif model_type in ["VAE", "GVAE", "CGVAE", "Generator"]:  # for debuging, maybe not necessary
+        elif model_type in ["VAE", "GVAE", "Generator"]:  # for debuging, maybe not necessary
             data_collator = DataCollatorForSeq2Seq(
                 tokenizer=tokenizer,
                 pad_to_multiple_of=config.max_length
@@ -265,17 +265,18 @@ def train(
                 # max_position_embeddings=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 hidden_features=768,
                 # z_dim is calculated by GraphVAEConfigLM from the number of nodes and entity features
+                # GraphLatentConfig().z_dim = (self.num_nodes ** 2) + (self.num_nodes * self. num_entity_features)
                 mlp_num_layers=1,
                 alpha=1.0,
                 beta=1.0,
                 gamma=1.0,  # weight of lm loss as compared to z_loss
                 sampling_iterations=20,
-                num_nodes=8,
-                num_entity_features=128,
+                num_nodes=5,
+                num_entity_features=64,
                 sample_num_interactions=5,
                 seq_length=config.max_length[0] if isinstance(config.max_length, list) else config.max_length,
                 residuals=False,
-                latent_var_loss=None,  # "mmd-DAG-diag-sparse", #"diag-sparse", "sparse", "diag", None
+                latent_var_loss="DAG-sparse-diag",  # "mmd-DAG-diag-sparse", "diag-sparse", "sparse", "diag", "DAG", None
                 flip_proba=0.5,
             )
             model = CGraphVAEForLM(

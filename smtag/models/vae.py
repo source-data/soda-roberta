@@ -13,7 +13,7 @@ from transformers import (
 )
 from transformers.models.bart.modeling_bart import (
     shift_tokens_right,
-    BartEncoder, BartDecoder
+    BartEncoder, BartDecoder, BartAttention,
 )
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -150,6 +150,7 @@ def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
     #     loss_off_diag = loss_off_diag.cuda()
     #     c = c.cuda()
     return loss_diag, loss_off_diag, c
+
 
 def flip(t: torch.Tensor) -> torch.Tensor:
     return t.flip(1) if t is not None else None
@@ -1100,6 +1101,23 @@ class GraphEncoder(BartEncoder):
         self.d_encoder = self.model.config.d_model
         self.seq_length = self.config.seq_length
         self.pad_token_id = self.model.config.pad_token_id
+
+        # Rosetta tensor as parameter
+        rosetta = torch.empty(self.seq_length, self.d_encoder)
+        nn.init.normal_(rosetta, std=0.02)
+        # def NormalParameter(n_in, n_out, init_scale=1.0):
+        #     """Parameter with random normal initialization"""
+        #     w = torch.empty(n_in, n_out)
+        #     nn.init.normal_(w, std=0.02 * init_scale)
+        #     return nn.Parameter(w)
+        self.rosetta = nn.Parameter(rosetta)
+        self.attn = BartAttention(
+            self.d_encoder,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=False,
+        )
+
         # adj matrix
         # latent vars
         self.hidden_features = self.config.hidden_features
@@ -1134,6 +1152,19 @@ class GraphEncoder(BartEncoder):
         batch_size, length, hidden_size = x.size()  # batch_size B, length L, hidden_size H_enc
         assert length == self.seq_length, f"observed seq length {length} mismatches with config.seq_length {self.seq_length} with input_ids.size()={input_ids.size()}"
 
+        # remove sequence info through cross-attention
+        # between a learn rosetta stone as magic query
+        # encoder outputs whose attention values are combined in weighted sum
+        # thus distroying sequence information but hopefully keeping
+        # causal dependencies.
+        # query: rosetta
+        # key_state, value_states: encoder_hidden_states
+        rosetta_with_batch_size = self.rosetta.data.repeat(batch_size, 1, 1)
+        y, cross_attn_weights, cross_attn_present_key_value = self.attn(
+            hidden_states=rosetta_with_batch_size,  # query
+            key_value_states=x  # key and value
+        )
+
         # compress
         y = self.vae_dropout(x)
         y = self.fc_compress(y)  # -> B x D x D (example: 32 example x 256 token x 256 hidden features)
@@ -1153,7 +1184,7 @@ class GraphEncoder(BartEncoder):
         if self.flip_proba > 0:
             p = random()
             if p <= self.flip_proba:
-                adj = adj.transpose(-1, -2)  # inverse 'causality'
+                adj = adj.transpose(-1, -2).contiguous()  # inverse 'causality', contiguous to allow view(-1, num_nodes ** 2)
                 x = flip(x)  # -> B x L x H_enc
                 encoder_outputs.hidden_states = flip(encoder_outputs.hidden_states)
                 encoder_outputs.attentions = flip(encoder_outputs.attentions)
@@ -1171,6 +1202,7 @@ class GraphEncoder(BartEncoder):
 
         # permutation-independent sets
         z_graph, z_entities = self.to_permutation_independent_set(adj, entities)
+        z_graph, z_entities = adj, entities
 
         if self.latent_var_loss:
             loss, supp_data = self.compute_loss_on_latent_var(z_graph, z_entities, self.latent_var_loss)
@@ -1183,8 +1215,8 @@ class GraphEncoder(BartEncoder):
             raise ValueError(f"unknown loss type on latent variable {self.latent_var_loss}")
 
         representation = [adj_matrix_representation, entities_representation]
-        z_graph = z_graph.view(-1, self.num_nodes * self.num_nodes)
-        z_entities = z_entities.view(-1, self.num_entity_features * self.num_nodes)
+        z_graph = adj.view(-1, self.num_nodes * self.num_nodes)
+        z_entities = entities.view(-1, self.num_entity_features * self.num_nodes)
         z = torch.cat([z_graph, z_entities], -1)
 
         return LatentCGraphEncoderOutput(
@@ -1310,7 +1342,7 @@ class GraphVAEForLM(VAEForLM):
         )
 
 
-class CGraphVAEForLM(BartForConditionalGeneration):
+class CGraphVAEForLM(MyPreTrainedModel):
 
     def __init__(
 
@@ -1328,14 +1360,6 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         self.lm_head = pretrained.lm_head
         self.shared = pretrained.get_input_embeddings()
         self.z_dim = self.config.z_dim
-
-    def transpose_adj_matrix(self, adj, entities) -> torch.Tensor:
-        adj_t = adj.transpose(-1, -2)  # inverse 'causality'
-        z_graph, z_entities = self.encoder.to_permutation_independent_set(adj_t, entities)
-        z_graph = z_graph.view(-1, self.encoder.num_nodes * self.encoder.num_nodes)
-        z_entities = z_entities.view(-1, self.encoder.num_entity_features * self.encoder.num_nodes)
-        z = torch.cat([z_graph, z_entities], -1)
-        return z
 
     def forward(
         self,
@@ -1365,6 +1389,8 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        input_ids = input_ids[0]  # unflipped input_ids
+        attention_mask = attention_mask[0]  # collator prepares attention_mask for both unflipped and flipped input_ids
         # skip encoder if text generation has already produced encoder outputs from context/query input
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1380,28 +1406,41 @@ class CGraphVAEForLM(BartForConditionalGeneration):
         # important to do this AFTER the encoding to see if labels need to be flipped before shifting them right
         # to produce decoder_input_ids
         if labels is not None:
-            if encoder_outputs.flipped:
-                labels = flip(labels)
+            unflipped_labels = labels[0]  # unflipped labels
+            flipped_labels = labels[1]  # labels pre-flipped by loader
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                unflipped_decoder_input_ids = shift_tokens_right(
+                    unflipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
-        # unflipped: predict next token
-        # shift right for inputs
-        # Inputs:   ^This is a cat
-        #           \|||||||||||||
-        # Labels    This is a cat.
+                flipped_decoder_input_ids = shift_tokens_right(
+                    flipped_labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+        # what/why does shift right insert decoder_start_token_id == eos_token_id???
+        # https://github.com/huggingface/transformers/issues/20842
+        # "bos_token_id": 0,
+        # "eos_token_id": 2
+        # "decoder_start_token_id": 2
+        # "pad_token_id": 1
+        # ^ = bos token
+        # $ = eos token
+        # § = decoder_start_token_id
+        # + = padding token
+        # unflipped => predict next token
+        # shift right labels for input to decoder
+        # Right-shifted inputs: §^This is a cat.$+++++
+        #                       ||||||||||||||||||||||
+        # Original labels       ^This is a cat.$++++++
 
-        # flipped: predict previous token
-        # shift right kabeks sfor inputs
-        # inputs:  .tac a si sihT
-        #          |||||||||||\\|
-        # labels:  tac a si sihT^
+        # flipped => predict *previous* token
+        # shift right flipped labels for input to decoder
+        # Right-shifted flipped inputs: §$.tac a si sihT^+++++++
+        #                               ||||||||||||||||||||||||
+        # Flipped original labels:      $.tac a si sihT^++++++++
 
         if not encoder_outputs.flipped:
             decoder_outputs = self.decoder(
-                input_ids=decoder_input_ids,
-                encoder_hidden_states=None, #encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                input_ids=unflipped_decoder_input_ids,
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=decoder_attention_mask,
                 encoder_attention_mask=attention_mask,
@@ -1414,13 +1453,29 @@ class CGraphVAEForLM(BartForConditionalGeneration):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+
+            adversarial_decoder_outputs = self.decoder(
+                input_ids=flipped_decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=flip(decoder_attention_mask),
+                encoder_attention_mask=flip(attention_mask),
+                head_mask=flip(decoder_head_mask),
+                cross_attn_head_mask=flip(cross_attn_head_mask),
+                past_key_values=flip(past_key_values),
+                inputs_embeds=flip(decoder_inputs_embeds),
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
         else:
             # flipped causal model, encoder hidden states and labels are flipped
             # adj matrix is transposed
 
             decoder_outputs = self.decoder(
-                input_ids=flip(decoder_input_ids),
-                encoder_hidden_states=None, #encoder_outputs.last_hidden_state),  # already flipped
+                input_ids=flipped_decoder_input_ids,  # generated from flip(labels)!!  so labels are flipped!
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # already flipped!
                 latent_variable=encoder_outputs.latent_variable,
                 attention_mask=flip(decoder_attention_mask),
                 encoder_attention_mask=flip(attention_mask),
@@ -1434,15 +1489,39 @@ class CGraphVAEForLM(BartForConditionalGeneration):
                 return_dict=return_dict,
             )
 
+            adversarial_decoder_outputs = self.decoder(
+                input_ids=unflipped_decoder_input_ids,
+                encoder_hidden_states=None,  # encoder_outputs.last_hidden_state,  # in BartModel encoder_hidden_states=encoder_outputs[0]
+                latent_variable=encoder_outputs.latent_variable,
+                attention_mask=decoder_attention_mask,
+                encoder_attention_mask=attention_mask,
+                head_mask=decoder_head_mask,
+                cross_attn_head_mask=cross_attn_head_mask,
+                past_key_values=past_key_values,
+                inputs_embeds=decoder_inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
         # trainable language model head
         logits = self.lm_head(decoder_outputs.last_hidden_state)
+        adversarial_logits = self.lm_head(adversarial_decoder_outputs.last_hidden_state)
         supp_data = encoder_outputs.supp_data if encoder_outputs.supp_data is not None else {}
 
         # calculate composite loss
 
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            if encoder_outputs.flipped:
+                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
+                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+            else:
+                loss_lm = self.gamma * loss_fct(logits.view(-1, self.decoder.config.vocab_size), unflipped_labels.view(-1))
+                loss_adv_lm = self.gamma * loss_fct(adversarial_logits.view(-1, self.decoder.config.vocab_size), flipped_labels.view(-1))
+
+            loss_lm = loss_lm - loss_adv_lm.detach()
             loss_z = encoder_outputs.loss  # loss on latent var
             loss = loss_lm + loss_z  # combine with language modelling loss
             supp_data['loss_lm'] = loss_lm  # keep track for plotting in TensorBoard

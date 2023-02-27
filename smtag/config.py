@@ -76,7 +76,7 @@ config = Config(
 #     asynchr=True  # we need ordered examples while async returns results in non deterministic way
 # )
 
-# config for VAE, GVAE
+# config for VAE
 
 # config = Config(
 #     max_length=512,  # in tokens! # sentence-level: 64, abstracts/full fig captions 512 tokens
