@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from tqdm.autonotebook import tqdm
 
+from .db import Instance, Query
+
 load_dotenv()
 SD_API_URL = os.getenv("SD_API_URL")
 SD_API_USERNAME = os.getenv("SD_API_USERNAME")
@@ -110,6 +112,26 @@ class CollectionProperties:
         return f'"{self.collection_name}"'
 
 
+class GET_COLLECTION(Query):
+
+    code = '''
+MATCH (coll:SDCollection {name: {$collection_name}}})
+RETURN coll.name AS collection_name, coll.id AS collection_id
+    '''
+    returns = ['collection_name', 'collection_id']
+
+class MERGE_COLLECTION(Query):
+
+    code = '''
+MERGE (coll:SDCollection)
+WHERE
+    coll.name = {$collection_name}
+    coll.id = {$collection_id}
+RETURN coll.name AS collection_name, coll.id AS collection_id
+'''
+    returns = ['collection_name', 'collection_id']
+
+
 @dataclass
 class ArticleProperties(Properties):
     doi: str = ""
@@ -124,6 +146,45 @@ class ArticleProperties(Properties):
 
     def __str__(self):
         return f"\"{self.title}\" ({self.doi})"
+    
+class GET_ARTICLES(Query):
+
+    code = '''
+MATCH (article:SDArticle)
+WHERE
+    article.doi = {$doi}
+RETURN
+    article.doi AS doi, 
+    article.title AS title,
+    article.journal_name AS journal_name,
+    article.pub_date AS pub_date,
+    article.pmid AS pmid,
+    article.pmcid AS pmcid,
+    article.import_id AS import_id,
+    article.pub_year AS pub_year,
+    article.nb_figures AS nb_figures
+    '''
+    returns = ['doi', 'title', 'journal_name', 'pub_date', 'pmid', 'pmcid', 'import_id', 'pub_year', 'nb_figures']
+
+class MERGE_ARTICLE(Query):
+
+    code = '''
+MERGE (article:SDArticle)
+WHERE
+    article.doi = {$doi}
+SET
+    article.title = {$title},
+    article.journal_name = {$journal_name},
+    article.pub_date = {$pub_date},
+    article.pmid = {$pmid},
+    article.pmcid = {$pmcid},
+    article.import_id = {$import_id},
+    article.pub_year = {$pub_year},
+    article.nb_figures = {$nb_figures}
+RETURN
+    article.doi AS doi
+    '''
+    returns = ['doi']
 
 
 @dataclass
@@ -491,7 +552,8 @@ class XMLSerializer:
 
 class SmartNode:
 
-    # NEO4J: Instance = DB
+    NEO4J: Instance = DB
+    NEO_LABEL: str = "SmartNode"
     SD_REST_API: str = "https://api.sourcedata.io/"
     REST_API_PARSER = SourceDataAPIParser()
     # SOURCE_XML_DIR: str = "xml_source_files/"
@@ -548,6 +610,13 @@ class SmartNode:
                 logger.error(f"XMLSyntaxError in {filepath}: {str(err)}. File was NOT written.")
         return str(filepath)
 
+    def to_neo(self):
+        query = self.TO_NEO_QUERY
+        query.params = self.props
+        self.DB.query(query)
+        for rel in self.relationships:
+            rel.target.to_neo()
+
     def _add_relationships(self, rel_type: str, targets: List["SmartNode"]):
         targets = filter(None, targets)
         # keep _relationships as a list rather than a Dict[rel_type, nodes] in case staggered order is important
@@ -574,8 +643,11 @@ class SmartNode:
 
 class Collection(SmartNode):
 
+    NEO_LABEL: str = "SDCollection"
     GET_COLLECTION = "collection/"
     GET_LIST = "/papers"
+    FROM_NEO_QUERY = GET_COLLECTION() #"MATCH (c:Collection {collection_id: $collection_id}) RETURN c"
+    TO_NEO_QUERY = MERGE_COLLECTION()
 
     def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -607,6 +679,26 @@ class Collection(SmartNode):
                 articles.append(article)
             self._add_relationships("has_article", articles)
         return self._finish()
+    
+    def from_neo(self, collection_name: str) -> SmartNode:
+        collection_query = GET_COLLECTION(params={"collection_name": collection_name})
+        results_collection = self.db.query(collection_query)[0]
+        self.props = CollectionProperties(**results_collection)
+        all_articles_query = GET_ALL_ARTICLES(params={"collection_id": self.props.collection_id})
+        article_ids = self.db.query(all_articles_query)
+        articles = []
+        for article_id in tqdm(article_ids, desc="articles"):
+            # if collection auto save is on, each article is saved as we go
+            # if the collection is ephemeral, no point in keeping relationships in article after saving and article are ephemeral too
+            article = Article(
+                auto_save=self.auto_save,
+                ephemeral=self.auto_save,
+                overwrite=self.overwrite,
+                sub_dir=self.sub_dir
+            )
+            article.from_neo(self.props.collection_id, article_id)
+            articles.append(article)
+        self._add_relationships("has_article", articles)
 
     def to_xml(self, sub_dir: str = None) -> List[str]:
         filepaths = []
@@ -622,11 +714,13 @@ class Collection(SmartNode):
                     filepaths.append(filepath)
         return filepaths
 
-
 class Article(SmartNode):
 
+    NEO_LABEL: str = "SDArticle"
     GET_COLLECTION = "collection/"
     GET_ARTICLE = "paper/"
+    FROM_NEO_QUERY = GET_ARTICLES() #"MATCH (a:Article {doi: $doi}) RETURN a"
+    TO_NEO_QUERY = MERGE_ARTICLE()
 
     def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -659,7 +753,7 @@ class Article(SmartNode):
         else:
             logger.error(f"Cannot create Article with empty params supplied: ('{collection_id}, {doi}')!")
             return None
-
+  
     def _finish(self) -> "SmartNode":
         if self.auto_save:
             logger.info("auto saving")
@@ -684,6 +778,7 @@ class Article(SmartNode):
 
 class Figure(SmartNode):
 
+    NEO_LABEL: str = "SDFigure"
     GET_COLLECTION = "collection/"
     GET_ARTICLE = "paper/"
     GET_FIGURE = "figure/"
@@ -713,6 +808,7 @@ class Figure(SmartNode):
 
 class Panel(SmartNode):
 
+    NEO_LABEL: str = "SDPanel"
     GET_PANEL = "panel/"
 
     def __init__(self, *args, **kwargs):
@@ -736,6 +832,8 @@ class Panel(SmartNode):
 
 
 class TaggedEntity(SmartNode):
+
+    NEO_LABEL: str = "SDTag"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

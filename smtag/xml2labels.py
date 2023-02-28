@@ -31,7 +31,7 @@ class CodeMap:
         self.iob2_labels: List[str] = ['O']  # generated labels of IOB2 schema tagging, including prefix combinations
         for label in self.all_labels:
             if self.mode == 'whole_entity':
-                for prefix in ['I', 'B']:
+                for prefix in ['B', 'I']:
                     self.iob2_labels.append(f"{prefix}-{label}")
             elif self.mode == 'boundary_start':
                 # only B_egning of entities, no I_nside tag

@@ -9,7 +9,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     source_dir = args.source_dir
     dest_dir = args.dest_dir
-    code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.BORING, sd.PANELIZATION]
+    code_maps = [sd.ENTITY_TYPES, sd.GENEPROD_ROLES, sd.SMALL_MOL_ROLES, sd.PANELIZATION]
     prep = PreparatorTOKCL(
         source_dir,
         dest_dir,
