@@ -34,7 +34,8 @@ RUN apt-get update \
 && pip install evaluate \
 && pip install rouge_score \
 && pip install wandb==0.13.7 \
-&& pip install allennlp==2.10.11 
+&& pip install allennlp==2.10.11 \
+&& pip install neotools==0.3.3 \
 # optional for plotting
 RUN pip install plotly 
 

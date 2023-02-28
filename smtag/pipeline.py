@@ -131,12 +131,11 @@ class Tagger:
             # Dealing with the first panel_group, typically empty
             if n == 0:
                 if (entity["entity_group"] == "O"):
-                    pass
                     if entity["end"]-restore_original >= 0:
                         panelize_output.append(
                             {
                                 "panel": 0,
-                                "text": original_sentence[entity["start"]: entity["end"]],
+                                "text": original_sentence[entity["start"]: entity["end"]-restore_original],
                                 "start": max(0, entity["start"]-restore_original),
                                 "end": entity["end"]-restore_original,
                             }
