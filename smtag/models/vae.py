@@ -146,13 +146,13 @@ def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
     loss_diag_c = loss_diag_c.sum() / z_dim  # num elements of diag scales as n
     loss_off_diag_c = loss_off_diag_c.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as n^2 - n
 
-    d = z[0] @ z[1].T
+    d = (z[0] @ z[1].T) / z_dim
     diag_d = d.diagonal()
     off_diag_d = d - torch.diag_embed(diag_d)
     loss_diag_d = (diag_d - 1) ** 2
     loss_off_diag_d = off_diag_d ** 2
-    loss_diag_d = loss_diag_d.sum() / z_dim  # num elements of diag scales as z_dim
-    loss_off_diag_d = loss_off_diag_d.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as z_dim^2 - z_dim
+    loss_diag_d = loss_diag_d.sum() / batch_size  # num elements of diag scales as z_dim
+    loss_off_diag_d = loss_off_diag_d.sum() / ((batch_size ** 2) - batch_size)  # num elements off_diag roughly scales as z_dim^2 - z_dim
 
     return loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d
 
@@ -917,7 +917,7 @@ class Twin(MyPreTrainedModel):
                 "img_correl_c": c.unsqueeze(0),
                 "loss_diag_d": loss_diag_d,
                 "loss_off_diag_d": loss_off_diag_d,
-                "img_correl_d": d.unsqueeze(0),
+                "img_correl_d": d.unsqueeze(0),  # 0 x batch_size x batch_size; need to set --dataloader_drop_last=True to avoid problems when concatenating supp data in trainer
             }
         supp_data = self.update_supp_data(supp_data, outputs)
         return TwinOutput(
@@ -935,7 +935,7 @@ class Twin(MyPreTrainedModel):
         losses = losses.sum()
         loss_twin_z_c = self.mu * (loss_diag_c + self.lambd * loss_off_diag_c)
         loss_twin_z_d = self.mu * (loss_diag_d + self.lambd * loss_off_diag_d)
-        loss = losses + loss_twin_z_c + loss_twin_z_d
+        loss = losses + loss_twin_z_d  + loss_twin_z_c
         return loss, loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d
 
     @staticmethod

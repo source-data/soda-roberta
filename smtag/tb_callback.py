@@ -127,7 +127,7 @@ class MyTensorBoardCallback(TensorBoardCallback):
                     val = val / val.max()
                     val = 1.0 - val  # invert: high correl black, low correl white
                     val = torch.cat([val] * 3, 0)  # format C x H x W
-                    self.tb_writer.add_image("images", val, state.global_step)
+                    self.tb_writer.add_image(main_tag, val, state.global_step)
                 else:
                     self.tb_writer.add_scalars(main_tag, val, state.global_step)
             self.tb_writer.flush()

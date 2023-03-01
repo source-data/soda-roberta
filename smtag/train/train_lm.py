@@ -294,7 +294,7 @@ def train(
                     **pretrained_config_dict,
                     freeze_pretrained=None,  # 'encoder' # 'both' # 'decoder' # None
                     hidden_features=256,
-                    z_dim=96,  # 1024,
+                    z_dim=256,
                     sampling_iterations=200,
                     seq_length=config.max_length[0],
                     latent_var_loss=None,  # "kl" or "mmd" or None
