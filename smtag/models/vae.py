@@ -139,17 +139,22 @@ def compute_loss_on_twins(z: List[torch.Tensor]) -> torch.Tensor:
     # z = [t.cpu() for t in z]
     batch_size, z_dim = z[0].size()
     c = (z[0].T @ z[1]) / batch_size
-    diag = c.diagonal()
-    off_diag = c - torch.diag_embed(diag)
-    loss_diag = (diag - 1) ** 2
-    loss_off_diag = off_diag ** 2
-    loss_diag = loss_diag.sum() / z_dim  # num elements of diag scales as n
-    loss_off_diag = loss_off_diag.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as n^2 - n
-    # if torch.cuda.is_available():
-    #     loss_diag = loss_diag.cuda()
-    #     loss_off_diag = loss_off_diag.cuda()
-    #     c = c.cuda()
-    return loss_diag, loss_off_diag, c
+    diag_c = c.diagonal()
+    off_diag_c = c - torch.diag_embed(diag_c)
+    loss_diag_c = (diag_c - 1) ** 2
+    loss_off_diag_c = off_diag_c ** 2
+    loss_diag_c = loss_diag_c.sum() / z_dim  # num elements of diag scales as n
+    loss_off_diag_c = loss_off_diag_c.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as n^2 - n
+
+    d = z[0] @ z[1].T
+    diag_d = d.diagonal()
+    off_diag_d = d - torch.diag_embed(diag_d)
+    loss_diag_d = (diag_d - 1) ** 2
+    loss_off_diag_d = off_diag_d ** 2
+    loss_diag_d = loss_diag_d.sum() / z_dim  # num elements of diag scales as z_dim
+    loss_off_diag_d = loss_off_diag_d.sum() / ((z_dim ** 2) - z_dim)  # num elements off_diag roughly scales as z_dim^2 - z_dim
+
+    return loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d
 
 
 def flip(t: torch.Tensor) -> torch.Tensor:
@@ -905,12 +910,14 @@ class Twin(MyPreTrainedModel):
             self.encoders[i](input_ids=input_ids[i], attention_mask=attention_mask[i], **kwargs)
             for i in range(len(input_ids))
         ]
-        loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl = self.all_losses(outputs)
+        loss, loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d = self.all_losses(outputs)
         supp_data = {
-                "loss_diag": loss_diag,
-                "loss_off_diag": loss_off_diag,
-                "loss_twin_z": loss_twin_z,
-                "img_correl": cross_correl.unsqueeze(0),
+                "loss_diag_c": loss_diag_c,
+                "loss_off_diag_c": loss_off_diag_c,
+                "img_correl_c": c.unsqueeze(0),
+                "loss_diag_d": loss_diag_d,
+                "loss_off_diag_d": loss_off_diag_d,
+                "img_correl_d": d.unsqueeze(0),
             }
         supp_data = self.update_supp_data(supp_data, outputs)
         return TwinOutput(
@@ -923,12 +930,13 @@ class Twin(MyPreTrainedModel):
         )
 
     def all_losses(self, outputs):
-        loss_diag, loss_off_diag, cross_correl = compute_loss_on_twins([out.representation for out in outputs])
+        loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d = compute_loss_on_twins([out.representation for out in outputs])
         losses = torch.stack([out.loss for out in outputs])
         losses = losses.sum()
-        loss_twin_z = self.mu * (loss_diag + self.lambd * loss_off_diag)
-        loss = losses + loss_twin_z
-        return loss, loss_twin_z, loss_diag, loss_off_diag, cross_correl
+        loss_twin_z_c = self.mu * (loss_diag_c + self.lambd * loss_off_diag_c)
+        loss_twin_z_d = self.mu * (loss_diag_d + self.lambd * loss_off_diag_d)
+        loss = losses + loss_twin_z_c + loss_twin_z_d
+        return loss, loss_diag_c, loss_off_diag_c, c, loss_diag_d, loss_off_diag_d, d
 
     @staticmethod
     def update_supp_data(supp_data, outputs):
