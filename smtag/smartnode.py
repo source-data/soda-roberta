@@ -1,6 +1,6 @@
 import os
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Dict, List, Union
 import requests
@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from tqdm.autonotebook import tqdm
 
-from sdneo.db import Instance, Query
+from smtag.sdneo.db import Instance, Query
+from smtag import DB
 
 load_dotenv()
 SD_API_URL = os.getenv("SD_API_URL")
@@ -112,10 +113,10 @@ class CollectionProperties:
         return f'"{self.collection_name}"'
 
 
-class GET_COLLECTION(Query):
+class GET_NEO_COLLECTION(Query):
 
     code = '''
-MATCH (coll:SDCollection {name: {$collection_name}}})
+MATCH (coll:SDCollection {name: $collection_name})
 RETURN coll.name AS collection_name, coll.id AS collection_id
     '''
     returns = ['collection_name', 'collection_id']
@@ -125,11 +126,12 @@ class MERGE_COLLECTION(Query):
     code = '''
 MERGE (coll:SDCollection)
 WHERE
-    coll.name = {$collection_name}
-    coll.id = {$collection_id}
+    coll.name = $collection_name
+    coll.id = $collection_id
 RETURN coll.name AS collection_name, coll.id AS collection_id
 '''
     returns = ['collection_name', 'collection_id']
+
 
 @dataclass
 class ArticleProperties(Properties):
@@ -145,13 +147,24 @@ class ArticleProperties(Properties):
 
     def __str__(self):
         return f"\"{self.title}\" ({self.doi})"
-    
-class GET_ARTICLES(Query):
+
+class GET_LIST_OF_ARTICLES(Query):
+    code = """
+    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle)
+    RETURN COLLECT(article.doi) AS doi_list    
+    """
+    returns = ['doi_list']
+
+@dataclass
+class ArticleDoiList(Properties):
+    doi_list: List[str] = field(default_factory=list)
+
+class GET_ARTICLE_PROPS(Query):
 
     code = '''
 MATCH (article:SDArticle)
 WHERE
-    article.doi = {$doi}
+    article.doi = $doi
 RETURN
     article.doi AS doi, 
     article.title AS title,
@@ -185,6 +198,15 @@ RETURN
     '''
     returns = ['doi']
 
+class GET_LIST_OF_FIGRUES(Query):
+    code = """
+    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle)
+    WITH COLLECT(article.doi) AS doi_list
+    MATCH (article:SDArticle {doi: $doi}) --> (figure:SDFigure)
+    WHERE figure.fig_label <> "" 
+    RETURN COLLECT(figure.fig_label) AS figure_label_list    
+    """
+    returns = ['figure_list']
 
 @dataclass
 class FigureProperties(Properties):
@@ -642,7 +664,7 @@ class Collection(SmartNode):
     NEO_LABEL: str = "SDCollection"
     GET_COLLECTION = "collection/"
     GET_LIST = "/papers"
-    FROM_NEO_QUERY = GET_COLLECTION() #"MATCH (c:Collection {collection_id: $collection_id}) RETURN c"
+    FROM_NEO_QUERY = GET_NEO_COLLECTION() #"MATCH (c:Collection {collection_id: $collection_id}) RETURN c"
     TO_NEO_QUERY = MERGE_COLLECTION()
 
     def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
@@ -677,13 +699,16 @@ class Collection(SmartNode):
         return self._finish()
     
     def from_neo(self, collection_name: str) -> SmartNode:
-        collection_query = GET_COLLECTION(params={"collection_name": collection_name})
-        results_collection = self.db.query(collection_query)[0]
+        self
+        collection_query = GET_NEO_COLLECTION(params={"collection_name": collection_name})
+        results_collection = DB.query(collection_query)[0].data()
         self.props = CollectionProperties(**results_collection)
-        all_articles_query = GET_ALL_ARTICLES(params={"collection_id": self.props.collection_id})
-        article_ids = self.db.query(all_articles_query)
+        get_articles_list = GET_LIST_OF_ARTICLES(params={"collection_name": collection_name})
+        article_ids = ArticleDoiList(**DB.query(get_articles_list)[0].data())
+        # all_articles_query = GET_ARTICLES(params={"collection_id": self.props.collection_id})
+        # article_ids = DB.query(all_articles_query)
         articles = []
-        for article_id in tqdm(article_ids, desc="articles"):
+        for article_id in tqdm(article_ids.doi_list, desc="articles"):
             # if collection auto save is on, each article is saved as we go
             # if the collection is ephemeral, no point in keeping relationships in article after saving and article are ephemeral too
             article = Article(
@@ -716,17 +741,16 @@ class Article(SmartNode):
     NEO_LABEL: str = "SDArticle"
     GET_COLLECTION = "collection/"
     GET_ARTICLE = "paper/"
-    FROM_NEO_QUERY = GET_ARTICLES() #"MATCH (a:Article {doi: $doi}) RETURN a"
-    TO_NEO_QUERY = MERGE_ARTICLE()
 
     def __init__(self, *args, auto_save: bool = True, overwrite: bool = False, sub_dir: str = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.auto_save = auto_save
         self.overwrite = overwrite
         self.sub_dir = sub_dir
-        self.props = ArticleProperties()
+        
 
     def from_sd_REST_API(self, collection_id: str, doi: str) -> SmartNode:
+        self.props = ArticleProperties()
         if collection_id and doi:
             logger.debug(f"  from sd API article {doi}")
             filepath = self._filepath(self.sub_dir, self._basename(doi))
@@ -747,6 +771,24 @@ class Article(SmartNode):
                 else:
                     logger.warning(f"API response was empty, no props set for doi='{doi}'.")
                 return self._finish()
+        else:
+            logger.error(f"Cannot create Article with empty params supplied: ('{collection_id}, {doi}')!")
+            return None
+        
+    def from_neo(self, collection_id: str, doi: str) -> SmartNode:
+        if collection_id and doi:
+            logger.debug(f"  from sd API article {doi}")
+            filepath = self._filepath(self.sub_dir, self._basename(doi))
+            if self.auto_save and not self.overwrite and filepath.exists():
+                logger.warning(f"{filepath} already exists, not overwriting.")
+                return None
+            else:
+                get_article_properties = GET_ARTICLE_PROPS(params={"doi": doi})
+                self.props = ArticleProperties(**DB.query(get_article_properties)[0].data())
+                figures = 
+                # Now is time to generate the list of figures in the article
+
+                import pdb; pdb.set_trace()
         else:
             logger.error(f"Cannot create Article with empty params supplied: ('{collection_id}, {doi}')!")
             return None

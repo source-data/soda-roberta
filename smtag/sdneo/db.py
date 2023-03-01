@@ -1,10 +1,8 @@
 import re
 from typing import List, Dict, Tuple, Callable
 from neo4j import GraphDatabase, Transaction
-
-import common.logging
-logger = common.logging.get_logger(__name__)
-
+from transformers.utils import logging
+logger = logging.get_logger(__name__)
 def quote4neo(properties):
     quotes_added = {}
     for k, v in properties.items():

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from sdneo.db import Instance
+from smtag.sdneo.db import Instance
 
 load_dotenv()
 SD_API_URL = os.getenv("SD_API_URL")

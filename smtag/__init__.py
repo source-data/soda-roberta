@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from neotools.db import Instance
+from smtag.sdneo.db import Instance
 
 load_dotenv()
 LM_MODEL_PATH = os.getenv('LM_MODEL_PATH')
