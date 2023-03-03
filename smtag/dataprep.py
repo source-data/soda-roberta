@@ -111,7 +111,7 @@ def _align_labels(example: str, pos_words, tokenized: BatchEncoding) -> List[str
 def _save_json(example: Dict, dest_file_path: str):
     # saving line by line to json-line file
     with Path(dest_file_path).open('a', encoding='utf-8') as f:  # mode 'a' to append lines
-        f.write(f"{json.dumps(example)}\n")
+        f.write(f"{json.dumps(example, ensure_ascii=False)}\n")
 
 
 def _special_tokens_mask(tokens, tokenizer):
@@ -452,7 +452,7 @@ class PreparatorTOKCL:
         with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
-                f.write(f"{json.dumps(example)}\n")
+                f.write(f"{json.dumps(example, ensure_ascii=False)}\n")
 
     @staticmethod
     def _cleaning_rules(text, alternative):
@@ -600,4 +600,4 @@ class PreparatorCharacterTOKCL:
         with dest_file_path.open('a', encoding='utf-8') as f:  # mode 'a' to append lines
             shuffle(examples)
             for example in examples:
-                f.write(f"{json.dumps(example)}\n")
+                f.write(f"{json.dumps(example, ensure_ascii=False)}\n")
