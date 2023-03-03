@@ -170,7 +170,14 @@ Download the SourceData raw dataset:
 
 Note that the latest dataset can be prepared from the SourceData REST API using:
 
+    ```bash
+    # To get the data from the SourceData API
     python -m smtag.cli.prepro.get_sd  # takes a very long time!!
+    # To get the data from a Neo4j dump
+    # This one is much faster and will be prefered in future releases. 
+    # It needs to generate a neo4j server with the desired dump.
+    python -m smtag.cli.prepro.get_sd --api neo
+    ```
 
 Split the original documents into train, eval and test sets. This is done at the document level since each document may contain several examples. Doing the split already now ensures more independent eval and test sets.
 

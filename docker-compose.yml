@@ -30,7 +30,7 @@ services:
     env_file:
     - ./.env
     ports:
-      - 8888:8888  # this allows to run jupyter notebook --port=8888 --ip=0.0.0.0 --allow-root
+      - 8899:8888  # this allows to run jupyter notebook --port=8888 --ip=0.0.0.0 --allow-root
     working_dir: /app
     command: ["jupyter", "notebook", "--port=8888", "--ip=0.0.0.0", "--allow-root"]
 
@@ -40,7 +40,7 @@ services:
 #    runtime: nvidia
     deploy: *gpus
     ports:
-    - 6007:6007
+    - 6008:6007
     volumes:
     - ./runs:/runs
     working_dir: /app
@@ -66,7 +66,7 @@ services:
     volumes: *volumes
     working_dir: /app
     ports:
-      - "5555:5555"
+      - "5556:5555"
     command: flower --app=smtag --port=5555 --broker=rabbitmq
 
   rabbitmq:
@@ -74,6 +74,6 @@ services:
     working_dir: /app
     ports:
       # The standard AMQP protocol port
-      - '5672:5672'
+      - '5673:5672'
       # HTTP management UI at http://localhost:15672/
-      - '15672:15672'
+      - '15673:15672'

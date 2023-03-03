@@ -23,6 +23,14 @@ SD_API_URL = os.getenv("SD_API_URL")
 SD_API_USERNAME = os.getenv("SD_API_USERNAME")
 SD_API_PASSWORD = os.getenv("SD_API_PASSWORD")
 
+
+import re 
+
+def sorted_nicely( l: List[str] ): 
+    """ Sort the given iterable in the way that humans expect.""" 
+    convert = lambda text: int(text) if text.isdigit() else text 
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
+    return sorted(l, key = alphanum_key)
 try:
     # central logging facility in sd-graph
     import common.logging
@@ -162,7 +170,7 @@ class ArticleDoiList(Properties):
 class GET_ARTICLE_PROPS(Query):
 
     code = '''
-MATCH (article:SDArticle)
+MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle)
 WHERE
     article.doi = $doi
 RETURN
@@ -198,15 +206,36 @@ RETURN
     '''
     returns = ['doi']
 
-class GET_LIST_OF_FIGRUES(Query):
+class GET_LIST_OF_FIGURES(Query):
     code = """
-    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle)
-    WITH COLLECT(article.doi) AS doi_list
-    MATCH (article:SDArticle {doi: $doi}) --> (figure:SDFigure)
-    WHERE figure.fig_label <> "" 
-    RETURN COLLECT(figure.fig_label) AS figure_label_list    
+    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle {doi: $doi}) --> (figure:SDFigure) --> (panel:SDPanel)
+    WHERE figure.caption <> "" 
+    WITH figure ORDER BY figure.fig_label
+    RETURN COLLECT(DISTINCT figure.fig_label) AS figure_list
     """
     returns = ['figure_list']
+
+
+class GET_FIGURE_PROPERTIES(Query):
+    code = """
+    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle {doi: $doi}) --> (figure:SDFigure) --> (panel:SDPanel)
+    WHERE figure.fig_label = $figure_label
+    RETURN article.doi AS paper_doi, 
+    figure.fig_label AS figure_label,
+    split(figure.href,"=")[1] AS figure_id,
+    figure.fig_title AS figure_title,
+    figure.href AS href
+    """
+    returns = ['paper_doi', 'figure_label', 'figure_id', 'figure_title', 'href']
+
+class GET_LIST_OF_PANELS(Query):
+    code = """
+    MATCH (collection:SDCollection {name: $collection_name})-->(article:SDArticle {doi: $doi}) --> (figure:SDFigure {fig_label: $figure_index}) --> (panel:SDPanel) --> (tag:SDTag)
+    WITH panel, split(panel.panel_label,"-")[1] AS panel_number ORDER BY panel_number
+    RETURN COLLECT(DISTINCT panel.panel_id) AS panel_list
+    """
+    returns = ['panel_list']
+
 
 @dataclass
 class FigureProperties(Properties):
@@ -220,6 +249,22 @@ class FigureProperties(Properties):
     def __str__(self):
         return f"\"{self.figure_label}\" ({self.figure_id})"
 
+class GET_PANEL_PROPERTIES(Query):
+    code = """
+    MATCH (article: SDArticle {doi: $doi})-->(figure: SDFigure {fig_label: $figure_label})-->(panel:SDPanel)-->(tag: SDTag)
+    WHERE panel.panel_id = $panel_id
+    RETURN panel.paper_doi AS paper_doi, 
+    panel.fig_label AS figure_label,
+    figure.fig_label AS figure_id,
+    panel.panel_id AS panel_id,
+    panel.panel_label AS panel_label,
+    split(panel.panel_label,"-")[1] AS panel_number,
+    panel.caption AS caption,
+    panel.formatted_caption AS formatted_caption,
+    panel.href AS href,
+    panel.coords AS coords
+    """
+    returns = ['paper_doi', 'figure_label', 'figure_id', 'panel_id', 'panel_label', 'panel_number', 'caption', 'formatted_caption', 'href', 'coords']
 
 @dataclass
 class PanelProperties(Properties):
@@ -237,6 +282,13 @@ class PanelProperties(Properties):
     def __str__(self):
         return f"\"{self.panel_number}\" ({self.panel_id})"
 
+class GET_LIST_OF_TAGS(Query):
+    code = """
+    MATCH (article: SDArticle {doi: $doi})-->(figure: SDFigure {fig_label: $figure_label})-->(panel:SDPanel {panel_id:$panel_id}) --> (tag:SDTag)
+    WITH tag ORDER BY toInteger(tag.tag_id)
+    RETURN COLLECT(properties(tag)) AS tag_id_list
+    """
+    returns = ['tag_id_list']
 
 @dataclass
 class TaggedEntityProperties(Properties):
@@ -246,6 +298,7 @@ class TaggedEntityProperties(Properties):
     role: str = ""
     text: str = ""
     ext_ids: str = ""
+    norm_text: str = ""
     ext_dbs: str = ""
     in_caption: str = ""
     ext_names: str = ""
@@ -452,6 +505,37 @@ class SourceDataAPIParser:
         }
         return TaggedEntityProperties(**props)
     
+    def tagged_entity_props_neo(self, response: List) -> TaggedEntityProperties:
+        tag_id = response.get("tag_id", "")
+        category = response.get("category", "entity")
+        entity_type = response.get("type", "")
+        role = response.get("role", "")
+        text = response.get("text", "")
+        ext_ids = "///".join(response.get("ext_ids", [])) if isinstance("///".join(response.get("ext_ids", [])), list) else response.get("externalresponsebases", "")
+        ext_dbs = "///".join(response.get("ext_dbs", [])) if isinstance("///".join(response.get("ext_dbs", [])), list) else response.get("ext_dbs", "")
+        norm_text = response.get("norm_text", "")
+        in_caption = response.get("in_caption", "") in ["Y", "true", True]
+        ext_names = "///".join(response.get("ext_names", [])) if isinstance("///".join(response.get("ext_dbs", [])), list) else response.get("ext_names", "")
+        ext_tax_ids = "///".join(response.get("ext_tax_ids", [])) if isinstance("///".join(response.get("ext_dbs", [])), list) else response.get("ext_tax_ids", "")
+        ext_tax_names = "///".join(response.get("ext_tax_names", [])) if isinstance("///".join(response.get("ext_dbs", [])), list) else response.get("ext_tax_names", "")
+        ext_urls = "///".join(response.get("ext_urls", [])) if isinstance("///".join(response.get("ext_dbs", [])), list) else response.get("ext_urls", "")
+        props = {
+            "tag_id": tag_id,
+            "category": category,
+            "entity_type": entity_type,
+            "role": role,
+            "text": text,
+            "ext_ids": ext_ids,
+            "ext_dbs": ext_dbs,
+            "norm_text": norm_text,
+            "in_caption": in_caption,
+            "ext_names": ext_names,
+            "ext_tax_ids": ext_tax_ids,
+            "ext_tax_names": ext_tax_names,
+            "ext_urls": ext_urls,
+        }
+        return TaggedEntityProperties(**props)
+
 @dataclass
 class Relationship:
     """Specifies the target of a directional typed relationship to another SmartNode """
@@ -502,6 +586,8 @@ class XMLSerializer:
         caption = panel.props.caption
         try:
             if caption:
+                if not caption.startswith("<sd-panel>"):
+                    caption = "<sd-panel>" + caption + "</sd-panel>"
                 xml_panel = fromstring(caption, parser=self.XML_Parser)
                 # does this include a declaration?? check with 107853
             else:
@@ -699,7 +785,6 @@ class Collection(SmartNode):
         return self._finish()
     
     def from_neo(self, collection_name: str) -> SmartNode:
-        self
         collection_query = GET_NEO_COLLECTION(params={"collection_name": collection_name})
         results_collection = DB.query(collection_query)[0].data()
         self.props = CollectionProperties(**results_collection)
@@ -717,9 +802,10 @@ class Collection(SmartNode):
                 overwrite=self.overwrite,
                 sub_dir=self.sub_dir
             )
-            article.from_neo(self.props.collection_id, article_id)
+            article.from_neo(self.props.collection_name, article_id)
             articles.append(article)
         self._add_relationships("has_article", articles)
+        return self._finish()
 
     def to_xml(self, sub_dir: str = None) -> List[str]:
         filepaths = []
@@ -783,12 +869,18 @@ class Article(SmartNode):
                 logger.warning(f"{filepath} already exists, not overwriting.")
                 return None
             else:
-                get_article_properties = GET_ARTICLE_PROPS(params={"doi": doi})
+                get_article_properties = GET_ARTICLE_PROPS(params={"doi": doi, "collection_name": collection_id})
                 self.props = ArticleProperties(**DB.query(get_article_properties)[0].data())
-                figures = 
-                # Now is time to generate the list of figures in the article
-
-                import pdb; pdb.set_trace()
+                figures = []
+                
+                get_figure_list = GET_LIST_OF_FIGURES(params={"doi": doi, "collection_name": collection_id})
+                figure_list = set(DB.query(get_figure_list)[0].data()["figure_list"])
+                figure_list_ordered = [x for x in sorted_nicely(figure_list)]
+                for idx in tqdm(figure_list_ordered, desc="figures ", leave=False):
+                    fig = Figure().from_neo(collection_id, doi, idx)
+                    figures.append(fig)
+                self._add_relationships("has_figure", figures)
+                return self._finish()
         else:
             logger.error(f"Cannot create Article with empty params supplied: ('{collection_id}, {doi}')!")
             return None
@@ -844,6 +936,32 @@ class Figure(SmartNode):
             logger.error(f"Cannot create Figure with empty params supplied: ('{collection_id}, {doi}')!")
             return None
 
+    def from_neo(self, collection_id: str, doi: str, figure_index: str) -> SmartNode:
+        if collection_id and doi and figure_index:
+            logger.debug(f"    from sd API figure {figure_index}")
+            get_figure_properties = GET_FIGURE_PROPERTIES({"collection_name":collection_id,
+                                                           "doi":doi,
+                                                           "figure_label":figure_index})
+            self.props = FigureProperties(**DB.query(get_figure_properties)[0].data())
+
+
+            get_panel_list = GET_LIST_OF_PANELS(
+                {
+                    "collection_name":collection_id,
+                    "doi":doi,
+                    "figure_index":figure_index,
+                }
+            )
+            panel_list = DB.query(get_panel_list)[0].data()["panel_list"]
+
+            panels = []
+            for panel_id in tqdm(panel_list, desc="panels  ", leave=False):
+                panel = Panel().from_neo(panel_id,doi,figure_index)
+                panels.append(panel)
+            self._add_relationships("has_panel", panels)
+            return self._finish()
+        else:
+            return None
 
 class Panel(SmartNode):
 
@@ -868,6 +986,33 @@ class Panel(SmartNode):
         else:
             logger.error(f"Cannot create Panel with empty params supplied: ('{panel_id}')!")
             return None
+        
+    def from_neo(self, panel_id: str, doi:str, figure_id:str) -> SmartNode:
+        if panel_id:
+            get_panel_properties = GET_PANEL_PROPERTIES(
+                {
+                    "panel_id":panel_id,
+                    "doi":doi,
+                    "figure_label":figure_id
+                }
+            )
+            self.props = PanelProperties(**DB.query(get_panel_properties)[0].data())
+
+            get_list_of_tags = GET_LIST_OF_TAGS(
+                {
+                    "panel_id":panel_id,
+                    "doi":doi,
+                    "figure_label":figure_id
+                }
+            )
+            tag_list = DB.query(get_list_of_tags)[0].data()["tag_id_list"]
+
+            tagged_entities = [TaggedEntity().from_neo(tag)for tag in tag_list]
+            self._add_relationships("has_entity", tagged_entities)
+            return self._finish()
+        else:
+            logger.error(f"Cannot create Panel with empty params supplied: ('{panel_id}')!")
+            return None
 
 
 class TaggedEntity(SmartNode):
@@ -879,6 +1024,12 @@ class TaggedEntity(SmartNode):
         self.props = TaggedEntityProperties()
 
     def from_sd_REST_API(self, tag_data: List) -> SmartNode:
-        logger.debug(f"        from sd tags {tag_data.get('text')}")
+        logger.debug(f"from sd tags {tag_data.get('text')}")
         self.props = self.REST_API_PARSER.tagged_entity_props(tag_data)
+        return self._finish()
+    
+    def from_neo(self, tag_data: List[Dict]) -> SmartNode:
+        logger.debug(f"from sd tags {tag_data.get('text')}")
+        self.props = self.REST_API_PARSER.tagged_entity_props_neo(tag_data)
+
         return self._finish()
