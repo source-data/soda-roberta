@@ -17,7 +17,7 @@ from tqdm.autonotebook import tqdm
 
 from smtag.sdneo.db import Instance, Query
 from smtag import DB
-
+from smtag.apis.epmc import EPMC
 load_dotenv()
 SD_API_URL = os.getenv("SD_API_URL")
 SD_API_USERNAME = os.getenv("SD_API_USERNAME")
@@ -152,6 +152,7 @@ class ArticleProperties(Properties):
     import_id: str = ""
     pub_year: str = "" # unfortunately SD has no pub_date properties
     nb_figures: int = 0
+    abstract: str = ""
 
     def __str__(self):
         return f"\"{self.title}\" ({self.doi})"
@@ -549,7 +550,7 @@ class XMLSerializer:
     XML_Parser = XMLParser(recover=True)
 
     def generate_article(self, article: "Article") -> Element:
-        xml_article = Element('article', doi=article.props.doi)
+        xml_article = Element('article', **{'doi': article.props.doi, 'abstract': article.props.abstract})
         xml_article = self.add_children_of_article(xml_article, article)
         return xml_article
 
@@ -870,7 +871,10 @@ class Article(SmartNode):
                 return None
             else:
                 get_article_properties = GET_ARTICLE_PROPS(params={"doi": doi, "collection_name": collection_id})
-                self.props = ArticleProperties(**DB.query(get_article_properties)[0].data())
+                properties = DB.query(get_article_properties)[0].data()
+                epmc = EPMC()
+                properties["abstract"] = epmc.get_abstract(doi)
+                self.props = ArticleProperties(**properties)
                 figures = []
                 
                 get_figure_list = GET_LIST_OF_FIGURES(params={"doi": doi, "collection_name": collection_id})

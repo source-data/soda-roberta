@@ -170,11 +170,18 @@ class SourceDataCodes(Enum):
                     'entity_type': ['subcellular'],
                 }
             },
+            # 4: {
+            #     'label': 'CELL',
+            #     'tag': 'sd-tag',
+            #     'attributes': {
+            #         'entity_type': ['cell'],
+            #     }
+            # },
             4: {
-                'label': 'CELL',
+                'label': 'CELL_TYPE',
                 'tag': 'sd-tag',
                 'attributes': {
-                    'entity_type': ['cell'],
+                    'entity_type': ['cell_type'],
                 }
             },
             5: {
@@ -204,7 +211,14 @@ class SourceDataCodes(Enum):
                 'attributes': {
                     'category': ['disease'],
                 }
-            }
+            },
+            9: {
+                'label': 'CELL_LINE',
+                'tag': 'sd-tag',
+                'attributes': {
+                    'entity_type': ['cell_line'],
+                }
+            },
         })
     )
 
