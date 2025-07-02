@@ -13,7 +13,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/source-data/soda-roberta",
-    packages=['smtag'],
+    packages=setuptools.find_packages(),
     install_requires=[
         "torch",
         "tensorflow",
